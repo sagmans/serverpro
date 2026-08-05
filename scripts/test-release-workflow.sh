@@ -3,6 +3,7 @@ set -euo pipefail
 
 # Static policy keeps tag-triggered publication on the same tested, immutable path.
 readonly GO_VERSION="1.26.5"
+readonly GREP_NO_MATCH_STATUS=1
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly ROOT_DIR
 readonly WORKFLOW="${ROOT_DIR}/.github/workflows/release.yml"
@@ -12,16 +13,23 @@ readonly SETUP_GO_ACTION="actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c
 readonly FORBIDDEN_RELEASE_MUTATIONS='--clobber|gh release edit|gh release upload'
 readonly FORBIDDEN_INLINE_PACKAGING='go build|tar -'
 
-rg -F "go-version: \"${GO_VERSION}\"" "${WORKFLOW}"
-rg -F "run: make check" "${WORKFLOW}"
-rg -F "bash scripts/package-release.sh" "${WORKFLOW}"
-rg -F '"${GITHUB_REF_NAME}" "${GITHUB_SHA}" dist' "${WORKFLOW}"
-[[ "$(rg -c 'gh release create' "${WORKFLOW}")" == "1" ]]
+grep -F "go-version: \"${GO_VERSION}\"" "${WORKFLOW}"
+grep -F "run: make check" "${WORKFLOW}"
+grep -F "bash scripts/package-release.sh" "${WORKFLOW}"
+grep -F "\"\${GITHUB_REF_NAME}\" \"\${GITHUB_SHA}\" dist" "${WORKFLOW}"
+[[ "$(grep -Fc 'gh release create' "${WORKFLOW}")" == "1" ]]
 for workflow in "${CI_WORKFLOW}" "${WORKFLOW}"; do
-  rg -F "${CHECKOUT_ACTION}" "${workflow}"
-  rg -F "${SETUP_GO_ACTION}" "${workflow}"
+  grep -F "${CHECKOUT_ACTION}" "${workflow}"
+  grep -F "${SETUP_GO_ACTION}" "${workflow}"
 done
-if rg -n -- "${FORBIDDEN_RELEASE_MUTATIONS}|${FORBIDDEN_INLINE_PACKAGING}" "${WORKFLOW}"; then
+matches=""
+if matches=$(grep -En -- "${FORBIDDEN_RELEASE_MUTATIONS}|${FORBIDDEN_INLINE_PACKAGING}" "${WORKFLOW}"); then
+  printf '%s\n' "${matches}"
   echo "release workflow bypasses immutable package publication" >&2
   exit 1
+else
+  status=$?
+  if [[ ${status} -ne ${GREP_NO_MATCH_STATUS} ]]; then
+    exit "${status}"
+  fi
 fi

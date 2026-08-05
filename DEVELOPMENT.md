@@ -8,6 +8,7 @@ DEVELOPMENT.md is contributor workflow. User docs live in `README.md`,
 - Go 1.26.5 is the supported development and CI toolchain.
 - `mise.toml` pins the local Go version.
 - `make check` is the local and CI gate.
+- Policy scripts use only tools preinstalled on GitHub-hosted runners.
 - Tool installers write under `.bin/`; caches stay under `.cache/`.
 
 ## Workflow
