@@ -97,6 +97,13 @@ func (c Client) DeleteFirewall(ctx context.Context, id string) error {
 	return c.api.Do(ctx, http.MethodDelete, fmt.Sprintf("/firewalls/%s", id), nil, nil)
 }
 
+func (c Client) DeleteFirewallRules(ctx context.Context, id string, inbound []Rule) error {
+	if len(inbound) == 0 {
+		return nil
+	}
+	return c.api.Do(ctx, http.MethodDelete, fmt.Sprintf("/firewalls/%s/rules", id), map[string]any{"inbound_rules": inbound}, nil)
+}
+
 func (c Client) CreateDroplet(ctx context.Context, input CreateDropletInput) (Droplet, error) {
 	payload := map[string]any{
 		"name":   input.Name,

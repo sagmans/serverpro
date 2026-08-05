@@ -41,6 +41,9 @@ https://www.vultr.com/api/#tag/instances
 https://www.vultr.com/api/#tag/plans
 https://www.vultr.com/api/#tag/region
 https://www.vultr.com/api/#tag/os
+https://docs.vultr.com/products/network/firewall-groups/management/rules
+https://docs.vultr.com/products/network/firewall/management/delete
+https://github.com/vultr/govultr/blob/master/firewall_rule.go
 https://docs.vultr.com/how-to-provision-cloud-infrastructure-on-vultr-using-terraform
 ```
 
@@ -53,6 +56,11 @@ Specific endpoints used:
   `POST /v2/instances/{instance-id}/halt`, `POST /v2/instances/{instance-id}/reboot`.
 - Firewall groups: `POST /v2/firewalls`, `GET /v2/firewalls/{firewall-group-id}`,
   `DELETE /v2/firewalls/{firewall-group-id}`.
+- Firewall rules: `GET /v2/firewalls/{firewall-group-id}/rules`,
+  `POST /v2/firewalls/{firewall-group-id}/rules`, and
+  `DELETE /v2/firewalls/{firewall-group-id}/rules/{firewall-rule-id}`; retry
+  reconciliation lists existing rules, removes exact legacy serverpro inbound
+  UDP `3478` entries, then restores missing required UDP `41641` entries.
 - Catalog: `GET /v2/regions`, `GET /v2/plans`, `GET /v2/os`.
 
 Vultr `user_data` is base64-encoded before submission. `enable_ipv6` is set to
@@ -67,6 +75,7 @@ provider-invalid tag characters are encoded reversibly.
 https://docs.digitalocean.com/reference/api/
 https://docs.digitalocean.com/reference/api/reference/droplets/
 https://docs.digitalocean.com/reference/api/reference/firewalls/
+https://docs.digitalocean.com/reference/pydo/reference/firewalls/delete_rules/
 https://docs.digitalocean.com/reference/api/reference/tags/
 https://docs.digitalocean.com/reference/api/reference/regions/
 https://docs.digitalocean.com/reference/api/reference/sizes/
@@ -82,7 +91,8 @@ droplet actions. Specific endpoints used:
 - Droplet actions: `POST /v2/droplets/{droplet_id}/actions` with
   `power_on`, `shutdown`, and `reboot`.
 - Firewalls: `POST /v2/firewalls`, `GET /v2/firewalls/{firewall_id}`,
-  `DELETE /v2/firewalls/{firewall_id}`.
+  `DELETE /v2/firewalls/{firewall_id}`, and
+  `DELETE /v2/firewalls/{firewall_id}/rules` with explicit rule bodies.
 - Tags: `POST /v2/tags`, `GET /v2/tags/{tag_name}`.
 - Catalog: `GET /v2/regions`, `GET /v2/sizes`,
   `GET /v2/images?type=distribution`.
@@ -93,16 +103,27 @@ ownership convention as Vultr because DigitalOcean tag names allow letters,
 numbers, colons, dashes, and underscores, not dots. Values with
 provider-invalid tag characters are encoded reversibly. It ensures ownership
 tag resources exist, creates a tag-bound firewall before the droplet, keeps SSH
-closed, and allows Tailscale UDP ports `41641` and `3478` inbound.
+closed, allows Tailscale's direct-connection UDP port `41641` inbound, and
+leaves outbound UDP `3478` available for STUN. Checkpoint retry removes only an
+exact legacy serverpro broad inbound UDP `3478` rule after ownership validation.
 
 ### Tailscale API
 
 ```text
 https://tailscale.com/docs/reference/tailscale-api
+https://tailscale.com/docs/concepts/tailnet-name
+https://tailscale.com/docs/reference/trust-credentials
+https://tailscale.com/docs/reference/faq/firewall-ports
 https://tailscale.com/kb/1337/acl-syntax
 ```
 
-Use: devices, keys, policy read, policy validate, and policy update.
+Use: users, devices, keys, policy read, policy validate, and policy update.
+`GET /api/v2/tailnet/{tailnet}/users?type=member` supplies the canonical
+`tailnetId` used to bind persisted ownership and cleanup to one tailnet while
+excluding shared users owned by other tailnets; scoped credentials require
+`users:read`. `-` remains the documented access-token shorthand selector.
+Official firewall guidance treats UDP `3478` as client-initiated STUN traffic
+and UDP `41641` as the default direct-connection listen port.
 
 ### Tailscale SSH
 

@@ -15,6 +15,11 @@ import (
 	"github.com/assagman/serverpro/internal/state"
 )
 
+const (
+	cleanupTestTailnetSelector = "-"
+	cleanupTestTailnetID       = "tailnet-1"
+)
+
 func TestDeleteTrackedExternalResourcesClearsAndSavesState(t *testing.T) {
 	createTestHome(t)
 	cfg := config.ExampleServer("demoapp", "webapp")
@@ -97,6 +102,101 @@ func TestDeleteTrackedExternalResourcesBoundsTunnelActiveConnectionRetry(t *test
 	}
 }
 
+func TestDeleteTrackedExternalResourcesFailsClosedWhenTailnetIdentityMissing(t *testing.T) {
+	createTestHome(t)
+	cfg := config.ExampleServer("demoapp", "webapp")
+	stPath := config.ServerStatePath("demoapp", "webapp")
+	st := cleanupTestState()
+	st.Cloudflare = state.CloudflareState{}
+	st.Tailscale.Tailnet = ""
+	st.Tailscale.TailnetID = ""
+	if err := state.Save(stPath, st); err != nil {
+		t.Fatal(err)
+	}
+	client := &recordingCleanupTailscale{devices: cleanupLiveDevices()}
+
+	_, err := deleteTrackedExternalResources(context.Background(), serverDeleteCleanup{Config: cfg, StatePath: stPath, State: st}, serverCleanupClients{Tailscale: client})
+	if err == nil || !strings.Contains(err.Error(), "tailnet identity missing") {
+		t.Fatalf("expected missing tailnet identity error, got %v", err)
+	}
+	if client.tailnetChecks != 0 || client.deletedDevice != "" {
+		t.Fatalf("missing identity reached Tailscale API: %+v", client)
+	}
+	persisted, loadErr := state.Load(stPath)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if persisted.Tailscale.NodeID != "node-1" {
+		t.Fatalf("failed cleanup cleared tracked device: %+v", persisted.Tailscale)
+	}
+}
+
+func TestDeleteTrackedExternalResourcesRejectsTailnetCredentialDriftBeforeMutation(t *testing.T) {
+	createTestHome(t)
+	cfg := config.ExampleServer("demoapp", "webapp")
+	stPath := config.ServerStatePath("demoapp", "webapp")
+	st := cleanupTestState()
+	st.Cloudflare = state.CloudflareState{}
+	if err := state.Save(stPath, st); err != nil {
+		t.Fatal(err)
+	}
+	client := &recordingCleanupTailscale{tailnetID: "tailnet-2", devices: cleanupLiveDevices(), authKeys: cleanupLiveAuthKeys()}
+
+	_, err := deleteTrackedExternalResources(context.Background(), serverDeleteCleanup{Config: cfg, StatePath: stPath, State: st}, serverCleanupClients{Tailscale: client})
+	if err == nil || !strings.Contains(err.Error(), "tailnet identity mismatch") {
+		t.Fatalf("expected tailnet drift error, got %v", err)
+	}
+	if client.tailnetChecks != 1 || client.deletedDevice != "" || client.deletedAuthKey != "" || len(client.removedPolicyTags) != 0 {
+		t.Fatalf("tailnet drift reached mutable Tailscale API: %+v", client)
+	}
+}
+
+func TestTrackedTailscaleSelectorUsesPersistedIdentity(t *testing.T) {
+	st := cleanupTestState()
+	st.Tailscale.Tailnet = "original.example.ts.net"
+
+	selector, err := trackedTailscaleSelector(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selector != "original.example.ts.net" {
+		t.Fatalf("selector = %q", selector)
+	}
+}
+
+func TestDeleteTrackedExternalResourcesFailsClosedForPendingPolicyOwnership(t *testing.T) {
+	createTestHome(t)
+	cfg := config.ExampleServer("demoapp", "webapp")
+	stPath := config.ServerStatePath("demoapp", "webapp")
+	st := cleanupTestState()
+	st.Cloudflare = state.CloudflareState{}
+	st.Tailscale.NodeID = ""
+	st.Tailscale.AuthKeyID = ""
+	st.Tailscale.PolicyTagOwners = nil
+	st.Tailscale.PolicySSHRule = false
+	st.Tailscale.PolicyPendingTagOwners = []string{"tag:serverpro-demoapp"}
+	st.Tailscale.PolicyPendingSSHRule = true
+	if err := state.Save(stPath, st); err != nil {
+		t.Fatal(err)
+	}
+	client := &recordingCleanupTailscale{}
+
+	_, err := deleteTrackedExternalResources(context.Background(), serverDeleteCleanup{Config: cfg, StatePath: stPath, State: st}, serverCleanupClients{Tailscale: client})
+	if err == nil || !strings.Contains(err.Error(), "pending") {
+		t.Fatalf("expected pending ownership error, got %v", err)
+	}
+	if client.tailnetChecks != 0 || client.deletedDevice != "" || client.deletedAuthKey != "" || len(client.removedPolicyTags) != 0 {
+		t.Fatalf("pending ownership reached provider mutation: %+v", client)
+	}
+	persisted, loadErr := state.Load(stPath)
+	if loadErr != nil {
+		t.Fatal(loadErr)
+	}
+	if len(persisted.Tailscale.PolicyPendingTagOwners) == 0 || !persisted.Tailscale.PolicyPendingSSHRule {
+		t.Fatalf("pending ownership was cleared: %+v", persisted.Tailscale)
+	}
+}
+
 func TestDeleteTrackedExternalResourcesRejectsMismatchedLiveTailscaleDevice(t *testing.T) {
 	createTestHome(t)
 	cfg := config.ExampleServer("demoapp", "webapp")
@@ -153,7 +253,7 @@ func TestDeleteTrackedExternalResourcesRejectsMismatchedTrackedAuthKey(t *testin
 	cfg := config.ExampleServer("demoapp", "webapp")
 	stPath := config.ServerStatePath("demoapp", "webapp")
 	st := cleanupTestState()
-	st.Tailscale = state.TailscaleState{AuthKeyID: "key-owned", Tags: []string{"tag:serverpro-demoapp"}}
+	st.Tailscale = state.TailscaleState{Tailnet: cleanupTestTailnetSelector, TailnetID: cleanupTestTailnetID, AuthKeyID: "key-owned", Tags: []string{"tag:serverpro-demoapp"}}
 	st.Cloudflare = state.CloudflareState{}
 	if err := state.Save(stPath, st); err != nil {
 		t.Fatal(err)
@@ -178,7 +278,7 @@ func TestDeleteTrackedExternalResourcesDeletesOnlyTrackedAuthKey(t *testing.T) {
 	cfg := config.ExampleServer("demoapp", "webapp")
 	stPath := config.ServerStatePath("demoapp", "webapp")
 	st := cleanupTestState()
-	st.Tailscale = state.TailscaleState{AuthKeyID: "key-owned"}
+	st.Tailscale = state.TailscaleState{Tailnet: cleanupTestTailnetSelector, TailnetID: cleanupTestTailnetID, AuthKeyID: "key-owned"}
 	st.Cloudflare = state.CloudflareState{}
 	if err := state.Save(stPath, st); err != nil {
 		t.Fatal(err)
@@ -197,13 +297,36 @@ func TestDeleteTrackedExternalResourcesDeletesOnlyTrackedAuthKey(t *testing.T) {
 	}
 }
 
+func TestDeleteTrackedExternalResourcesValidatesAuthKeyAgainstOriginalDeviceTags(t *testing.T) {
+	createTestHome(t)
+	cfg := config.ExampleServer("demoapp", "webapp")
+	cfg.Access.Tailscale.Tags = []string{"tag:drifted"}
+	stPath := config.ServerStatePath("demoapp", "webapp")
+	st := cleanupTestState()
+	st.Cloudflare = state.CloudflareState{}
+	st.Tailscale.PolicyTagOwners = nil
+	st.Tailscale.PolicySSHRule = false
+	if err := state.Save(stPath, st); err != nil {
+		t.Fatal(err)
+	}
+	client := &recordingCleanupTailscale{devices: cleanupLiveDevices(), authKeys: cleanupLiveAuthKeys()}
+
+	updated, err := deleteTrackedExternalResources(context.Background(), serverDeleteCleanup{Config: cfg, StatePath: stPath, State: st}, serverCleanupClients{Tailscale: client})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.deletedDevice != "node-1" || client.deletedAuthKey != "key-owned" || updated.Tailscale.AuthKeyID != "" {
+		t.Fatalf("cleanup lost original auth-key ownership identity: updated=%+v client=%+v", updated.Tailscale, client)
+	}
+}
+
 func TestDeleteTrackedExternalResourcesRemovesSSHOnlyPolicy(t *testing.T) {
 	createTestHome(t)
 	cfg := config.ExampleServer("demoapp", "webapp")
 	cfg.Access.Tailscale.Tags = []string{"tag:serverpro-new"}
 	stPath := config.ServerStatePath("demoapp", "webapp")
 	st := cleanupTestState()
-	st.Tailscale = state.TailscaleState{PolicySSHRule: true, PolicySSHTags: []string{"tag:serverpro-demoapp"}}
+	st.Tailscale = state.TailscaleState{Tailnet: cleanupTestTailnetSelector, TailnetID: cleanupTestTailnetID, PolicySSHRule: true, PolicySSHTags: []string{"tag:serverpro-demoapp"}, PolicySSHUser: "deploy"}
 	st.Cloudflare = state.CloudflareState{}
 	if err := state.Save(stPath, st); err != nil {
 		t.Fatal(err)
@@ -225,13 +348,13 @@ func TestDeleteTrackedExternalResourcesRemovesOnlyUnsharedPolicyTags(t *testing.
 	cfg.Access.Tailscale.Tags = []string{"tag:serverpro-demoapp", "tag:serverpro-unique"}
 	stPath := config.ServerStatePath("demoapp", "webapp")
 	st := cleanupTestState()
-	st.Tailscale = state.TailscaleState{PolicyTagOwners: cfg.Access.Tailscale.Tags, PolicySSHRule: true, PolicySSHTags: cfg.Access.Tailscale.Tags}
+	st.Tailscale = state.TailscaleState{Tailnet: cleanupTestTailnetSelector, TailnetID: cleanupTestTailnetID, PolicyTagOwners: cfg.Access.Tailscale.Tags, PolicySSHRule: true, PolicySSHTags: cfg.Access.Tailscale.Tags, PolicySSHUser: "deploy"}
 	st.Cloudflare = state.CloudflareState{}
 	if err := state.Save(stPath, st); err != nil {
 		t.Fatal(err)
 	}
 	siblingPath := config.ServerStatePath("demoapp", "api")
-	sibling := state.State{Project: "demoapp", Server: "api", Tailscale: state.TailscaleState{NodeID: "node-2", Tags: []string{"tag:serverpro-demoapp"}}}
+	sibling := state.State{Project: "demoapp", Server: "api", Tailscale: state.TailscaleState{Tailnet: cleanupTestTailnetSelector, TailnetID: cleanupTestTailnetID, NodeID: "node-2", Tags: []string{"tag:serverpro-demoapp"}}}
 	if err := state.Save(siblingPath, sibling); err != nil {
 		t.Fatal(err)
 	}
@@ -258,13 +381,13 @@ func TestDeleteTrackedExternalResourcesKeepsSharedTailscalePolicy(t *testing.T) 
 	cfg := config.ExampleServer("demoapp", "webapp")
 	stPath := config.ServerStatePath("demoapp", "webapp")
 	st := cleanupTestState()
-	st.Tailscale = state.TailscaleState{PolicyTagOwners: []string{"tag:serverpro-demoapp"}, PolicySSHRule: true, PolicySSHTags: []string{"tag:serverpro-demoapp"}}
+	st.Tailscale = state.TailscaleState{Tailnet: cleanupTestTailnetSelector, TailnetID: cleanupTestTailnetID, PolicyTagOwners: []string{"tag:serverpro-demoapp"}, PolicySSHRule: true, PolicySSHTags: []string{"tag:serverpro-demoapp"}, PolicySSHUser: "deploy"}
 	st.Cloudflare = state.CloudflareState{}
 	if err := state.Save(stPath, st); err != nil {
 		t.Fatal(err)
 	}
 	siblingPath := config.ServerStatePath("demoapp", "api")
-	sibling := state.State{Project: "demoapp", Server: "api", Tailscale: state.TailscaleState{NodeID: "node-2", Tags: []string{"tag:serverpro-demoapp"}, PolicySSHRule: true, PolicySSHTags: []string{"tag:serverpro-demoapp"}}}
+	sibling := state.State{Project: "demoapp", Server: "api", Tailscale: state.TailscaleState{Tailnet: cleanupTestTailnetSelector, TailnetID: cleanupTestTailnetID, NodeID: "node-2", Tags: []string{"tag:serverpro-demoapp"}, PolicySSHRule: true, PolicySSHTags: []string{"tag:serverpro-demoapp"}, PolicySSHUser: "deploy"}}
 	if err := state.Save(siblingPath, sibling); err != nil {
 		t.Fatal(err)
 	}
@@ -295,6 +418,8 @@ func cleanupTestState() state.State {
 		Server:  "webapp",
 		Compute: state.ComputeState{Name: "demoapp-webapp"},
 		Tailscale: state.TailscaleState{
+			Tailnet:         cleanupTestTailnetSelector,
+			TailnetID:       cleanupTestTailnetID,
 			NodeID:          "node-1",
 			AuthKeyID:       "key-owned",
 			Name:            "demoapp-webapp",
@@ -303,6 +428,7 @@ func cleanupTestState() state.State {
 			PolicyTagOwners: []string{"tag:serverpro-demoapp"},
 			PolicySSHRule:   true,
 			PolicySSHTags:   []string{"tag:serverpro-demoapp"},
+			PolicySSHUser:   "deploy",
 		},
 		Cloudflare: state.CloudflareState{TunnelID: "tun-1", Name: "demoapp-webapp"},
 	}
@@ -321,22 +447,48 @@ func cleanupLiveAuthKeys() []tailscale.AuthKey {
 }
 
 type recordingCleanupTailscale struct {
-	devices              []tailscale.Device
-	authKeys             []tailscale.AuthKey
-	deletedDevice        string
-	deletedAuthKey       string
-	deletedKeyTags       []string
-	removedPolicyTags    []string
-	removedPolicySSHTags []string
-	removedPolicyUser    string
+	tailnetID              string
+	tailnetErr             error
+	tailnetChecks          int
+	devices                []tailscale.Device
+	deviceErr              error
+	deviceReads            int
+	authKeys               []tailscale.AuthKey
+	authKeyErr             error
+	authKeyReads           int
+	policyPresence         tailscale.ServerproPolicyChange
+	policyInspectErr       error
+	policyInspections      int
+	inspectedPolicyTags    []string
+	inspectedPolicySSHTags []string
+	inspectedPolicyUser    string
+	deletedDevice          string
+	deletedAuthKey         string
+	deletedKeyTags         []string
+	removedPolicyTags      []string
+	removedPolicySSHTags   []string
+	removedPolicyUser      string
+}
+
+func (c *recordingCleanupTailscale) TailnetID(context.Context) (string, error) {
+	c.tailnetChecks++
+	if c.tailnetErr != nil {
+		return "", c.tailnetErr
+	}
+	if c.tailnetID != "" {
+		return c.tailnetID, nil
+	}
+	return cleanupTestTailnetID, nil
 }
 
 func (c *recordingCleanupTailscale) Devices(context.Context) ([]tailscale.Device, error) {
-	return c.devices, nil
+	c.deviceReads++
+	return c.devices, c.deviceErr
 }
 
 func (c *recordingCleanupTailscale) AuthKeys(context.Context) ([]tailscale.AuthKey, error) {
-	return c.authKeys, nil
+	c.authKeyReads++
+	return c.authKeys, c.authKeyErr
 }
 
 func (c *recordingCleanupTailscale) DeleteDevice(_ context.Context, id string) error {
@@ -354,6 +506,14 @@ func (c *recordingCleanupTailscale) DeleteServerproAuthKeys(_ context.Context, t
 	return len(tags), nil
 }
 
+func (c *recordingCleanupTailscale) InspectServerproPolicyParts(_ context.Context, tagOwnerTags, sshTags []string, adminUser string) (tailscale.ServerproPolicyChange, error) {
+	c.policyInspections++
+	c.inspectedPolicyTags = append([]string(nil), tagOwnerTags...)
+	c.inspectedPolicySSHTags = append([]string(nil), sshTags...)
+	c.inspectedPolicyUser = adminUser
+	return c.policyPresence, c.policyInspectErr
+}
+
 func (c *recordingCleanupTailscale) RemoveServerproPolicyParts(_ context.Context, tagOwnerTags, sshTags []string, adminUser string) (bool, error) {
 	c.removedPolicyTags = append([]string{}, tagOwnerTags...)
 	c.removedPolicySSHTags = append([]string{}, sshTags...)
@@ -363,12 +523,15 @@ func (c *recordingCleanupTailscale) RemoveServerproPolicyParts(_ context.Context
 
 type recordingCleanupCloudflare struct {
 	tunnel        cloudflare.Tunnel
+	getErr        error
+	tunnelReads   int
 	deletedTunnel string
 	deleteErr     error
 }
 
 func (c *recordingCleanupCloudflare) GetTunnel(context.Context, string) (cloudflare.Tunnel, error) {
-	return c.tunnel, nil
+	c.tunnelReads++
+	return c.tunnel, c.getErr
 }
 
 func (c *recordingCleanupCloudflare) DeleteTunnel(_ context.Context, id string) error {

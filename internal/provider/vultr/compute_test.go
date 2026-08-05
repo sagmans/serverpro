@@ -128,14 +128,14 @@ func TestComputeProviderCreateUsesGenericIntentAndDenyPublicPolicy(t *testing.T)
 	if firewallPayload["description"] != "prod-web-deny-public" {
 		t.Fatalf("bad firewall payload: %+v", firewallPayload)
 	}
-	if len(firewallRulePayloads) != 4 {
-		t.Fatalf("expected 4 firewall rules, got %d: %+v", len(firewallRulePayloads), firewallRulePayloads)
+	if len(firewallRulePayloads) != 2 {
+		t.Fatalf("expected 2 firewall rules, got %d: %+v", len(firewallRulePayloads), firewallRulePayloads)
 	}
 	gotPorts := make(map[string]bool)
 	for _, p := range firewallRulePayloads {
 		gotPorts[p["port"].(string)+"/"+p["ip_type"].(string)] = true
 	}
-	for _, want := range []string{"41641/v4", "41641/v6", "3478/v4", "3478/v6"} {
+	for _, want := range []string{"41641/v4", "41641/v6"} {
 		if !gotPorts[want] {
 			t.Fatalf("missing firewall rule for %s", want)
 		}
@@ -214,8 +214,8 @@ func TestComputeProviderCreateReturnsFirewallCheckpointOnServerFailure(t *testin
 	if record.ID != "" || record.ProviderState["firewall_group_id"] != "fw-9" {
 		t.Fatalf("firewall checkpoint missing: %+v", record)
 	}
-	if ruleRequestCount != 4 {
-		t.Fatalf("expected 4 firewall rule requests, got %d", ruleRequestCount)
+	if ruleRequestCount != 2 {
+		t.Fatalf("expected 2 firewall rule requests, got %d", ruleRequestCount)
 	}
 }
 
@@ -242,6 +242,90 @@ func TestComputeProviderCreateReturnsFirewallCheckpointOnRuleFailure(t *testing.
 	}
 	if record.ID != "" || record.ProviderState["firewall_group_id"] != "fw-9" {
 		t.Fatalf("firewall checkpoint missing: %+v", record)
+	}
+}
+
+func TestComputeProviderCreateReconcilesCheckpointedFirewallRulesBeforeRetry(t *testing.T) {
+	ruleAttempts := 0
+	listRequests := 0
+	createdRules := map[string]bool{}
+	instanceCreated := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/firewalls":
+			_, _ = w.Write([]byte(`{"firewall_group":{"id":"fw-9","description":"prod-web-deny-public"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/firewalls/fw-9":
+			_, _ = w.Write([]byte(`{"firewall_group":{"id":"fw-9","description":"prod-web-deny-public"}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/firewalls/fw-9/rules":
+			listRequests++
+			_, _ = w.Write([]byte(`{"firewall_rules":[{"id":1,"action":"accept","ip_type":"v4","protocol":"udp","port":"41641","subnet":"0.0.0.0","subnet_size":0,"notes":"tailscale wireguard"}],"meta":{"links":{"next":"","prev":""}}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/firewalls/fw-9/rules":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatal(err)
+			}
+			ruleAttempts++
+			if ruleAttempts == 2 {
+				http.Error(w, "rule create failed", http.StatusBadGateway)
+				return
+			}
+			createdRules[payload["port"].(string)+"/"+payload["ip_type"].(string)] = true
+			_, _ = w.Write([]byte(`{"firewall_rule":{"id":1,"action":"accept"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/instances":
+			instanceCreated = true
+			_, _ = w.Write([]byte(`{"instance":{"id":"abc-123","label":"prod-web","main_ip":"203.0.113.10"}}`))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer srv.Close()
+
+	provider := NewComputeProvider(func(token string) Client { return NewWithHTTP(token, srv.URL, srv.Client()) })
+	request := compute.CreateServerRequest{
+		Account: compute.Account{Name: "prod", Provider: "vultr", Token: "token"},
+		Intent:  compute.ServerIntent{Namespace: "prod", Server: "web", Name: "prod-web", Location: "ewr", Size: "vc2-1c-2gb", Image: "2284"},
+	}
+	partial, diagnostics := provider.Create(context.Background(), request)
+	if diagnostics.Passed() || partial.ProviderState["firewall_group_id"] != "fw-9" {
+		t.Fatalf("partial=%+v diagnostics=%v", partial, diagnostics.Err())
+	}
+	request.ProviderState = partial.ProviderState
+	record, diagnostics := provider.Create(context.Background(), request)
+	if !diagnostics.Passed() || record.ID != "abc-123" {
+		t.Fatalf("record=%+v diagnostics=%v", record, diagnostics.Err())
+	}
+	for _, want := range []string{"41641/v4", "41641/v6"} {
+		if !createdRules[want] {
+			t.Fatalf("checkpoint retry left firewall rule %s missing: %+v", want, createdRules)
+		}
+	}
+	if listRequests != 1 || ruleAttempts != 3 || !instanceCreated {
+		t.Fatalf("listRequests=%d ruleAttempts=%d instanceCreated=%t", listRequests, ruleAttempts, instanceCreated)
+	}
+}
+
+func TestComputeProviderCreateRejectsMismatchedCheckpointedFirewallGroup(t *testing.T) {
+	mutated := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/firewalls/fw-9" {
+			_, _ = w.Write([]byte(`{"firewall_group":{"id":"fw-9","description":"other-deny-public"}}`))
+			return
+		}
+		mutated = true
+	}))
+	defer server.Close()
+
+	provider := NewComputeProvider(func(token string) Client { return NewWithHTTP(token, server.URL, server.Client()) })
+	_, diagnostics := provider.Create(context.Background(), compute.CreateServerRequest{
+		Account:       compute.Account{Name: "prod", Provider: "vultr", Token: "token"},
+		Intent:        compute.ServerIntent{Namespace: "prod", Server: "web", Name: "prod-web", Location: "ewr", Size: "vc2-1c-2gb", Image: "2284"},
+		ProviderState: map[string]string{"firewall_group_id": "fw-9"},
+	})
+	if diagnostics.Passed() || diagnostics.Err() == nil || !strings.Contains(diagnostics.Err().Error(), "ownership mismatch") {
+		t.Fatalf("expected checkpoint ownership failure, got %v", diagnostics.Err())
+	}
+	if mutated {
+		t.Fatal("mismatched checkpoint reached mutable provider endpoint")
 	}
 }
 

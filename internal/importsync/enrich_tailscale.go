@@ -12,6 +12,14 @@ import (
 
 // MatchTailscaleDevice finds the mesh node for an imported compute hostname.
 func MatchTailscaleDevice(ctx context.Context, client tailscale.Client, candidate Candidate, cfg config.Config) (state.TailscaleState, error) {
+	selector := strings.TrimSpace(cfg.Access.Tailscale.Tailnet)
+	if selector == "" {
+		return state.TailscaleState{}, fmt.Errorf("tailscale tailnet selector missing")
+	}
+	tailnetID, err := client.TailnetID(ctx)
+	if err != nil {
+		return state.TailscaleState{}, fmt.Errorf("tailscale tailnet identity failed: %w", err)
+	}
 	devices, err := client.Devices(ctx)
 	if err != nil {
 		return state.TailscaleState{}, fmt.Errorf("tailscale device list failed: %w", err)
@@ -43,10 +51,12 @@ func MatchTailscaleDevice(ctx context.Context, client tailscale.Client, candidat
 	}
 	device := matches[0]
 	return state.TailscaleState{
-		NodeID: device.NodeID,
-		Name:   device.Name,
-		IPs:    append([]string(nil), device.Addresses...),
-		Tags:   append([]string(nil), device.Tags...),
+		Tailnet:   selector,
+		TailnetID: tailnetID,
+		NodeID:    device.NodeID,
+		Name:      device.Name,
+		IPs:       append([]string(nil), device.Addresses...),
+		Tags:      append([]string(nil), device.Tags...),
 	}, nil
 }
 

@@ -2,15 +2,96 @@ package lifecycle
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/assagman/serverpro/internal/config"
 	"github.com/assagman/serverpro/internal/credentials"
+	"github.com/assagman/serverpro/internal/provider/httpjson"
 	"github.com/assagman/serverpro/internal/provider/tailscale"
 	"github.com/assagman/serverpro/internal/state"
 )
+
+func ensureTailscaleTailnetIdentity(ctx context.Context, st *state.State, stPath string, creds credentials.Set, cfg config.Config, c TailscaleClient) error {
+	if creds.Tailscale == "" {
+		return nil
+	}
+	if st.Tailscale.Tailnet == "" || st.Tailscale.TailnetID == "" {
+		if tailscaleStateTracksExternalResources(*st) {
+			return fmt.Errorf("tracked Tailscale tailnet identity missing; refusing provider mutation")
+		}
+		id, err := c.TailnetID(ctx)
+		if err != nil {
+			return fmt.Errorf("resolve Tailscale tailnet identity: %w", err)
+		}
+		if strings.TrimSpace(id) == "" {
+			return fmt.Errorf("resolved Tailscale tailnet identity is empty")
+		}
+		st.Tailscale.Tailnet = cfg.Access.Tailscale.Tailnet
+		st.Tailscale.TailnetID = id
+		return state.Save(stPath, *st)
+	}
+	id, err := c.TailnetID(ctx)
+	if err != nil {
+		return fmt.Errorf("validate Tailscale tailnet identity: %w", err)
+	}
+	if id != st.Tailscale.TailnetID {
+		return fmt.Errorf("tracked Tailscale tailnet identity mismatch: state %q live %q", st.Tailscale.TailnetID, id)
+	}
+	return nil
+}
+
+func tailscaleStateTracksExternalResources(st state.State) bool {
+	return st.Tailscale.NodeID != "" || st.Tailscale.AuthKeyID != "" || len(st.Tailscale.PolicyTagOwners) > 0 || st.Tailscale.PolicySSHRule || tailscalePolicyPending(st.Tailscale) || len(st.Tailscale.PolicySSHTags) > 0 || st.Tailscale.PolicySSHUser != ""
+}
+
+func tailscalePolicyPending(st state.TailscaleState) bool {
+	return len(st.PolicyPendingTagOwners) > 0 || st.PolicyPendingSSHRule
+}
+
+func ReconcilePendingTailscalePolicy(ctx context.Context, st *state.State, stPath string, c TailscalePolicyInspector) error {
+	if !tailscalePolicyPending(st.Tailscale) {
+		return nil
+	}
+	sshTags := []string(nil)
+	if st.Tailscale.PolicyPendingSSHRule {
+		if len(st.Tailscale.PolicySSHTags) == 0 || strings.TrimSpace(st.Tailscale.PolicySSHUser) == "" {
+			return fmt.Errorf("pending Tailscale SSH policy identity incomplete; refusing reconciliation")
+		}
+		sshTags = st.Tailscale.PolicySSHTags
+	}
+	present, err := c.InspectServerproPolicyParts(ctx, st.Tailscale.PolicyPendingTagOwners, sshTags, st.Tailscale.PolicySSHUser)
+	if err != nil {
+		return fmt.Errorf("inspect pending Tailscale policy ownership: %w", err)
+	}
+	pendingTags := slices.Clone(st.Tailscale.PolicyPendingTagOwners)
+	presentTags := slices.Clone(present.TagOwners)
+	slices.Sort(pendingTags)
+	slices.Sort(presentTags)
+	allPresent := slices.Equal(pendingTags, presentTags) && (!st.Tailscale.PolicyPendingSSHRule || present.SSHRule)
+	nonePresent := len(presentTags) == 0 && !present.SSHRule
+	if !allPresent && !nonePresent {
+		return fmt.Errorf("pending Tailscale policy ownership is partially applied; reconcile live policy before retrying")
+	}
+	previous := st.Tailscale
+	if allPresent {
+		st.Tailscale.PolicyTagOwners = appendMissingStrings(st.Tailscale.PolicyTagOwners, st.Tailscale.PolicyPendingTagOwners)
+		if st.Tailscale.PolicyPendingSSHRule {
+			st.Tailscale.PolicySSHRule = true
+		}
+	}
+	st.Tailscale.PolicyPendingTagOwners = nil
+	st.Tailscale.PolicyPendingSSHRule = false
+	if err := state.Save(stPath, *st); err != nil {
+		st.Tailscale = previous
+		return fmt.Errorf("save reconciled Tailscale policy ownership: %w", err)
+	}
+	return nil
+}
 
 func captureTailscaleDeviceBaseline(ctx context.Context, st *state.State, stPath string, creds credentials.Set, cfg config.Config, c TailscaleClient) error {
 	if creds.Tailscale == "" || st.Tailscale.NodeID != "" || st.Tailscale.DeviceBaselineCaptured {
@@ -34,19 +115,69 @@ func ensureTailscalePolicy(ctx context.Context, st *state.State, stPath string, 
 	if creds.Tailscale == "" {
 		return nil
 	}
-	change, err := c.EnsureServerproPolicy(ctx, cfg.Access.Tailscale.Tags, cfg.Admin.Username, cfg.Access.Tailscale.RootPolicy)
-	if err != nil {
+	if err := ReconcilePendingTailscalePolicy(ctx, st, stPath, c); err != nil {
 		return err
+	}
+	if st.Tailscale.PolicySSHRule {
+		if len(st.Tailscale.PolicySSHTags) == 0 || strings.TrimSpace(st.Tailscale.PolicySSHUser) == "" {
+			return fmt.Errorf("tracked Tailscale SSH policy identity incomplete; refusing provider mutation")
+		}
+		trackedTags := slices.Clone(st.Tailscale.PolicySSHTags)
+		configuredTags := slices.Clone(cfg.Access.Tailscale.Tags)
+		slices.Sort(trackedTags)
+		slices.Sort(configuredTags)
+		// Replacing an owned identity would orphan the old authorization rule;
+		// cleanup must use the tracked identity before config can change it.
+		if st.Tailscale.PolicySSHUser != cfg.Admin.Username || !slices.Equal(trackedTags, configuredTags) {
+			return fmt.Errorf("tracked Tailscale SSH policy identity differs from config; clean up the tracked rule before reprovisioning")
+		}
+	}
+	checkpointed := false
+	change, err := c.EnsureServerproPolicy(ctx, cfg.Access.Tailscale.Tags, cfg.Admin.Username, cfg.Access.Tailscale.RootPolicy, func(change tailscale.ServerproPolicyChange) error {
+		previous := st.Tailscale
+		st.Tailscale.PolicyPendingTagOwners = append([]string(nil), change.TagOwners...)
+		st.Tailscale.PolicyPendingSSHRule = change.SSHRule
+		// Exact identity is durable before provider mutation, but ownership stays
+		// pending until the conditional provider write confirms success.
+		st.Tailscale.PolicySSHTags = append([]string(nil), cfg.Access.Tailscale.Tags...)
+		st.Tailscale.PolicySSHUser = cfg.Admin.Username
+		if err := state.Save(stPath, *st); err != nil {
+			st.Tailscale = previous
+			return err
+		}
+		checkpointed = true
+		return nil
+	})
+	if err != nil {
+		if checkpointed && httpjson.IsStatus(err, http.StatusPreconditionFailed) {
+			pending := st.Tailscale
+			st.Tailscale.PolicyPendingTagOwners = nil
+			st.Tailscale.PolicyPendingSSHRule = false
+			if saveErr := state.Save(stPath, *st); saveErr != nil {
+				st.Tailscale = pending
+				return errors.Join(err, fmt.Errorf("clear rejected Tailscale policy ownership checkpoint: %w", saveErr))
+			}
+		}
+		return err
+	}
+	if !checkpointed {
+		return fmt.Errorf("Tailscale policy ownership checkpoint was not executed")
 	}
 	if len(change.TagOwners) == 0 && !change.SSHRule {
 		return nil
 	}
+	pending := st.Tailscale
 	st.Tailscale.PolicyTagOwners = appendMissingStrings(st.Tailscale.PolicyTagOwners, change.TagOwners)
 	if change.SSHRule {
 		st.Tailscale.PolicySSHRule = true
-		st.Tailscale.PolicySSHTags = append([]string(nil), cfg.Access.Tailscale.Tags...)
 	}
-	return state.Save(stPath, *st)
+	st.Tailscale.PolicyPendingTagOwners = nil
+	st.Tailscale.PolicyPendingSSHRule = false
+	if err := state.Save(stPath, *st); err != nil {
+		st.Tailscale = pending
+		return fmt.Errorf("confirm Tailscale policy ownership: %w", err)
+	}
+	return nil
 }
 
 func tailscaleAuthKey(ctx context.Context, c TailscaleClient, creds credentials.Set, cfg config.Config) (key string, id string, err error) {

@@ -1,6 +1,10 @@
 package tailscale
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+	"slices"
+)
 
 func (d policyDocument) ensureSSHRule(tags []string, adminUser string) (bool, error) {
 	rules, err := d.sshRules()
@@ -16,22 +20,38 @@ func (d policyDocument) ensureSSHRule(tags []string, adminUser string) (bool, er
 	return true, d.setSSHRules(rules)
 }
 
+func (d policyDocument) inspectSSHRule(tags []string, adminUser string) (bool, error) {
+	rules, err := d.sshRules()
+	if err != nil {
+		return false, err
+	}
+	for _, rule := range rules {
+		if serverproSSHRuleMatches(rule, tags, adminUser) {
+			return true, nil
+		}
+	}
+	for _, rule := range rules {
+		if serverproSSHRuleMayBeDrifted(rule, tags, adminUser) {
+			return false, fmt.Errorf("tailscale policy ownership drift for SSH rule tags %v user %q", tags, adminUser)
+		}
+	}
+	return false, nil
+}
+
 func (d policyDocument) removeSSHRule(tags []string, adminUser string) (bool, error) {
+	present, err := d.inspectSSHRule(tags, adminUser)
+	if err != nil || !present {
+		return false, err
+	}
 	rules, err := d.sshRules()
 	if err != nil {
 		return false, err
 	}
 	out := rules[:0]
-	changed := false
 	for _, rule := range rules {
-		if serverproSSHRuleMatches(rule, tags, adminUser) {
-			changed = true
-			continue
+		if !serverproSSHRuleMatches(rule, tags, adminUser) {
+			out = append(out, rule)
 		}
-		out = append(out, rule)
-	}
-	if !changed {
-		return false, nil
 	}
 	return true, d.setSSHRules(out)
 }
@@ -64,6 +84,32 @@ func serverproSSHRule(tags []string, adminUser string) SSHRule {
 
 func serverproSSHRuleMatches(rule SSHRule, tags []string, adminUser string) bool {
 	return rule.Action == "check" && sameStringSet(rule.Src, []string{serverproPolicyOwner}) && sameStringSet(rule.Dst, tags) && sameStringSet(rule.Users, []string{adminUser})
+}
+
+func serverproSSHRuleMayBeDrifted(rule SSHRule, tags []string, adminUser string) bool {
+	matches := 0
+	if rule.Action == "check" {
+		matches++
+	}
+	if slices.Contains(rule.Src, serverproPolicyOwner) {
+		matches++
+	}
+	destinationsMatch := len(tags) > 0
+	for _, tag := range tags {
+		if !slices.Contains(rule.Dst, tag) {
+			destinationsMatch = false
+			break
+		}
+	}
+	if destinationsMatch {
+		matches++
+	}
+	if slices.Contains(rule.Users, adminUser) {
+		matches++
+	}
+	// Three matching identity dimensions distinguish likely mutation of the
+	// tracked rule from unrelated policy entries while still failing closed.
+	return matches >= 3
 }
 
 func sameStringSet(a, b []string) bool {

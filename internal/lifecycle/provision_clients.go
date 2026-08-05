@@ -10,10 +10,16 @@ import (
 	"github.com/assagman/serverpro/internal/remote"
 )
 
+type TailscalePolicyInspector interface {
+	InspectServerproPolicyParts(context.Context, []string, []string, string) (tailscale.ServerproPolicyChange, error)
+}
+
 type TailscaleClient interface {
+	TailscalePolicyInspector
+	TailnetID(context.Context) (string, error)
 	CreateAuthKey(context.Context, []string, time.Duration) (tailscale.AuthKey, error)
 	DeleteAuthKey(context.Context, string) error
-	EnsureServerproPolicy(context.Context, []string, string, string) (tailscale.ServerproPolicyChange, error)
+	EnsureServerproPolicy(context.Context, []string, string, string, tailscale.PolicyCheckpoint) (tailscale.ServerproPolicyChange, error)
 	ValidateSSHPolicy(context.Context, []string, string, string) error
 	MatchingDeviceIDs(context.Context, string, []string) ([]string, error)
 	WaitDevice(context.Context, tailscale.DeviceWait) (tailscale.Device, error)

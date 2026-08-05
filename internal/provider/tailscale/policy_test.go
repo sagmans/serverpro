@@ -3,6 +3,7 @@ package tailscale
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -39,12 +40,20 @@ func TestEnsureServerproPolicyAddsTagOwnerAndSSHRule(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	change, err := NewWithHTTP("token", "-", ts.URL, ts.Client()).EnsureServerproPolicy(context.Background(), []string{"tag:serverpro-prod"}, "deploy", "check-or-disabled")
+	checkpointed := false
+	change, err := NewWithHTTP("token", "-", ts.URL, ts.Client()).EnsureServerproPolicy(context.Background(), []string{"tag:serverpro-prod"}, "deploy", "check-or-disabled", func(got ServerproPolicyChange) error {
+		checkpointed = true
+		requests = append(requests, "checkpoint")
+		if !got.SSHRule || strings.Join(got.TagOwners, ",") != "tag:serverpro-prod" {
+			t.Fatalf("checkpoint change = %+v", got)
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !change.SSHRule || strings.Join(change.TagOwners, ",") != "tag:serverpro-prod" {
-		t.Fatalf("change = %+v", change)
+	if !checkpointed || !change.SSHRule || strings.Join(change.TagOwners, ",") != "tag:serverpro-prod" {
+		t.Fatalf("checkpointed=%t change=%+v", checkpointed, change)
 	}
 	for name, body := range map[string]map[string]any{"validated": validated, "posted": posted} {
 		tagOwners := body["tagOwners"].(map[string]any)
@@ -58,7 +67,7 @@ func TestEnsureServerproPolicyAddsTagOwnerAndSSHRule(t *testing.T) {
 			t.Fatalf("%s ssh rule = %#v", name, rule)
 		}
 	}
-	if strings.Join(requests, ",") != "GET /tailnet/-/acl,POST /tailnet/-/acl/validate,POST /tailnet/-/acl" {
+	if strings.Join(requests, ",") != "GET /tailnet/-/acl,POST /tailnet/-/acl/validate,checkpoint,POST /tailnet/-/acl" {
 		t.Fatalf("requests = %v", requests)
 	}
 }
@@ -74,15 +83,72 @@ func TestEnsureServerproPolicyNoopsWhenManagedEntriesExist(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	change, err := NewWithHTTP("token", "-", ts.URL, ts.Client()).EnsureServerproPolicy(context.Background(), []string{"tag:serverpro-prod"}, "deploy", "check-or-disabled")
+	checkpointed := false
+	change, err := NewWithHTTP("token", "-", ts.URL, ts.Client()).EnsureServerproPolicy(context.Background(), []string{"tag:serverpro-prod"}, "deploy", "check-or-disabled", func(got ServerproPolicyChange) error {
+		checkpointed = true
+		if got.SSHRule || len(got.TagOwners) != 0 {
+			t.Fatalf("checkpoint change = %+v", got)
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if change.SSHRule || len(change.TagOwners) != 0 {
-		t.Fatalf("change = %+v", change)
+	if !checkpointed || change.SSHRule || len(change.TagOwners) != 0 {
+		t.Fatalf("checkpointed=%t change=%+v", checkpointed, change)
 	}
 	if strings.Join(requests, ",") != "GET /tailnet/-/acl" {
 		t.Fatalf("requests = %v", requests)
+	}
+}
+
+func TestEnsureServerproPolicyStopsBeforeMutationWhenCheckpointFails(t *testing.T) {
+	policyPosted := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /tailnet/-/acl":
+			w.Header().Set("ETag", `"policy-v1"`)
+			_, _ = w.Write([]byte(`{"ssh":[]}`))
+		case "POST /tailnet/-/acl/validate":
+		case "POST /tailnet/-/acl":
+			policyPosted = true
+		default:
+			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer ts.Close()
+
+	_, err := NewWithHTTP("token", "-", ts.URL, ts.Client()).EnsureServerproPolicy(context.Background(), []string{"tag:serverpro-prod"}, "deploy", "check-or-disabled", func(ServerproPolicyChange) error {
+		return errors.New("checkpoint failed")
+	})
+	if err == nil || !strings.Contains(err.Error(), "checkpoint failed") {
+		t.Fatalf("expected checkpoint error, got %v", err)
+	}
+	if policyPosted {
+		t.Fatal("policy mutated before ownership checkpoint")
+	}
+}
+
+func TestRemoveServerproPolicyRejectsTagOwnerDriftBeforeMutation(t *testing.T) {
+	mutated := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /tailnet/-/acl":
+			_, _ = w.Write([]byte(`{"tagOwners":{"tag:serverpro-prod":["group:operators"]},"ssh":[]}`))
+		case "POST /tailnet/-/acl/validate", "POST /tailnet/-/acl":
+			mutated = true
+		default:
+			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer ts.Close()
+
+	_, err := NewWithHTTP("token", "-", ts.URL, ts.Client()).RemoveServerproPolicyParts(context.Background(), []string{"tag:serverpro-prod"}, nil, "")
+	if err == nil || !strings.Contains(err.Error(), "ownership drift") {
+		t.Fatalf("expected tag-owner drift error, got %v", err)
+	}
+	if mutated {
+		t.Fatal("drifted policy reached validation or mutation")
 	}
 }
 

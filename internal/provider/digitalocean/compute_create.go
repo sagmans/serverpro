@@ -31,6 +31,16 @@ func (p ComputeProvider) Create(ctx context.Context, request compute.CreateServe
 
 func ensureFirewall(ctx context.Context, client Client, request compute.CreateServerRequest) (string, error) {
 	if raw := request.ProviderState["firewall_id"]; raw != "" {
+		firewall, err := client.GetFirewall(ctx, raw)
+		if err != nil {
+			return raw, err
+		}
+		if err := validateLiveFirewallOwnership(partialServerRecordFromCreateRequest(request, raw), firewall); err != nil {
+			return raw, err
+		}
+		if err := client.DeleteFirewallRules(ctx, raw, legacyTailscaleSTUNRules(firewall.Inbound)); err != nil {
+			return raw, err
+		}
 		return raw, nil
 	}
 	tags := labelsToTags(ownership.ProviderLabels(request.Intent.Namespace, request.Intent.Server, request.Intent.Labels))

@@ -367,6 +367,7 @@ func TestNamespaceDeleteInvokesExternalCleanupPerServer(t *testing.T) {
 	cleanupCalls := 0
 	var out bytes.Buffer
 	a := &app{stdin: strings.NewReader(""), stdout: &out, stderr: io.Discard, yes: true, providers: providerRegistryForPower(t, provider), services: serviceHooks{
+		preflightTrackedExternalResources: func(context.Context, *serverDeleteCleanup) error { return nil },
 		deleteTrackedExternalResources: func(context.Context, serverDeleteCleanup) (state.State, error) {
 			cleanupCalls++
 			return state.State{}, nil

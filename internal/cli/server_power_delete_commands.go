@@ -125,6 +125,11 @@ func (a *app) deleteServerDestructive(ctx context.Context, name, stPath string, 
 		return err
 	}
 	stPath, st = cleanup.StatePath, cleanup.State
+	if cleanup.Required {
+		if err := a.preflightTrackedExternalResources(ctx, &cleanup); err != nil {
+			return err
+		}
+	}
 	if st.Compute.ID != "" || len(st.Compute.ProviderState) > 0 {
 		provider, accountRef, err := a.serverProviderAccount(st)
 		if err != nil {
@@ -169,6 +174,9 @@ func serverDeleteConfirmMessage(st state.State) string {
 }
 
 func serverDeleteExternalCleanupPreview(stPath string, st state.State) ([]serverDeleteExternalResource, error) {
+	if tailscalePolicyOwnershipPending(st.Tailscale) {
+		return nil, fmt.Errorf("Tailscale policy ownership is pending; reconcile live policy and state before delete")
+	}
 	var resources []serverDeleteExternalResource
 	if st.Tailscale.NodeID != "" {
 		resources = append(resources, serverDeleteExternalResource{Type: deleteResourceTailscaleDevice, ID: st.Tailscale.NodeID, Name: st.Tailscale.Name})

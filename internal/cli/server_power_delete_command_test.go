@@ -13,6 +13,7 @@ import (
 	"github.com/assagman/serverpro/internal/compute"
 	"github.com/assagman/serverpro/internal/config"
 	"github.com/assagman/serverpro/internal/credentials"
+	"github.com/assagman/serverpro/internal/provider/tailscale"
 	"github.com/assagman/serverpro/internal/state"
 	"github.com/spf13/cobra"
 )
@@ -174,7 +175,7 @@ func TestServerDeleteDryRunListsTrackedExternalCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st.Tailscale = state.TailscaleState{NodeID: "node-1", AuthKeyID: "key-1", Tags: []string{"tag:serverpro-demoapp"}, PolicyTagOwners: []string{"tag:serverpro-demoapp"}, PolicySSHRule: true, PolicySSHTags: []string{"tag:serverpro-demoapp"}}
+	st.Tailscale = state.TailscaleState{Tailnet: cleanupTestTailnetSelector, TailnetID: cleanupTestTailnetID, NodeID: "node-1", AuthKeyID: "key-1", Tags: []string{"tag:serverpro-demoapp"}, PolicyTagOwners: []string{"tag:serverpro-demoapp"}, PolicySSHRule: true, PolicySSHTags: []string{"tag:serverpro-demoapp"}, PolicySSHUser: "deploy"}
 	st.Cloudflare = state.CloudflareState{TunnelID: "tun-1", Name: "demoapp-webapp"}
 	if err := state.Save(stPath, st); err != nil {
 		t.Fatal(err)
@@ -223,12 +224,12 @@ func TestServerDeleteDryRunDoesNotListSharedPolicyAsDeleted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st.Tailscale = state.TailscaleState{PolicyTagOwners: []string{"tag:serverpro-demoapp"}, PolicySSHRule: true, PolicySSHTags: []string{"tag:serverpro-demoapp"}}
+	st.Tailscale = state.TailscaleState{Tailnet: cleanupTestTailnetSelector, TailnetID: cleanupTestTailnetID, PolicyTagOwners: []string{"tag:serverpro-demoapp"}, PolicySSHRule: true, PolicySSHTags: []string{"tag:serverpro-demoapp"}, PolicySSHUser: "deploy"}
 	if err := state.Save(stPath, st); err != nil {
 		t.Fatal(err)
 	}
 	siblingPath := config.ServerStatePath("demoapp", "api")
-	sibling := state.State{Project: "demoapp", Server: "api", Tailscale: state.TailscaleState{NodeID: "node-2", Tags: []string{"tag:serverpro-demoapp"}}}
+	sibling := state.State{Project: "demoapp", Server: "api", Tailscale: state.TailscaleState{Tailnet: cleanupTestTailnetSelector, TailnetID: cleanupTestTailnetID, NodeID: "node-2", Tags: []string{"tag:serverpro-demoapp"}}}
 	if err := state.Save(siblingPath, sibling); err != nil {
 		t.Fatal(err)
 	}
@@ -314,6 +315,155 @@ func TestServerDeleteUsesProviderFacade(t *testing.T) {
 	}
 	if !provider.deleted {
 		t.Fatal("provider delete not called")
+	}
+}
+
+func TestServerDeleteStopsBeforeComputeWhenTailnetIdentityMissing(t *testing.T) {
+	createServerReadFixture(t)
+	stPath := config.ServerStatePath("demoapp", "webapp")
+	st, err := state.Load(stPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Tailscale.NodeID = "node-1"
+	if err := state.Save(stPath, st); err != nil {
+		t.Fatal(err)
+	}
+	provider := &powerDeleteFakeProvider{}
+	a := &app{stdout: io.Discard, stderr: io.Discard, project: "demoapp", provider: "hetzner", yes: true, providers: providerRegistryForPower(t, provider)}
+	cmd := a.serverDeleteCmd()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"webapp"})
+
+	err = cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "tailnet identity missing") {
+		t.Fatalf("expected tailnet identity error, got %v", err)
+	}
+	if provider.deleted {
+		t.Fatal("compute deleted before structural Tailscale preflight")
+	}
+}
+
+func TestServerDeleteStopsBeforeComputeForPartiallyAppliedPolicyOwnership(t *testing.T) {
+	createServerReadFixture(t)
+	stPath := config.ServerStatePath("demoapp", "webapp")
+	st, err := state.Load(stPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Tailscale = state.TailscaleState{
+		Tailnet:                cleanupTestTailnetSelector,
+		TailnetID:              cleanupTestTailnetID,
+		PolicyPendingTagOwners: []string{"tag:serverpro-demoapp"},
+		PolicyPendingSSHRule:   true,
+		PolicySSHTags:          []string{"tag:serverpro-demoapp"},
+		PolicySSHUser:          "deploy",
+	}
+	if err := state.Save(stPath, st); err != nil {
+		t.Fatal(err)
+	}
+	provider := &powerDeleteFakeProvider{}
+	tailscaleClient := &recordingCleanupTailscale{policyPresence: tailscale.ServerproPolicyChange{TagOwners: []string{"tag:serverpro-demoapp"}}}
+	a := &app{stdout: io.Discard, stderr: io.Discard, project: "demoapp", provider: "hetzner", yes: true, providers: providerRegistryForPower(t, provider), services: serviceHooks{
+		preflightTrackedExternalResources: func(ctx context.Context, cleanup *serverDeleteCleanup) error {
+			return validateTrackedExternalResources(ctx, cleanup, serverCleanupClients{Tailscale: tailscaleClient})
+		},
+	}}
+	cmd := a.serverDeleteCmd()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"webapp"})
+
+	err = cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "partially applied") {
+		t.Fatalf("expected partial ownership error, got %v", err)
+	}
+	if tailscaleClient.policyInspections != 1 || provider.deleted {
+		t.Fatalf("partial ownership inspection=%d compute_deleted=%t", tailscaleClient.policyInspections, provider.deleted)
+	}
+}
+
+func TestServerDeleteStopsBeforeComputeForSharedPolicyDrift(t *testing.T) {
+	createServerReadFixture(t)
+	stPath := config.ServerStatePath("demoapp", "webapp")
+	st, err := state.Load(stPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Tailscale = state.TailscaleState{
+		Tailnet:         cleanupTestTailnetSelector,
+		TailnetID:       cleanupTestTailnetID,
+		PolicyTagOwners: []string{"tag:serverpro-demoapp"},
+		PolicySSHRule:   true,
+		PolicySSHTags:   []string{"tag:serverpro-demoapp"},
+		PolicySSHUser:   "deploy",
+	}
+	if err := state.Save(stPath, st); err != nil {
+		t.Fatal(err)
+	}
+	siblingPath := config.ServerStatePath("demoapp", "api")
+	sibling := state.State{Project: "demoapp", Server: "api", Tailscale: state.TailscaleState{Tailnet: cleanupTestTailnetSelector, TailnetID: cleanupTestTailnetID, Tags: []string{"tag:serverpro-demoapp"}}}
+	if err := state.Save(siblingPath, sibling); err != nil {
+		t.Fatal(err)
+	}
+	registerCleanupSiblings(t, stPath, siblingPath)
+
+	provider := &powerDeleteFakeProvider{}
+	tailscaleClient := &recordingCleanupTailscale{policyInspectErr: errors.New("ownership drift")}
+	a := &app{stdout: io.Discard, stderr: io.Discard, project: "demoapp", provider: "hetzner", yes: true, providers: providerRegistryForPower(t, provider), services: serviceHooks{
+		preflightTrackedExternalResources: func(ctx context.Context, cleanup *serverDeleteCleanup) error {
+			return validateTrackedExternalResources(ctx, cleanup, serverCleanupClients{Tailscale: tailscaleClient})
+		},
+		deleteTrackedExternalResources: func(_ context.Context, cleanup serverDeleteCleanup) (state.State, error) {
+			return cleanup.State, nil
+		},
+	}}
+	cmd := a.serverDeleteCmd()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"webapp"})
+
+	err = cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "ownership drift") {
+		t.Fatalf("expected shared policy drift error, got %v", err)
+	}
+	if tailscaleClient.policyInspections != 1 || strings.Join(tailscaleClient.inspectedPolicyTags, ",") != "tag:serverpro-demoapp" || strings.Join(tailscaleClient.inspectedPolicySSHTags, ",") != "tag:serverpro-demoapp" || tailscaleClient.inspectedPolicyUser != "deploy" {
+		t.Fatalf("shared policy inspection used wrong identity: %+v", tailscaleClient)
+	}
+	if provider.deleted {
+		t.Fatal("compute deleted before shared policy drift preflight")
+	}
+}
+
+func TestServerDeleteStopsBeforeComputeWhenTailnetPreflightFails(t *testing.T) {
+	createServerReadFixture(t)
+	stPath := config.ServerStatePath("demoapp", "webapp")
+	st, err := state.Load(stPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Tailscale = state.TailscaleState{Tailnet: cleanupTestTailnetSelector, TailnetID: cleanupTestTailnetID, NodeID: "node-1"}
+	if err := state.Save(stPath, st); err != nil {
+		t.Fatal(err)
+	}
+	provider := &powerDeleteFakeProvider{}
+	a := &app{stdout: io.Discard, stderr: io.Discard, project: "demoapp", provider: "hetzner", yes: true, providers: providerRegistryForPower(t, provider), services: serviceHooks{
+		preflightTrackedExternalResources: func(context.Context, *serverDeleteCleanup) error {
+			return errors.New("tailnet identity mismatch")
+		},
+	}}
+	cmd := a.serverDeleteCmd()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"webapp"})
+
+	err = cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "tailnet identity mismatch") {
+		t.Fatalf("expected tailnet preflight error, got %v", err)
+	}
+	if provider.deleted {
+		t.Fatal("compute deleted before live Tailscale preflight")
 	}
 }
 
@@ -410,6 +560,7 @@ func TestServerDeletePreservesStateWhenExternalCleanupFails(t *testing.T) {
 
 	provider := &powerDeleteFakeProvider{}
 	a := &app{stdout: io.Discard, stderr: io.Discard, project: "demoapp", provider: "hetzner", yes: true, providers: providerRegistryForPower(t, provider), services: serviceHooks{
+		preflightTrackedExternalResources: func(context.Context, *serverDeleteCleanup) error { return nil },
 		deleteTrackedExternalResources: func(context.Context, serverDeleteCleanup) (state.State, error) {
 			return state.State{}, errors.New("cleanup failed")
 		},

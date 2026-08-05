@@ -2,6 +2,7 @@ package tailscale
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 )
 
@@ -29,21 +30,36 @@ func (d policyDocument) ensureTagOwners(tags []string) ([]string, error) {
 	return added, d.setTagOwners(owners)
 }
 
+func (d policyDocument) inspectTagOwners(tags []string) ([]string, error) {
+	owners, err := d.tagOwners()
+	if err != nil {
+		return nil, err
+	}
+	present := []string{}
+	for _, tag := range tags {
+		current, ok := owners[tag]
+		if !ok {
+			continue
+		}
+		if !sameStringSet(current, []string{serverproPolicyOwner}) {
+			return nil, fmt.Errorf("tailscale policy ownership drift for tag %q: expected %q, found %v", tag, serverproPolicyOwner, current)
+		}
+		present = append(present, tag)
+	}
+	return present, nil
+}
+
 func (d policyDocument) removeTagOwners(tags []string) (bool, error) {
+	present, err := d.inspectTagOwners(tags)
+	if err != nil || len(present) == 0 {
+		return false, err
+	}
 	owners, err := d.tagOwners()
 	if err != nil {
 		return false, err
 	}
-	changed := false
-	for _, tag := range tags {
-		if _, ok := owners[tag]; !ok {
-			continue
-		}
+	for _, tag := range present {
 		delete(owners, tag)
-		changed = true
-	}
-	if !changed {
-		return false, nil
 	}
 	return true, d.setTagOwners(owners)
 }

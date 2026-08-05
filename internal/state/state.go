@@ -42,6 +42,8 @@ type ComputeState struct {
 }
 
 type TailscaleState struct {
+	Tailnet                string   `json:"tailnet,omitempty"`
+	TailnetID              string   `json:"tailnet_id,omitempty"`
 	NodeID                 string   `json:"node_id,omitempty"`
 	AuthKeyID              string   `json:"auth_key_id,omitempty"`
 	Name                   string   `json:"name,omitempty"`
@@ -51,7 +53,10 @@ type TailscaleState struct {
 	PreexistingDeviceIDs   []string `json:"preexisting_device_ids,omitempty"`
 	PolicyTagOwners        []string `json:"policy_tag_owners,omitempty"`
 	PolicySSHRule          bool     `json:"policy_ssh_rule,omitempty"`
+	PolicyPendingTagOwners []string `json:"policy_pending_tag_owners,omitempty"`
+	PolicyPendingSSHRule   bool     `json:"policy_pending_ssh_rule,omitempty"`
 	PolicySSHTags          []string `json:"policy_ssh_tags,omitempty"`
+	PolicySSHUser          string   `json:"policy_ssh_user,omitempty"`
 }
 
 type CloudflareState struct {

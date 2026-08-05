@@ -3,6 +3,7 @@ package digitalocean
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 
 	"github.com/assagman/serverpro/internal/compute"
@@ -27,12 +28,33 @@ func firewallName(serverName string) string {
 	return serverName + "-deny-public"
 }
 
+const (
+	tailscaleWireGuardPort  = "41641"
+	legacyTailscaleSTUNPort = "3478"
+)
+
+var publicIPRanges = []string{"0.0.0.0/0", "::/0"}
+
 func tailscaleInboundRules() []Rule {
-	sources := &RuleTargets{Addresses: []string{"0.0.0.0/0", "::/0"}}
-	return []Rule{
-		{Protocol: "udp", Ports: "41641", Sources: sources},
-		{Protocol: "udp", Ports: "3478", Sources: sources},
+	sources := &RuleTargets{Addresses: slices.Clone(publicIPRanges)}
+	return []Rule{{Protocol: "udp", Ports: tailscaleWireGuardPort, Sources: sources}}
+}
+
+func legacyTailscaleSTUNRules(rules []Rule) []Rule {
+	var legacy []Rule
+	for _, rule := range rules {
+		if rule.Protocol != "udp" || rule.Ports != legacyTailscaleSTUNPort || rule.Sources == nil {
+			continue
+		}
+		addresses := slices.Clone(rule.Sources.Addresses)
+		slices.Sort(addresses)
+		expected := slices.Clone(publicIPRanges)
+		slices.Sort(expected)
+		if slices.Equal(addresses, expected) && len(rule.Sources.DropletIDs) == 0 && len(rule.Sources.LoadBalancerUIDs) == 0 && len(rule.Sources.KubernetesIDs) == 0 && len(rule.Sources.Tags) == 0 {
+			legacy = append(legacy, rule)
+		}
 	}
+	return legacy
 }
 
 func allowAllOutboundRules() []Rule {

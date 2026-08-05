@@ -132,6 +132,30 @@ func TestCreateFirewallRuleSendsIPTypeProtocolSubnetAndPort(t *testing.T) {
 	}
 }
 
+func TestFirewallRulesListsAllPages(t *testing.T) {
+	requests := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/firewalls/fw-9/rules" {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.String())
+		}
+		requests++
+		if r.URL.Query().Get("cursor") == "page-2" {
+			_, _ = w.Write([]byte(`{"firewall_rules":[{"id":2,"action":"accept","ip_type":"v6","protocol":"udp","port":"41641","subnet":"::","subnet_size":0}],"meta":{"links":{"next":"","prev":""}}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"firewall_rules":[{"id":1,"action":"accept","ip_type":"v4","protocol":"udp","port":"41641","subnet":"0.0.0.0","subnet_size":0}],"meta":{"links":{"next":"page-2","prev":""}}}`))
+	}))
+	defer ts.Close()
+
+	rules, err := NewWithHTTP("token", ts.URL, ts.Client()).FirewallRules(context.Background(), "fw-9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 || len(rules) != 2 || rules[1].IPType != "v6" {
+		t.Fatalf("requests=%d rules=%+v", requests, rules)
+	}
+}
+
 func TestGetInstanceDecodesStatusAndTags(t *testing.T) {
 	handlerErr := newHandlerErrorRecorder(t)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

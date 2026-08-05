@@ -75,8 +75,11 @@ type Rule struct {
 }
 
 type RuleTargets struct {
-	Addresses []string `json:"addresses,omitempty"`
-	Tags      []string `json:"tags,omitempty"`
+	Addresses        []string `json:"addresses,omitempty"`
+	DropletIDs       []int64  `json:"droplet_ids,omitempty"`
+	LoadBalancerUIDs []string `json:"load_balancer_uids,omitempty"`
+	KubernetesIDs    []string `json:"kubernetes_ids,omitempty"`
+	Tags             []string `json:"tags,omitempty"`
 }
 
 type Action struct {

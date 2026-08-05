@@ -79,7 +79,7 @@ func TestRunRejectsExistingComputeWithoutDeviceBaseline(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "device baseline") {
 		t.Fatalf("expected fail-closed baseline error, got %v", err)
 	}
-	if len(ts.calls) != 0 {
-		t.Fatalf("provider mutation began before binding check: %v", ts.calls)
+	if strings.Join(ts.calls, ",") != "tailnet-id" {
+		t.Fatalf("mutable provider call began before binding check: %v", ts.calls)
 	}
 }

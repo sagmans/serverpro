@@ -2,6 +2,7 @@ package vultr
 
 import (
 	"context"
+	"slices"
 
 	"github.com/assagman/serverpro/internal/compute"
 	"github.com/assagman/serverpro/internal/ownership"
@@ -35,6 +36,9 @@ func (p ComputeProvider) Create(ctx context.Context, request compute.CreateServe
 
 func ensureFirewallGroup(ctx context.Context, client Client, request compute.CreateServerRequest) (string, error) {
 	if raw := request.ProviderState["firewall_group_id"]; raw != "" {
+		if err := reconcileFirewallRules(ctx, client, request, raw); err != nil {
+			return raw, err
+		}
 		return raw, nil
 	}
 	fw, err := client.CreateFirewallGroup(ctx, firewallGroupName(request.Intent.Name))
@@ -46,25 +50,67 @@ func ensureFirewallGroup(ctx context.Context, client Client, request compute.Cre
 			return fw.ID, err
 		}
 	}
-	if err := ensureFirewallRules(ctx, client, fw.ID); err != nil {
+	if err := ensureFirewallRules(ctx, client, fw.ID, nil); err != nil {
 		return fw.ID, err
 	}
 	return fw.ID, nil
 }
 
-func ensureFirewallRules(ctx context.Context, client Client, groupID string) error {
+func reconcileFirewallRules(ctx context.Context, client Client, request compute.CreateServerRequest, groupID string) error {
+	group, err := client.GetFirewallGroup(ctx, groupID)
+	if err != nil {
+		return err
+	}
+	if err := validateLiveFirewallGroupOwnership(partialServerRecordFromCreateRequest(request, groupID), group); err != nil {
+		return err
+	}
+	existing, err := client.FirewallRules(ctx, groupID)
+	if err != nil {
+		return err
+	}
+	for _, rule := range existing {
+		if legacyTailscaleSTUNRuleMatches(rule) {
+			if err := client.DeleteFirewallRule(ctx, groupID, rule.ID); err != nil {
+				return err
+			}
+		}
+	}
+	return ensureFirewallRules(ctx, client, groupID, existing)
+}
+
+func ensureFirewallRules(ctx context.Context, client Client, groupID string, existing []FirewallRule) error {
 	rules := []CreateFirewallRuleInput{
 		{IPType: "v4", Protocol: "udp", Port: "41641", Subnet: "0.0.0.0", SubnetSize: 0, Notes: "tailscale wireguard"},
 		{IPType: "v6", Protocol: "udp", Port: "41641", Subnet: "::", SubnetSize: 0, Notes: "tailscale wireguard"},
-		{IPType: "v4", Protocol: "udp", Port: "3478", Subnet: "0.0.0.0", SubnetSize: 0, Notes: "tailscale stun"},
-		{IPType: "v6", Protocol: "udp", Port: "3478", Subnet: "::", SubnetSize: 0, Notes: "tailscale stun"},
 	}
 	for _, rule := range rules {
+		if slices.ContainsFunc(existing, func(candidate FirewallRule) bool {
+			return firewallRuleMatches(candidate, rule)
+		}) {
+			continue
+		}
 		if _, err := client.CreateFirewallRule(ctx, groupID, rule); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func firewallRuleMatches(existing FirewallRule, required CreateFirewallRuleInput) bool {
+	// Notes are intentionally excluded because only packet-filtering semantics
+	// determine whether retrying must create a missing rule.
+	return existing.Action == "accept" && existing.IPType == required.IPType && existing.Protocol == required.Protocol && existing.Port == required.Port && existing.Subnet == required.Subnet && existing.SubnetSize == required.SubnetSize
+}
+
+func legacyTailscaleSTUNRuleMatches(rule FirewallRule) bool {
+	const (
+		legacyPort = "3478"
+		legacyNote = "tailscale stun"
+	)
+	if rule.Action != "accept" || rule.Protocol != "udp" || rule.Port != legacyPort || rule.SubnetSize != 0 || rule.Source != "" || rule.Notes != legacyNote {
+		return false
+	}
+	return rule.IPType == "v4" && rule.Subnet == "0.0.0.0" || rule.IPType == "v6" && rule.Subnet == "::"
 }
 
 func createInstanceInputFromRequest(request compute.CreateServerRequest, osID int64, firewallGroupID string) CreateInstanceInput {

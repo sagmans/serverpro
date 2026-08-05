@@ -73,17 +73,35 @@ func (f *fakeHetzner) Create(_ context.Context, request compute.CreateServerRequ
 }
 
 type fakeTailscale struct {
-	calls         []string
-	created       bool
-	keyErr        error
-	deleteErr     error
-	deletedKeyIDs []string
-	policyErr     error
-	waitErr       error
-	baselineIDs   []string
-	waitDevice    tailscale.Device
-	waitRequests  []tailscale.DeviceWait
-	policyChange  tailscale.ServerproPolicyChange
+	calls            []string
+	created          bool
+	keyErr           error
+	deleteErr        error
+	deletedKeyIDs    []string
+	policyErr        error
+	policyPostErr    error
+	policyUnchanged  bool
+	policyMutated    bool
+	waitErr          error
+	baselineIDs      []string
+	waitDevice       tailscale.Device
+	waitRequests     []tailscale.DeviceWait
+	policyChange     tailscale.ServerproPolicyChange
+	policyPresence   tailscale.ServerproPolicyChange
+	policyInspectErr error
+	tailnetID        string
+	tailnetErr       error
+}
+
+func (f *fakeTailscale) TailnetID(context.Context) (string, error) {
+	f.calls = append(f.calls, "tailnet-id")
+	if f.tailnetErr != nil {
+		return "", f.tailnetErr
+	}
+	if f.tailnetID != "" {
+		return f.tailnetID, nil
+	}
+	return "tailnet-1", nil
 }
 
 func (f *fakeTailscale) CreateAuthKey(context.Context, []string, time.Duration) (tailscale.AuthKey, error) {
@@ -101,15 +119,32 @@ func (f *fakeTailscale) DeleteAuthKey(_ context.Context, id string) error {
 	return f.deleteErr
 }
 
-func (f *fakeTailscale) EnsureServerproPolicy(_ context.Context, tags []string, _ string, _ string) (tailscale.ServerproPolicyChange, error) {
+func (f *fakeTailscale) InspectServerproPolicyParts(context.Context, []string, []string, string) (tailscale.ServerproPolicyChange, error) {
+	f.calls = append(f.calls, "inspect-policy")
+	return f.policyPresence, f.policyInspectErr
+}
+
+func (f *fakeTailscale) EnsureServerproPolicy(_ context.Context, tags []string, _ string, _ string, checkpoint tailscale.PolicyCheckpoint) (tailscale.ServerproPolicyChange, error) {
 	f.calls = append(f.calls, "ensure-policy")
 	if f.policyErr != nil {
 		return tailscale.ServerproPolicyChange{}, f.policyErr
 	}
-	if len(f.policyChange.TagOwners) > 0 || f.policyChange.SSHRule {
-		return f.policyChange, nil
+	change := f.policyChange
+	if f.policyUnchanged {
+		change = tailscale.ServerproPolicyChange{}
+	} else if len(change.TagOwners) == 0 && !change.SSHRule {
+		change = tailscale.ServerproPolicyChange{TagOwners: tags, SSHRule: true}
 	}
-	return tailscale.ServerproPolicyChange{TagOwners: tags, SSHRule: true}, nil
+	if checkpoint != nil {
+		if err := checkpoint(change); err != nil {
+			return change, err
+		}
+	}
+	if f.policyPostErr != nil {
+		return change, f.policyPostErr
+	}
+	f.policyMutated = len(change.TagOwners) > 0 || change.SSHRule
+	return change, nil
 }
 
 func (f *fakeTailscale) ValidateSSHPolicy(context.Context, []string, string, string) error {

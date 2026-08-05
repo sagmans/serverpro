@@ -56,6 +56,9 @@ func Run(ctx context.Context, opt Options) (state.State, error) {
 	if err := checkpointProvisionIntent(opt.StatePath, &st, cfg, account); err != nil {
 		return st, err
 	}
+	if err := ensureTailscaleTailnetIdentity(ctx, &st, opt.StatePath, opt.Creds, cfg, opt.Clients.Tailscale); err != nil {
+		return st, err
+	}
 	if staleKeyID := st.Tailscale.AuthKeyID; staleKeyID != "" {
 		// A persisted key identifies unfinished cleanup. Replacing it first would
 		// lose the only durable handle needed to revoke the old credential.

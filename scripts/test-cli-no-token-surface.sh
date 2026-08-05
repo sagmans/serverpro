@@ -273,6 +273,8 @@ cat >"$state_path" <<'JSON'
     "provider_state": {"access_policy_id": "fw-test"}
   },
   "tailscale": {
+    "tailnet": "example.ts.net",
+    "tailnet_id": "tailnet-test",
     "node_id": "node-test",
     "auth_key_id": "key-test",
     "name": "webapp.test.ts.net",
@@ -280,7 +282,8 @@ cat >"$state_path" <<'JSON'
     "tags": ["tag:serverpro-mynamespace"],
     "policy_tag_owners": ["tag:serverpro-mynamespace"],
     "policy_ssh_rule": true,
-    "policy_ssh_tags": ["tag:serverpro-mynamespace"]
+    "policy_ssh_tags": ["tag:serverpro-mynamespace"],
+    "policy_ssh_user": "ops"
   },
   "cloudflare": {"tunnel_id": "tun-test", "name": "mynamespace-webapp"},
   "labels": {"managed-by": "serverpro", "serverpro-namespace": "mynamespace", "serverpro-server": "webapp"},

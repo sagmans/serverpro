@@ -32,7 +32,9 @@ type ServerproPolicyChange struct {
 	SSHRule   bool
 }
 
-func (c Client) EnsureServerproPolicy(ctx context.Context, tags []string, adminUser, rootPolicy string) (ServerproPolicyChange, error) {
+type PolicyCheckpoint func(ServerproPolicyChange) error
+
+func (c Client) EnsureServerproPolicy(ctx context.Context, tags []string, adminUser, rootPolicy string, checkpoint PolicyCheckpoint) (ServerproPolicyChange, error) {
 	var change ServerproPolicyChange
 	if rootPolicy != "check-or-disabled" {
 		return change, fmt.Errorf("unsupported root policy %q", rootPolicy)
@@ -52,15 +54,43 @@ func (c Client) EnsureServerproPolicy(ctx context.Context, tags []string, adminU
 	}
 	change.SSHRule = addedSSHRule
 	if len(change.TagOwners) == 0 && !change.SSHRule {
+		if checkpoint != nil {
+			if err := checkpoint(change); err != nil {
+				return change, fmt.Errorf("checkpoint tailscale policy ownership: %w", err)
+			}
+		}
 		return change, nil
 	}
 	if err := c.validatePolicyDocument(ctx, doc); err != nil {
 		return change, err
 	}
+	// Pending ownership must be durable before policy mutation. Callers promote
+	// it only after this conditional write succeeds; ambiguous failures stay pending.
+	if checkpoint != nil {
+		if err := checkpoint(change); err != nil {
+			return change, fmt.Errorf("checkpoint tailscale policy ownership: %w", err)
+		}
+	}
 	if err := c.postPolicyDocument(ctx, doc, etag); err != nil {
 		return change, err
 	}
 	return change, nil
+}
+
+func (c Client) InspectServerproPolicyParts(ctx context.Context, tagOwnerTags, sshTags []string, adminUser string) (ServerproPolicyChange, error) {
+	var present ServerproPolicyChange
+	doc, _, err := c.policyDocument(ctx)
+	if err != nil {
+		return present, err
+	}
+	present.TagOwners, err = doc.inspectTagOwners(tagOwnerTags)
+	if err != nil {
+		return present, err
+	}
+	if len(sshTags) > 0 {
+		present.SSHRule, err = doc.inspectSSHRule(sshTags, adminUser)
+	}
+	return present, err
 }
 
 func (c Client) RemoveServerproPolicy(ctx context.Context, tags []string, adminUser string, removeSSH bool) (bool, error) {

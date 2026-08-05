@@ -2,13 +2,30 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/assagman/serverpro/internal/compute"
 	"github.com/assagman/serverpro/internal/config"
 	"github.com/assagman/serverpro/internal/credentials"
+	"github.com/assagman/serverpro/internal/provider/tailscale"
 )
+
+type recordingTailscalePreflight struct {
+	calls      []string
+	tailnetErr error
+}
+
+func (f *recordingTailscalePreflight) TailnetID(context.Context) (string, error) {
+	f.calls = append(f.calls, "users")
+	return "tailnet-1", f.tailnetErr
+}
+
+func (f *recordingTailscalePreflight) Policy(context.Context) (tailscale.Policy, error) {
+	f.calls = append(f.calls, "policy")
+	return tailscale.Policy{}, nil
+}
 
 func TestValidateCreateImageReferenceRejectsUnsupportedImages(t *testing.T) {
 	for _, tc := range []struct {
@@ -49,6 +66,29 @@ func TestPreflightRejectsIncompatibleImageBeforeServiceChecks(t *testing.T) {
 	err := a.preflight(context.Background(), cfg, credentials.Set{ServerProvider: "token"})
 	if err == nil || !strings.Contains(err.Error(), "Ubuntu 24.04") {
 		t.Fatalf("expected image compatibility error, got %v", err)
+	}
+}
+
+func TestPreflightTailscaleAccessRequiresMemberReadBeforePolicy(t *testing.T) {
+	client := &recordingTailscalePreflight{tailnetErr: errors.New("users:read denied")}
+
+	err := preflightTailscaleAccess(context.Background(), client)
+	if err == nil || !strings.Contains(err.Error(), "users:read denied") {
+		t.Fatalf("expected member-read error, got %v", err)
+	}
+	if strings.Join(client.calls, ",") != "users" {
+		t.Fatalf("policy read ran before member access passed: %v", client.calls)
+	}
+}
+
+func TestPreflightTailscaleAccessReadsMemberIdentityThenPolicy(t *testing.T) {
+	client := &recordingTailscalePreflight{}
+
+	if err := preflightTailscaleAccess(context.Background(), client); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(client.calls, ",") != "users,policy" {
+		t.Fatalf("preflight calls = %v", client.calls)
 	}
 }
 

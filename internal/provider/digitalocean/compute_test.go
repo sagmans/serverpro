@@ -271,15 +271,15 @@ func payloadHasTags(payload map[string]any, wants ...string) bool {
 func assertTailscaleInboundRules(t *testing.T, payload map[string]any) {
 	t.Helper()
 	rules := payload["inbound_rules"].([]any)
-	if len(rules) != 2 {
-		t.Fatalf("expected 2 inbound tailscale rules, got %+v", rules)
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 inbound tailscale rule, got %+v", rules)
 	}
 	got := map[string]bool{}
 	for _, raw := range rules {
 		rule := raw.(map[string]any)
 		got[rule["protocol"].(string)+":"+rule["ports"].(string)] = true
 	}
-	for _, want := range []string{"udp:41641", "udp:3478"} {
+	for _, want := range []string{"udp:41641"} {
 		if !got[want] {
 			t.Fatalf("missing inbound %s in %+v", want, rules)
 		}

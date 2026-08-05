@@ -221,8 +221,12 @@ MYNAMESPACE_WEBAPP_SUDOPASS='use-a-long-remote-admin-password' \
 ```
 
 Only IPv4-backed instances are created (`enable_ipv6=false`). A Vultr firewall
-group that denies inbound traffic is attached automatically. Ownership uses the
-shared provider metadata convention.
+group keeps public services closed while allowing Tailscale direct connections
+on inbound UDP `41641`; STUN on UDP `3478` remains outbound. If creation retries
+from a checkpointed group, serverpro validates its ownership, removes only
+exact legacy serverpro inbound UDP `3478` rules, and restores missing required
+UDP `41641` rules before creating the instance. Ownership uses the shared
+provider metadata convention.
 
 ### Creating a DigitalOcean server
 
@@ -254,10 +258,12 @@ serverpro server create webapp \
 
 Only IPv4-backed droplets are created (`ipv6=false`). DigitalOcean tag
 resources are ensured first, then a tag-bound firewall is created before the
-droplet. It keeps SSH closed, allows Tailscale UDP ports `41641` and `3478`
-inbound, and allows outbound traffic. Ownership uses the shared provider
-metadata convention. The token needs tag read/create scope in addition to
-droplet and firewall scopes.
+droplet. It keeps SSH closed, allows Tailscale's direct-connection UDP port
+`41641` inbound, and allows outbound traffic, including STUN on UDP `3478`.
+A retry from a checkpointed firewall validates ownership and removes only the
+exact legacy serverpro broad inbound UDP `3478` rule before creating the
+droplet. Ownership uses the shared provider metadata convention. The token
+needs tag read/create scope in addition to droplet and firewall scopes.
 
 ## Inspect and operate
 
@@ -293,8 +299,10 @@ serverpro server import --all -p vultr --dry-run
 
 Import claims only resources stamped with `managed-by=serverpro` ownership
 labels. It fails closed if exact region/size/image metadata or one unique owned
-provider firewall cannot be recovered. Sudo passwords are not recoverable;
-re-enter them for doctor/bootstrap when needed.
+provider firewall cannot be recovered. `--with-tailscale` also records the
+configured tailnet selector and canonical tailnet ID before attaching a device.
+Sudo passwords are not recoverable; re-enter them for doctor/bootstrap when
+needed.
 
 Status includes provider, catalog shape, power, public IP, Tailscale readiness,
 SSH readiness, and ingress summary. Bootstrap reruns managed host-tool setup
@@ -361,9 +369,19 @@ serverpro server delete webapp -n mynamespace -p hetzner --dry-run
 ```
 
 State is removed only after all tracked provider and external cleanup succeeds.
-If creation stopped before any compute resource existed, delete skips that
-absent resource and cleans the checkpointed external resources. Non-interactive
-mode disables the approval prompt, so live delete requires `--yes`.
+Tailscale cleanup uses the persisted tailnet selector, verifies its canonical ID
+with current credentials before compute deletion, and uses the exact SSH tags
+and admin user recorded when the rule was ensured—not current config. A live
+delete preflight reconciles pending policy ownership from an ambiguous write:
+full exact presence promotes it, full absence clears it, and partial application
+or drift remains blocked for manual repair. Dry-run cannot reconcile because it
+makes no provider calls. Before compute deletion, the same preflight validates
+every tracked Tailscale and Cloudflare resource and any shared-policy ownership
+transfer without provider mutation. Legacy or drifted ownership lacking a
+complete identity fails closed instead of guessing. If creation stopped before
+any compute resource existed, delete skips that absent resource and cleans
+checkpointed external resources. Non-interactive mode disables the approval
+prompt, so live delete requires `--yes`.
 
 ### Delete a namespace
 

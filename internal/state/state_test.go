@@ -58,6 +58,28 @@ func TestSaveWritesGenericStateKeys(t *testing.T) {
 	}
 }
 
+func TestSavePreservesPendingTailscalePolicyOwnership(t *testing.T) {
+	path := stateTestPath(t, "state.json")
+	want := TailscaleState{
+		Tailnet:                "example.ts.net",
+		TailnetID:              "tailnet-1",
+		PolicyPendingTagOwners: []string{"tag:serverpro-prod"},
+		PolicyPendingSSHRule:   true,
+		PolicySSHTags:          []string{"tag:serverpro-prod"},
+		PolicySSHUser:          "deploy",
+	}
+	if err := Save(path, State{Project: "prod", Server: "web", Tailscale: want}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got.Tailscale.PolicyPendingTagOwners, ",") != "tag:serverpro-prod" || !got.Tailscale.PolicyPendingSSHRule || got.Tailscale.PolicySSHUser != "deploy" {
+		t.Fatalf("pending policy ownership was not preserved: %+v", got.Tailscale)
+	}
+}
+
 func TestSaveResetsExistingFilePermissions(t *testing.T) {
 	path := stateTestPath(t, "state.json")
 	if err := os.WriteFile(path, []byte(`{"namespace":"prod"}`), 0o644); err != nil {

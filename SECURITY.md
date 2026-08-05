@@ -117,8 +117,21 @@ Power and delete operations require:
 State is removed only after every tracked compute, access-policy, and external
 resource cleanup succeeds. A failed create that never reached compute skips the
 absent compute deletion but still cleans checkpointed external resources.
-Partial failures retain state and report remaining resources. Local state can
-drift from provider reality.
+Partial failures retain state and report remaining resources. DigitalOcean and
+Vultr retries validate checkpointed firewall ownership and remove only exact
+legacy serverpro inbound UDP `3478` rules; Vultr also restores missing required
+UDP `41641` rules before creating an instance. Tailscale policy intent is
+checkpointed as pending before the policy write and promoted to confirmed
+ownership only after success. The next live create or delete preflight reads
+exact live policy: full presence promotes pending ownership,
+full absence clears it, and partial application or drift fails closed for manual
+repair. Dry-runs cannot reconcile because they make no provider calls. Before
+compute deletion, cleanup validates the persisted canonical tailnet identity,
+tracked device, auth key, exact policy or safe absence, shared-policy ownership
+transfer, and Cloudflare tunnel without provider mutation. Cleanup targets the
+exact tracked SSH tags and admin user. Missing or mismatched legacy identity
+fails closed rather than using current config. Local state can drift from
+provider reality.
 
 `serverpro server discover` lists compute resources labeled
 `managed-by=serverpro` on a provider token. `serverpro server import` rebuilds

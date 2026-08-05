@@ -108,11 +108,17 @@ flowchart LR
 3. Prompt for ingress; default `none`.
 4. Validate server-scoped compute provider token and Tailscale access.
 5. Checkpoint intended compute identity before creating external resources.
-6. Create and checkpoint Tailscale policy, optional tunnel, and one-off access.
-7. Render cloud-init with Tailscale-first bootstrap.
-8. Create compute server through `compute.Provider.Create`, checkpointing each
-   recoverable provider resource.
-9. Wait for Tailscale SSH, converge managed host tools, and run doctor.
+6. Resolve and checkpoint the canonical Tailscale tailnet identity, then
+   checkpoint pending exact policy ownership before any update and confirm it
+   only after the conditional policy write succeeds.
+7. Create and checkpoint the optional tunnel and one-off access.
+8. Render cloud-init with Tailscale-first bootstrap.
+9. Create the compute server through `compute.Provider.Create`, checkpointing
+   each recoverable provider resource. DigitalOcean and Vultr validate
+   checkpointed firewall ownership and remove only exact legacy serverpro
+   inbound UDP `3478` rules before retrying; Vultr also restores missing
+   required UDP `41641` rules.
+10. Wait for Tailscale SSH, converge managed host tools, and run doctor.
 
 ### Ingress
 
@@ -132,20 +138,28 @@ Important fields:
 
 - `compute`: provider, namespace, server, provider ID, location, size,
   image, public IP, and adapter state.
-- `tailscale`: Tailscale node identity and policy markers.
+- `tailscale`: persisted tailnet selector and canonical tailnet ID, node
+  identity, exact managed SSH policy tags and admin user, plus pending and
+  confirmed policy ownership. Cleanup validates the live tailnet ID and remains
+  bound to the original rule after config drift. The next live create or delete
+  preflight reconciles an ambiguous write: exact full presence promotes pending
+  ownership, full absence clears it, and partial application or drift remains
+  blocked for manual repair. Dry-runs make no provider calls and cannot perform
+  this reconciliation.
 - `ingress`: generic ingress routes.
 - `cloudflare`: Cloudflare tunnel metadata when present.
 
 Provider-specific data stays inside provider-neutral state fields. Server state
 and registry currently use schema version 1. Unversioned legacy files normalize
-to version 1; unknown older or newer versions fail before any write so binaries
-cannot silently reinterpret state. Mixed serverpro versions sharing one state
-tree are unsupported before `v1.0.0`; replacement is safe only while both
-binaries use schema version 1.
+to version 1; unknown explicit versions fail before any write. Before `v1.0.0`,
+mixed versions and downgrades are unsupported even when both binaries report
+schema version 1: additive safety metadata can change, and an older binary can
+discard fields it does not understand when rewriting state. Legacy state that
+lacks required ownership identity fails before external mutation.
 
-Current schema needs no migration. Any future schema bump must add ordered
-migration and rollback tests, preserve a pre-migration backup, define the
-compatible binary window, and update operator upgrade guidance in the same
+Current schema has no automatic migration. Any future schema bump must add
+ordered migration and rollback tests, preserve a pre-migration backup, define
+the compatible binary window, and update operator upgrade guidance in the same
 change.
 
 When local trees are missing, `server discover` / `server import` rebuild state
@@ -169,6 +183,16 @@ by resource name.
 - Provider and service tokens are stored in private server-scoped credential files.
 - Runtime sudo passwords and bootstrap data are secrets and are never persisted.
 - Delete and power operations use state-known IDs and identity checks.
+- Retry creation on DigitalOcean and Vultr validates each checkpointed
+  firewall, removes only exact legacy serverpro inbound UDP `3478` rules, and
+  restores missing Vultr UDP `41641` rules before creating compute.
+- Tailscale policy intent is durable before provider mutation and becomes
+  confirmed ownership only after success. Live create and delete preflights
+  reconcile wholly present or absent pending intent; partial application and
+  policy drift fail closed.
+- Before compute deletion, cleanup validates every tracked Tailscale and
+  Cloudflare resource plus any shared-policy ownership transfer without
+  provider mutation.
 
 ## Extension points
 

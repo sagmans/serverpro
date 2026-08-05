@@ -11,7 +11,7 @@ paths are ready.
 - `ssh`
 - `tailscale` CLI for local SSH checks and `serverpro server ssh`
 - Provider API token for Hetzner, Vultr, or DigitalOcean
-- Tailscale API token for target tailnet policy, auth keys, and devices
+- Tailscale API token for target tailnet member users, policy, auth keys, and devices
 - Optional Cloudflare API token/account for Cloudflare Tunnel connector metadata
 - Optional `fzf` for interactive selections
 
@@ -115,8 +115,10 @@ SERVERPRO_SERVER_PROVIDER_TOKEN='provider-token' \
 Do not run different serverpro versions against the same local state tree.
 Before replacement, back up `~/.config/serverpro` and
 `~/.local/state/serverpro`. Current releases use schema version 1, accept legacy
-unversioned files as version 1, and perform no migration. Unknown schema versions fail without
-rewriting state.
+unversioned files as version 1, and perform no automatic migration. Unknown
+explicit schema versions fail without rewriting state. Before `v1.0.0`, same
+schema number does not guarantee downgrade compatibility because safety metadata
+can grow between releases.
 
 ```sh
 go install github.com/assagman/serverpro/cmd/serverpro@latest
@@ -124,8 +126,19 @@ serverpro --version
 serverpro server list
 ```
 
-Downgrade only between releases that use schema version 1. If validation fails,
-stop using the new binary, restore the backup, and reinstall the prior version.
+Pre-`v1.0.0` downgrades are unsupported. To roll back, stop the new binary,
+restore both config and state backups made before replacement, then reinstall
+the prior version. Never run an older binary against state already rewritten by
+a newer one.
+
+Earlier pre-release builds may have created broad inbound UDP `3478` rules on
+DigitalOcean or Vultr firewalls. New firewalls expose only UDP `41641` for
+Tailscale direct connections; STUN on UDP `3478` remains outbound. A create
+retry removes an exact legacy serverpro rule after validating checkpointed
+firewall ownership. Completed servers are not changed automatically: inspect
+the serverpro-owned provider firewall, remove only broad inbound UDP `3478`
+rules created by the old build, preserve outbound UDP, and verify inbound UDP
+`41641` plus public SSH closure before upgrading.
 
 ## Uninstall
 

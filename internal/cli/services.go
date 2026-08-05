@@ -17,13 +17,27 @@ import (
 )
 
 type serviceHooks struct {
-	preflight                      func(context.Context, config.Config, credentials.Set) error
-	runProvision                   func(context.Context, config.Config, string, compute.Account, credentials.Set, string, string) (state.State, error)
-	doctorReport                   func(context.Context, config.Config, state.State, credentials.Set, string, string) doctor.Report
-	bootstrapTools                 func(context.Context, config.Config, state.State, string, bootstraptools.Target) error
-	deleteTrackedExternalResources func(context.Context, serverDeleteCleanup) (state.State, error)
-	generateGitDeployKey           func(context.Context, config.Config, state.State, string, string) (string, error)
-	verifyGitDeployAccess          func(context.Context, config.Config, state.State, string, string) error
+	preflight                         func(context.Context, config.Config, credentials.Set) error
+	runProvision                      func(context.Context, config.Config, string, compute.Account, credentials.Set, string, string) (state.State, error)
+	doctorReport                      func(context.Context, config.Config, state.State, credentials.Set, string, string) doctor.Report
+	bootstrapTools                    func(context.Context, config.Config, state.State, string, bootstraptools.Target) error
+	preflightTrackedExternalResources func(context.Context, *serverDeleteCleanup) error
+	deleteTrackedExternalResources    func(context.Context, serverDeleteCleanup) (state.State, error)
+	generateGitDeployKey              func(context.Context, config.Config, state.State, string, string) (string, error)
+	verifyGitDeployAccess             func(context.Context, config.Config, state.State, string, string) error
+}
+
+type tailscalePreflightClient interface {
+	TailnetID(context.Context) (string, error)
+	Policy(context.Context) (tailscale.Policy, error)
+}
+
+func preflightTailscaleAccess(ctx context.Context, client tailscalePreflightClient) error {
+	if _, err := client.TailnetID(ctx); err != nil {
+		return err
+	}
+	_, err := client.Policy(ctx)
+	return err
 }
 
 func (a *app) preflight(ctx context.Context, cfg config.Config, creds credentials.Set) error {
@@ -49,7 +63,7 @@ func (a *app) preflight(ctx context.Context, cfg config.Config, creds credential
 			return err
 		}
 	}
-	if _, err := tailscale.New(creds.Tailscale, cfg.Access.Tailscale.Tailnet).Policy(ctx); err != nil {
+	if err := preflightTailscaleAccess(ctx, tailscale.New(creds.Tailscale, cfg.Access.Tailscale.Tailnet)); err != nil {
 		return err
 	}
 	if cfg.Cloudflare.Tunnel.Enabled {

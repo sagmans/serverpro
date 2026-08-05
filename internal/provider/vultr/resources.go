@@ -76,6 +76,22 @@ func (c Client) CreateFirewallRule(ctx context.Context, groupID string, input Cr
 	return res.FirewallRule, c.api.Do(ctx, http.MethodPost, fmt.Sprintf("/firewalls/%s/rules", groupID), payload, &res)
 }
 
+func (c Client) FirewallRules(ctx context.Context, groupID string) ([]FirewallRule, error) {
+	return pagedList(func(cursor string) ([]FirewallRule, string, error) {
+		var res struct {
+			FirewallRules []FirewallRule `json:"firewall_rules"`
+			pageMeta
+		}
+		path := catalogListPath(fmt.Sprintf("/firewalls/%s/rules", groupID), cursor)
+		err := c.api.Do(ctx, http.MethodGet, path, nil, &res)
+		return res.FirewallRules, res.pageMeta.Meta.Links.Next, err
+	})
+}
+
+func (c Client) DeleteFirewallRule(ctx context.Context, groupID string, ruleID int) error {
+	return c.api.Do(ctx, http.MethodDelete, fmt.Sprintf("/firewalls/%s/rules/%d", groupID, ruleID), nil, nil)
+}
+
 func (c Client) CreateInstance(ctx context.Context, input CreateInstanceInput) (Instance, error) {
 	payload := map[string]any{
 		"region":      input.Region,

@@ -17,7 +17,7 @@ func TestRunRetriesPersistedAuthKeyCleanupBeforeCreatingReplacement(t *testing.T
 	cfg := config.Example("prod")
 	cfg.Cloudflare.AccountID = "acc"
 	path := provisionStatePath(t)
-	if err := state.Save(path, state.State{Project: cfg.Project, Server: cfg.Server, Compute: state.ComputeState{Name: cfg.Compute.Name}, Cloudflare: state.CloudflareState{Name: cfg.Cloudflare.Tunnel.Name}, Tailscale: state.TailscaleState{AuthKeyID: "old-key"}}); err != nil {
+	if err := state.Save(path, state.State{Project: cfg.Project, Server: cfg.Server, Compute: state.ComputeState{Name: cfg.Compute.Name}, Cloudflare: state.CloudflareState{Name: cfg.Cloudflare.Tunnel.Name}, Tailscale: state.TailscaleState{Tailnet: "-", TailnetID: "tailnet-1", AuthKeyID: "old-key"}}); err != nil {
 		t.Fatal(err)
 	}
 	ts := &fakeTailscale{}
@@ -28,8 +28,8 @@ func TestRunRetriesPersistedAuthKeyCleanupBeforeCreatingReplacement(t *testing.T
 	if got := strings.Join(ts.deletedKeyIDs, ","); got != "old-key,k1" {
 		t.Fatalf("deleted auth key ids = %q", got)
 	}
-	if len(ts.calls) == 0 || ts.calls[0] != "delete-key" {
-		t.Fatalf("stale auth key cleanup did not run first: %v", ts.calls)
+	if len(ts.calls) < 2 || strings.Join(ts.calls[:2], ",") != "tailnet-id,delete-key" {
+		t.Fatalf("stale auth key cleanup did not follow identity validation: %v", ts.calls)
 	}
 }
 
@@ -37,7 +37,7 @@ func TestRunPreservesPersistedAuthKeyWhenRetryCleanupFails(t *testing.T) {
 	cfg := config.Example("prod")
 	cfg.Cloudflare.AccountID = "acc"
 	path := provisionStatePath(t)
-	if err := state.Save(path, state.State{Project: cfg.Project, Server: cfg.Server, Compute: state.ComputeState{Name: cfg.Compute.Name}, Cloudflare: state.CloudflareState{Name: cfg.Cloudflare.Tunnel.Name}, Tailscale: state.TailscaleState{AuthKeyID: "old-key"}}); err != nil {
+	if err := state.Save(path, state.State{Project: cfg.Project, Server: cfg.Server, Compute: state.ComputeState{Name: cfg.Compute.Name}, Cloudflare: state.CloudflareState{Name: cfg.Cloudflare.Tunnel.Name}, Tailscale: state.TailscaleState{Tailnet: "-", TailnetID: "tailnet-1", AuthKeyID: "old-key"}}); err != nil {
 		t.Fatal(err)
 	}
 	ts := &fakeTailscale{deleteErr: errors.New("cleanup failed")}
