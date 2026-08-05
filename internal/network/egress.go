@@ -12,6 +12,8 @@ ufw allow out 53
 ufw allow out 123/udp
 ufw allow out 80/tcp
 ufw allow out 443/tcp
+# outbound 22: git-over-ssh (pull/push/clone) breaks under HTTPS-only egress
+ufw allow out 22/tcp
 ufw allow out 7844/tcp
 ufw allow out 7844/udp
 ufw allow out 41641/udp

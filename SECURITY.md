@@ -39,7 +39,9 @@ default.
 - Public app ingress defaults to `none`.
 - Post-bootstrap egress lockdown is fail-closed: an omitted
   `phase_lockdown_after_bootstrap` value behaves as `true`; only explicit
-  `false` disables it.
+  `false` disables it. Restricted egress still permits outbound SSH (22/tcp)
+  for git-over-SSH workflows; `serverpro server doctor NAME --fix` adds the rule
+  to hosts provisioned before it existed.
 - Current selectable ingress modes are `none` and `cloudflare-tunnel`.
 - Cloudflare tunnel lifecycle can create or adopt an account tunnel. Ingress
   route commands record pending local metadata only; routes are not made

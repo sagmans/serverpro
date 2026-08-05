@@ -162,6 +162,10 @@ hardening:
   journald_persistent: true
 ```
 
+`network.egress.mode: restricted` permits only DNS, NTP, HTTP(S), outbound
+SSH (22/tcp, for git-over-SSH), Cloudflare Tunnel, and Tailscale egress;
+`open` allows all outbound traffic.
+
 Legacy config files containing only `project` still load, but every save rewrites
 that identity as `namespace`. Files containing both fields must use the same
 value; divergent identities are rejected. Legacy credential and state JSON
