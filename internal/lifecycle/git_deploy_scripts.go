@@ -45,20 +45,7 @@ Host ` + repo.hostAlias() + `
 EOF
 fi
 ` + gitRewriteCommand(repo) + `
-github_ed25519_key='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl'
-add_known_host() {
-  host_entry=$1
-  known_host_line="${host_entry} ${github_ed25519_key}"
-  if ! grep -Fxq "${known_host_line}" "${known_hosts_path}"; then
-    printf '%s\n' "${known_host_line}" >>"${known_hosts_path}"
-  fi
-}
-# GitHub-published Ed25519 host key, fingerprint SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU.
-add_known_host 'github.com'
-add_known_host 'ssh.github.com'
-add_known_host '[github.com]:443'
-add_known_host '[ssh.github.com]:443'
-chown "${TARGET_USER}:${TARGET_GID}" "${known_hosts_path}"
+` + githubKnownHostsScript("github.com", "ssh.github.com", "[github.com]:443", "[ssh.github.com]:443") + `chown "${TARGET_USER}:${TARGET_GID}" "${known_hosts_path}"
 chmod 0644 "${known_hosts_path}"
 cat "${key_path}.pub"
 `
