@@ -7,6 +7,7 @@ func (c Config) Validate() error {
 		c.validateNamespaceScopes,
 		c.validateMVPConstraints,
 		c.validateAdminUsername,
+		c.validateGit,
 	} {
 		if err := validate(); err != nil {
 			return err
