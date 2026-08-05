@@ -1,0 +1,20 @@
+package tailscale
+
+import (
+	"net/http"
+
+	"github.com/assagman/serverpro/internal/provider/httpjson"
+)
+
+type Client struct {
+	api     httpjson.Client
+	tailnet string
+}
+
+func New(token, tailnet string) Client {
+	return Client{api: httpjson.Client{BaseURL: "https://api.tailscale.com/api/v2", Token: token}, tailnet: tailnet}
+}
+
+func NewWithHTTP(token, tailnet, baseURL string, h *http.Client) Client {
+	return Client{api: httpjson.Client{BaseURL: baseURL, Token: token, HTTP: h}, tailnet: tailnet}
+}

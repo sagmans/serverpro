@@ -1,0 +1,35 @@
+name: Feature request
+description: Suggest a scoped serverpro improvement
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What operator problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should change? Keep scope small enough for one focused PR when possible.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - cli
+        - provider
+        - ingress
+        - security
+        - docs
+        - other
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety and scope
+      description: Provider/API scopes, live-infra risks, migration concerns, or docs impacted.

@@ -1,0 +1,32 @@
+package lifecycle
+
+import (
+	"context"
+	"time"
+
+	"github.com/assagman/serverpro/internal/compute"
+	"github.com/assagman/serverpro/internal/provider/cloudflare"
+	"github.com/assagman/serverpro/internal/provider/tailscale"
+	"github.com/assagman/serverpro/internal/remote"
+)
+
+type TailscaleClient interface {
+	CreateAuthKey(context.Context, []string, time.Duration) (tailscale.AuthKey, error)
+	DeleteAuthKey(context.Context, string) error
+	EnsureServerproPolicy(context.Context, []string, string, string) (tailscale.ServerproPolicyChange, error)
+	ValidateSSHPolicy(context.Context, []string, string, string) error
+	MatchingDeviceIDs(context.Context, string, []string) ([]string, error)
+	WaitDevice(context.Context, tailscale.DeviceWait) (tailscale.Device, error)
+}
+
+type CloudflareClient interface {
+	CreateTunnel(context.Context, string) (cloudflare.Tunnel, error)
+	TunnelToken(context.Context, string) (string, error)
+}
+
+type Clients struct {
+	Compute    compute.Provider
+	Tailscale  TailscaleClient
+	Cloudflare CloudflareClient
+	Remote     remote.Runner
+}

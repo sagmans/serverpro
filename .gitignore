@@ -1,0 +1,14 @@
+/serverpro
+/serverpro.yaml
+/.bin
+/.cache
+/.opencode
+/.pi
+/.sc
+/.sem
+/dist
+.DS_Store
+*.test
+coverage.out
+
+docs/plans
