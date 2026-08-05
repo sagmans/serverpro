@@ -9,14 +9,14 @@ import (
 type progressPhase string
 
 const (
-	progressPhasePreflight progressPhase = "preflight"
-	progressPhaseProvision progressPhase = "provision"
-	progressPhaseDoctor    progressPhase = "doctor"
-	progressPhaseBootstrap progressPhase = "bootstrap"
+	progressPhasePreflight   progressPhase = "preflight"
+	progressPhaseProvision   progressPhase = "provision"
+	progressPhaseDoctor      progressPhase = "doctor"
+	progressPhaseBootstrap   progressPhase = "bootstrap"
 	progressPhaseGitDeploy   progressPhase = "git-deploy"
 	progressPhaseGitIdentity progressPhase = "git-identity"
-	progressInitialAttempt               = 1
-	progressEventFormat                  = "progress phase=%s elapsed=%s attempt=%d\n"
+	progressInitialAttempt                 = 1
+	progressEventFormat                    = "progress phase=%s elapsed=%s attempt=%d\n"
 )
 
 type commandProgress struct {
