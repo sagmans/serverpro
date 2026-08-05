@@ -122,7 +122,7 @@ make test-full-chain-e2e
 ```
 
 GitHub repository settings must separately protect `v*` tags and enable
-immutable releases; issue #103 owns those remote controls.
+immutable releases.
 
 ## Documentation rules
 

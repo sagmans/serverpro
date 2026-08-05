@@ -27,8 +27,8 @@ func (p listImportProvider) List(context.Context, compute.ListServersQuery) ([]c
 func TestServerDiscoverListsManagedCandidates(t *testing.T) {
 	createTestHome(t)
 	provider := listImportProvider{records: []compute.ServerRecord{{
-		ID: "abc", Name: "cloudagents-dev", PublicIPv4: "203.0.113.20",
-		Labels: ownership.ProviderLabels("cloudagents", "dev", nil),
+		ID: "abc", Name: "example-dev", PublicIPv4: "203.0.113.20",
+		Labels: ownership.ProviderLabels("example", "dev", nil),
 	}}}
 	var out bytes.Buffer
 	a := &app{
@@ -44,7 +44,7 @@ func TestServerDiscoverListsManagedCandidates(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), `"server": "dev"`) || !strings.Contains(out.String(), `"namespace": "cloudagents"`) {
+	if !strings.Contains(out.String(), `"server": "dev"`) || !strings.Contains(out.String(), `"namespace": "example"`) {
 		t.Fatalf("output=%s", out.String())
 	}
 }
@@ -52,9 +52,9 @@ func TestServerDiscoverListsManagedCandidates(t *testing.T) {
 func TestServerImportAllWritesLocalState(t *testing.T) {
 	createTestHome(t)
 	provider := listImportProvider{records: []compute.ServerRecord{{
-		Provider: "vultr", ID: "abc", Name: "cloudagents-dev", Location: "ewr", Size: "vc2-1c-1gb", Image: "2284",
+		Provider: "vultr", ID: "abc", Name: "example-dev", Location: "ewr", Size: "vc2-1c-1gb", Image: "2284",
 		PublicIPv4:       "203.0.113.20",
-		Labels:           ownership.ProviderLabels("cloudagents", "dev", nil),
+		Labels:           ownership.ProviderLabels("example", "dev", nil),
 		ManagedResources: []compute.ManagedResourceRef{{Kind: compute.ManagedResourceAccessPolicy, ID: "fw-1"}},
 	}}}
 	var out bytes.Buffer
@@ -82,7 +82,7 @@ func TestServerImportAllWritesLocalState(t *testing.T) {
 	if len(results) != 1 || results[0]["status"] != "imported" {
 		t.Fatalf("results=%+v", results)
 	}
-	st, err := state.Load(config.ServerStatePath("cloudagents", "dev"))
+	st, err := state.Load(config.ServerStatePath("example", "dev"))
 	if err != nil {
 		t.Fatal(err)
 	}
