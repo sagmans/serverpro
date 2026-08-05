@@ -1,0 +1,42 @@
+name: Bug report
+description: Report a reproducible serverpro bug
+title: "bug: "
+labels: [bug]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Use placeholders. Do not include tokens, hostnames, public IPs, provider IDs, or local private paths.
+      placeholder: |
+        1. Run `serverpro ... --dry-run`
+        2. Expected ...
+        3. Got ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: serverpro --version
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options:
+        - hetzner
+        - vultr
+        - digitalocean
+        - provider-neutral
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety notes
+      description: Did this touch live infrastructure? Was it dry-run only? Were provider resources cleaned up?

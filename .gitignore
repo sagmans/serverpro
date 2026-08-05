@@ -1,0 +1,14 @@
+/serverpro
+/serverpro.yaml
+/.bin
+/.cache
+/.pi
+/.sc
+/.sem
+/dist
+.DS_Store
+*.test
+__pycache__/
+coverage.out
+
+docs/plans

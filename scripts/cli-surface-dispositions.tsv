@@ -1,0 +1,35 @@
+# Cobra command path	compiled-harness evidence label
+serverpro	root no args shows help
+serverpro catalog	parent help: catalog
+serverpro catalog images	catalog images digitalocean token guard
+serverpro catalog locations	catalog locations digitalocean token guard
+serverpro catalog sizes	catalog sizes digitalocean token guard
+serverpro doctor	doctor global
+serverpro ingress	parent help: ingress
+serverpro ingress add	ingress add cloudflare-tunnel
+serverpro ingress list	ingress list after add
+serverpro ingress remove	ingress remove
+serverpro namespace	parent help: namespace
+serverpro namespace create	namespace create mynamespace
+serverpro namespace delete	namespace delete dry-run
+serverpro namespace list	namespace list after create
+serverpro namespace status	namespace status mynamespace
+serverpro provider	parent help: provider
+serverpro provider doctor	provider doctor digitalocean token guard
+serverpro provider list	provider list
+serverpro provider status	provider status digitalocean
+serverpro server	parent help: server
+serverpro server bootstrap	server bootstrap dry-run all
+serverpro server create	server create dry-run hetzner
+serverpro server delete	server delete dry-run
+serverpro server discover	server discover token guard
+serverpro server doctor	server doctor dry-run
+serverpro server import	server import token guard
+serverpro server list	server list fixture
+serverpro server restart	server restart dry-run
+serverpro server ssh	server ssh dry-run
+serverpro server start	server start dry-run
+serverpro server status	server status token guard
+serverpro server stop	server stop dry-run
+serverpro tailnet	parent help: tailnet
+serverpro tailnet reconcile	tailnet reconcile token guard

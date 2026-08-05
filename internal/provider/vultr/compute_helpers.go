@@ -1,0 +1,76 @@
+package vultr
+
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/ownership"
+	"github.com/sagmans/serverpro/internal/provider/providerutil"
+)
+
+func labelsToTags(labels map[string]string) []string {
+	return ownership.ProviderTags(labels)
+}
+
+func tagsToLabels(tags []string) map[string]string {
+	return ownership.LabelsFromProviderTags(tags)
+}
+
+func firewallGroupName(serverName string) string {
+	return serverName + "-deny-public"
+}
+
+func osIDFromImage(image string) (int64, error) {
+	id, err := strconv.ParseInt(image, 10, 64)
+	if err != nil || id == 0 {
+		return 0, fmt.Errorf("provider os id missing")
+	}
+	return id, nil
+}
+
+func instanceID(record compute.ServerRecord) (string, error) {
+	if record.ID == "" {
+		return "", fmt.Errorf("provider instance id missing")
+	}
+	return record.ID, nil
+}
+
+func firewallGroupID(record compute.ServerRecord) (string, bool) {
+	raw, ok := compute.ManagedResourceID(record.ManagedResources, compute.ManagedResourceAccessPolicy)
+	if ok {
+		return raw, true
+	}
+	raw = record.ProviderState["firewall_group_id"]
+	return raw, raw != ""
+}
+
+func validateMutationRequest(record compute.ServerRecord, provider compute.ProviderName) error {
+	return providerutil.ValidateMutationProvider(record.Provider, provider)
+}
+
+func validateLiveInstanceOwnership(record compute.ServerRecord, inst Instance) error {
+	if record.Name != "" && inst.Label != "" && inst.Label != record.Name {
+		return fmt.Errorf("provider ownership mismatch: live instance label %q state name %q", inst.Label, record.Name)
+	}
+	return ownership.ValidateLiveLabels(tagsToLabels(inst.Tags), record.Namespace, record.Server)
+}
+
+func validateLiveFirewallGroupOwnership(record compute.ServerRecord, fw FirewallGroup) error {
+	if record.Name == "" {
+		return fmt.Errorf("provider ownership mismatch: state server name missing")
+	}
+	expected := firewallGroupName(record.Name)
+	if fw.Description != expected {
+		return fmt.Errorf("provider ownership mismatch: live firewall group description %q state %q", fw.Description, expected)
+	}
+	return nil
+}
+
+func failure(secret, prefix string, err error, extraSecrets ...string) compute.Diagnostics {
+	return providerutil.Failure(secret, prefix, err, extraSecrets...)
+}
+
+func bootstrapRedactionSecrets(data string) []string {
+	return providerutil.BootstrapSecrets(data, encodeUserData(data))
+}
