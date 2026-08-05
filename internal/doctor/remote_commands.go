@@ -3,6 +3,7 @@ package doctor
 import (
 	"strings"
 
+	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/shell"
 )
 
@@ -61,6 +62,47 @@ func sshdChallengeResponseCommand() string {
 		"sudo grep -Fx " + shell.Quote(configured) + " /etc/ssh/sshd_config.d/99-serverpro.conf && " +
 		"printf '%s\n' " + shell.Quote("sshd inactive; /run/sshd absent; serverpro config contains "+configured) + " ;; " +
 		"*) printf '%s\n' \"$out\"; exit 1 ;; esac"
+}
+
+// gitUserCommand runs git as the admin user with the resolved home so the
+// root-executed doctor batch reads the user's git configuration, not root's.
+func gitUserCommand(user, args string) string {
+	quotedUser := shell.Quote(user)
+	return "home=\"$(getent passwd " + quotedUser + " | cut -d: -f6)\"; " +
+		"runuser -u " + quotedUser + " -- env HOME=\"$home\" git " + args
+}
+
+func gitIdentityReadCommand(user string) string {
+	return gitUserCommand(user, "config --global user.name") + " >/dev/null && " + gitUserCommand(user, "config --global user.email") + " >/dev/null"
+}
+
+func gitIdentityFixCommand(user string, identity config.GitIdentity) string {
+	return gitUserCommand(user, "config --global user.name "+shell.Quote(identity.Name)) + " && " +
+		gitUserCommand(user, "config --global user.email "+shell.Quote(identity.Email))
+}
+
+func gitSigningReadCommand(user string) string {
+	return "test \"$(" + gitUserCommand(user, "config --global gpg.format") + ")\" = ssh && " +
+		gitUserCommand(user, "config --global user.signingkey") + " >/dev/null"
+}
+
+func gitSigningFixCommand(user string) string {
+	return gitUserCommand(user, "config --global gpg.format ssh") + " && " +
+		gitUserCommand(user, "config --global user.signingkey \"$home/.ssh/id_ed25519_sign.pub\"") + " && " +
+		gitUserCommand(user, "config --global commit.gpgsign true")
+}
+
+func githubSSHAuthReadCommand(user string) string {
+	quotedUser := shell.Quote(user)
+	return "home=\"$(getent passwd " + quotedUser + " | cut -d: -f6)\"; " +
+		"out=\"$(runuser -u " + quotedUser + " -- env HOME=\"$home\" ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -T git@github.com 2>&1)\"; " +
+		"printf '%s\n' \"$out\"; case \"$out\" in *'successfully authenticated'*) exit 0 ;; esac; exit 1"
+}
+
+func ghAuthReadCommand(user string) string {
+	quotedUser := shell.Quote(user)
+	return "home=\"$(getent passwd " + quotedUser + " | cut -d: -f6)\"; " +
+		"runuser -u " + quotedUser + " -- env HOME=\"$home\" \"$home/.local/bin/mise\" exec -- gh auth status"
 }
 
 func dnsResolutionCommand() string {
