@@ -61,7 +61,10 @@ func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
 		remoteFixableSpecification("egress positive", "getent hosts ubuntu.com >/dev/null && curl -fsI https://ubuntu.com >/dev/null && curl -fsI https://1.1.1.1 >/dev/null", ""),
 	)
 	if cfg.Network.Egress.Mode == "restricted" {
-		specifications = append(specifications, remoteStaticSpecification(warn("remote", "egress precision", "restricted mode is port/protocol best-effort; global 80/443 and Cloudflare edge 7844 remain open for updates/connectors")))
+		specifications = append(specifications,
+			remoteFixableSpecification("ufw ssh egress", "ufw status numbered verbose | grep -E '(^|[[:space:]])22/tcp[[:space:]].*ALLOW OUT'", "ufw allow out 22/tcp && ufw --force reload"),
+			remoteStaticSpecification(warn("remote", "egress precision", "restricted mode is port/protocol best-effort; global 22/80/443 and Cloudflare edge 7844 remain open for git/updates/connectors")),
+		)
 	}
 	if cfg.Network.Ingress != "none" {
 		specifications = append(specifications, remoteFixableSpecification("cloudflared", "systemctl is-active cloudflared", ""))

@@ -52,12 +52,12 @@ func TestRunChecksSeparateSecuritySettings(t *testing.T) {
 	cfg.Cloudflare.AccountID = "acc"
 	r := &fakeRemote{}
 	report := Run(context.Background(), cfg, doctorState(cfg, "192.0.2.10", ""), credentials.Set{Tailscale: "ts-token-long"}, Clients{Compute: fakeCompute{}, Tailscale: fakeTailscale{}, Cloudflare: fakeCloudflare{}, Remote: r, PublicSSHProbe: refusedPublicSSHProbe})
-	for _, want := range []string{"grep -Fx 'permitrootlogin no'", "grep -Fx 'passwordauthentication no'", "grep -Fx 'kbdinteractiveauthentication no'", "ChallengeResponseAuthentication no", "grep -Fx 'x11forwarding no'", "grep -Fx 'allowagentforwarding no'", "grep -Fx 'allowtcpforwarding no'", "grep -Fx 'permittunnel no'", "PermitOpen none", "Status: active", "Default: deny (incoming)", "ALLOW IN"} {
+	for _, want := range []string{"grep -Fx 'permitrootlogin no'", "grep -Fx 'passwordauthentication no'", "grep -Fx 'kbdinteractiveauthentication no'", "ChallengeResponseAuthentication no", "grep -Fx 'x11forwarding no'", "grep -Fx 'allowagentforwarding no'", "grep -Fx 'allowtcpforwarding no'", "grep -Fx 'permittunnel no'", "PermitOpen none", "Status: active", "Default: deny (incoming)", "ALLOW IN", "ALLOW OUT"} {
 		if !hasCommand(r.commands, want) {
 			t.Fatalf("missing security check %q in %#v", want, r.commands)
 		}
 	}
-	for _, want := range []string{"sshd root login", "sshd password auth", "sshd keyboard-interactive auth", "sshd challenge-response auth", "sshd x11 forwarding", "sshd agent forwarding", "sshd tcp forwarding", "sshd tunnel forwarding", "sshd open forwarding", "ufw active", "ufw default deny incoming", "ufw ssh ingress"} {
+	for _, want := range []string{"sshd root login", "sshd password auth", "sshd keyboard-interactive auth", "sshd challenge-response auth", "sshd x11 forwarding", "sshd agent forwarding", "sshd tcp forwarding", "sshd tunnel forwarding", "sshd open forwarding", "ufw active", "ufw default deny incoming", "ufw ssh ingress", "ufw ssh egress"} {
 		if !hasResult(report, want, Pass, "ok") {
 			t.Fatalf("missing passing result %q in %+v", want, report.Results)
 		}

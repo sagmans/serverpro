@@ -300,7 +300,9 @@ never replaced.
 - Public SSH is disabled.
 - Public app ingress defaults to `none`.
 - Omitted post-bootstrap egress-lockdown configuration defaults to enabled;
-  disabling it requires an explicit `false`.
+  disabling it requires an explicit `false`. Restricted egress permits
+  outbound SSH (22/tcp) so git-over-SSH keeps working; doctor detects and
+  repairs pre-existing hosts missing the rule.
 - Compute provider, location, size, and image are explicit operator choices.
 - Provider ownership metadata uses `managed-by`, `serverpro-namespace`, and
   `serverpro-server` across Hetzner, Vultr, and DigitalOcean; flat tag values
