@@ -24,7 +24,7 @@ func TestCreateOptionalGitDeployAccessGenerateAndVerify(t *testing.T) {
 	verifyCalls := 0
 	var out bytes.Buffer
 	var progress bytes.Buffer
-	a := &app{configPath: cfgPath, provider: "hetzner", yes: true, stdin: strings.NewReader("correct horse battery staple\n\ngit@github.com:owner/repo.git\ny\n"), stdout: &out, stderr: &progress, services: serviceHooks{
+	a := &app{configPath: cfgPath, provider: "hetzner", yes: true, stdin: strings.NewReader("correct horse battery staple\n\n\ngit@github.com:owner/repo.git\ny\n"), stdout: &out, stderr: &progress, services: serviceHooks{
 		preflight: func(context.Context, config.Config, credentials.Set) error { return nil },
 		runProvision: func(_ context.Context, got config.Config, stPath string, _ compute.Account, creds credentials.Set, sudoPassword, adminPasswordHash string) (state.State, error) {
 			calls = append(calls, "runProvision")
@@ -87,7 +87,7 @@ func TestCreateOptionalGitDeployAccessGenerateAndVerify(t *testing.T) {
 func TestCreateOptionalGitDeployAccessSkipsWhenDeclined(t *testing.T) {
 	cfgPath := createTestConfig(t)
 	var calls []string
-	a := &app{configPath: cfgPath, provider: "hetzner", yes: true, stdin: strings.NewReader("correct horse battery staple\nn\n"), stdout: io.Discard, services: serviceHooks{
+	a := &app{configPath: cfgPath, provider: "hetzner", yes: true, stdin: strings.NewReader("correct horse battery staple\nn\nn\n"), stdout: io.Discard, services: serviceHooks{
 		preflight: func(context.Context, config.Config, credentials.Set) error { return nil },
 		runProvision: func(_ context.Context, got config.Config, stPath string, _ compute.Account, creds credentials.Set, sudoPassword, adminPasswordHash string) (state.State, error) {
 			calls = append(calls, "runProvision")

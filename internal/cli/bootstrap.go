@@ -64,7 +64,7 @@ func (a *app) serverBootstrapCmd() *cobra.Command {
 				return redact.New(a.runtimeSecrets...).Error(err)
 			}
 			if target.IncludesGit() {
-				if err := a.maybeSetupGitDeployAccess(ctx, cfg, st, sudoPassword, progress); err != nil {
+				if err := a.maybeSetupGitHubAccess(ctx, cfg, st, sudoPassword, progress); err != nil {
 					return redact.New(a.runtimeSecrets...).Error(err)
 				}
 			}

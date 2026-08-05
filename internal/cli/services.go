@@ -42,6 +42,11 @@ type serviceHooks struct {
 	cleanupClients                 func(serverDeleteCleanup) serverCleanupClients
 	generateGitDeployKey           func(context.Context, config.Config, state.State, string, string) (string, error)
 	verifyGitDeployAccess          func(context.Context, config.Config, state.State, string, string) error
+	setupGitAccountKey             func(context.Context, config.Config, state.State, string) (string, error)
+	verifyGitHubSSH                func(context.Context, config.Config, state.State, string) error
+	configureGitIdentity           func(context.Context, config.Config, state.State, string) error
+	setupGitSigningKey             func(context.Context, config.Config, state.State, string) (string, error)
+	setupGitHubCLI                 func(context.Context, config.Config, state.State, string, string) error
 	tailnetPolicyClient            func(string, string) tailnetPolicyClient
 }
 
@@ -177,6 +182,41 @@ func (a *app) verifyGitDeployAccess(ctx context.Context, cfg config.Config, st s
 		return a.services.verifyGitDeployAccess(ctx, cfg, st, sudoPassword, repoURL)
 	}
 	return lifecycle.VerifyGitDeployAccess(ctx, remote.TailscaleSSH{SudoPassword: sudoPassword}, cfg, st, repoURL)
+}
+
+func (a *app) setupGitAccountKey(ctx context.Context, cfg config.Config, st state.State, sudoPassword string) (string, error) {
+	if a.services.setupGitAccountKey != nil {
+		return a.services.setupGitAccountKey(ctx, cfg, st, sudoPassword)
+	}
+	return lifecycle.SetupGitAccountKey(ctx, remote.TailscaleSSH{SudoPassword: sudoPassword}, cfg, st)
+}
+
+func (a *app) verifyGitHubSSH(ctx context.Context, cfg config.Config, st state.State, sudoPassword string) error {
+	if a.services.verifyGitHubSSH != nil {
+		return a.services.verifyGitHubSSH(ctx, cfg, st, sudoPassword)
+	}
+	return lifecycle.VerifyGitHubSSH(ctx, remote.TailscaleSSH{SudoPassword: sudoPassword}, cfg, st)
+}
+
+func (a *app) configureGitIdentity(ctx context.Context, cfg config.Config, st state.State, sudoPassword string) error {
+	if a.services.configureGitIdentity != nil {
+		return a.services.configureGitIdentity(ctx, cfg, st, sudoPassword)
+	}
+	return lifecycle.ConfigureGitIdentity(ctx, remote.TailscaleSSH{SudoPassword: sudoPassword}, cfg, st)
+}
+
+func (a *app) setupGitSigningKey(ctx context.Context, cfg config.Config, st state.State, sudoPassword string) (string, error) {
+	if a.services.setupGitSigningKey != nil {
+		return a.services.setupGitSigningKey(ctx, cfg, st, sudoPassword)
+	}
+	return lifecycle.SetupGitSigningKey(ctx, remote.TailscaleSSH{SudoPassword: sudoPassword}, cfg, st)
+}
+
+func (a *app) setupGitHubCLI(ctx context.Context, cfg config.Config, st state.State, sudoPassword, pat string) error {
+	if a.services.setupGitHubCLI != nil {
+		return a.services.setupGitHubCLI(ctx, cfg, st, sudoPassword, pat)
+	}
+	return lifecycle.SetupGitHubCLI(ctx, remote.TailscaleSSH{SudoPassword: sudoPassword}, cfg, st, pat)
 }
 
 func (a *app) retryDoctorSudoReport(ctx context.Context, cfg config.Config, st state.State, creds credentials.Set, existing doctor.Report, sudoPassword string) doctor.Report {

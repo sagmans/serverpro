@@ -21,7 +21,7 @@ func TestBootstrapGitRunsDeployAccessByDefaultWhenInteractive(t *testing.T) {
 	verifyCalls := 0
 	var out bytes.Buffer
 	var progress bytes.Buffer
-	a := &app{configPath: cfgPath, statePath: stPath, stdin: strings.NewReader("correct horse battery staple\n\ngit@github.com:owner/repo.git\ny\n"), stdout: &out, stderr: &progress, services: serviceHooks{
+	a := &app{configPath: cfgPath, statePath: stPath, stdin: strings.NewReader("correct horse battery staple\n\n\ngit@github.com:owner/repo.git\ny\n"), stdout: &out, stderr: &progress, services: serviceHooks{
 		bootstrapTools: func(_ context.Context, got config.Config, st state.State, sudoPassword string, target bootstraptools.Target) error {
 			calls = append(calls, "bootstrap:"+string(target))
 			if target != bootstraptools.TargetGit || sudoPassword != "correct horse battery staple" || st.Tailscale.Name != "demo-web" {
@@ -76,7 +76,7 @@ func TestBootstrapGitSkipsDeployKeyWhenRepoAccessAlreadyWorks(t *testing.T) {
 	cfgPath, stPath := writeDoctorFixture(t)
 	var calls []string
 	var out bytes.Buffer
-	a := &app{configPath: cfgPath, statePath: stPath, stdin: strings.NewReader("correct horse battery staple\n\ngit@github.com:owner/repo.git\n"), stdout: &out, services: serviceHooks{
+	a := &app{configPath: cfgPath, statePath: stPath, stdin: strings.NewReader("correct horse battery staple\n\n\ngit@github.com:owner/repo.git\n"), stdout: &out, services: serviceHooks{
 		bootstrapTools: func(context.Context, config.Config, state.State, string, bootstraptools.Target) error {
 			calls = append(calls, "bootstrap")
 			return nil
