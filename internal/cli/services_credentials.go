@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/assagman/serverpro/internal/compute"
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/credentials"
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/credentials"
 )
 
 func (a *app) ensureCredentials(cfg config.Config) (credentials.Set, bool, error) {

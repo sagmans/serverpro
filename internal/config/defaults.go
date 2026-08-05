@@ -1,6 +1,6 @@
 package config
 
-import "github.com/assagman/serverpro/internal/servername"
+import "github.com/sagmans/serverpro/internal/servername"
 
 const defaultCredentialsJSONPath = "~/.config/serverpro/credentials.json"
 

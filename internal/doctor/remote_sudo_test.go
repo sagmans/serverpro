@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/assagman/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/config"
 )
 
 func TestRemoteChecksFailsWhenAdminHasNOPASSWDSudo(t *testing.T) {

@@ -3,9 +3,9 @@ package doctor
 import (
 	"context"
 
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/remote"
-	"github.com/assagman/serverpro/internal/shell"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/remote"
+	"github.com/sagmans/serverpro/internal/shell"
 )
 
 func remoteChecksWithOptions(ctx context.Context, cfg config.Config, r remote.Runner, host string, opt Options) []Result {

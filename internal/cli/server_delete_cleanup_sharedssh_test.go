@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 // Legacy regression: older sibling state can omit SSH-rule identity after

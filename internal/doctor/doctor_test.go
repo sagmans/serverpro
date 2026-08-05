@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/assagman/serverpro/internal/compute"
-	"github.com/assagman/serverpro/internal/provider/cloudflare"
-	"github.com/assagman/serverpro/internal/provider/tailscale"
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/provider/cloudflare"
+	"github.com/sagmans/serverpro/internal/provider/tailscale"
 )
 
 type fakeCompute struct {

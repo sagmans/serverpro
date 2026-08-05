@@ -3,7 +3,7 @@ package vultr
 import (
 	"net/http"
 
-	"github.com/assagman/serverpro/internal/provider/httpjson"
+	"github.com/sagmans/serverpro/internal/provider/httpjson"
 )
 
 type Client struct{ api httpjson.Client }

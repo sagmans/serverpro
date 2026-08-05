@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/assagman/serverpro/internal/compute"
-	"github.com/assagman/serverpro/internal/provider/cloudflare"
-	"github.com/assagman/serverpro/internal/provider/tailscale"
-	"github.com/assagman/serverpro/internal/remote"
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/provider/cloudflare"
+	"github.com/sagmans/serverpro/internal/provider/tailscale"
+	"github.com/sagmans/serverpro/internal/remote"
 )
 
 type TailscalePolicyInspector interface {

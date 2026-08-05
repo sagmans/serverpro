@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/assagman/serverpro/internal/passwordhash"
-	"github.com/assagman/serverpro/internal/remote"
+	"github.com/sagmans/serverpro/internal/passwordhash"
+	"github.com/sagmans/serverpro/internal/remote"
 )
 
 func remoteCheck(ctx context.Context, r remote.Runner, user, host, name, command string) Result {

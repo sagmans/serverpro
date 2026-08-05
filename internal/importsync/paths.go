@@ -1,6 +1,6 @@
 package importsync
 
-import "github.com/assagman/serverpro/internal/config"
+import "github.com/sagmans/serverpro/internal/config"
 
 func defaultRegistryPath() string {
 	return config.RegistryPath()

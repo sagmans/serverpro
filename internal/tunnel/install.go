@@ -3,7 +3,7 @@ package tunnel
 import (
 	"fmt"
 
-	"github.com/assagman/serverpro/internal/shell"
+	"github.com/sagmans/serverpro/internal/shell"
 )
 
 // A pinned signer prevents repository setup from trusting a substituted package key.

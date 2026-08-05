@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/assagman/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/config"
 )
 
 func (a *app) prepareConfig(project, server string) (config.Config, string, error) {

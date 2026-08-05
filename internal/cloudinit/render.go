@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"text/template"
 
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/passwordhash"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/passwordhash"
 )
 
 type Input struct {

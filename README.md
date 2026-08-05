@@ -1,6 +1,6 @@
 # serverpro
 
-[![CI](https://github.com/assagman/serverpro/actions/workflows/ci.yml/badge.svg)](https://github.com/assagman/serverpro/actions/workflows/ci.yml)
+[![CI](https://github.com/sagmans/serverpro/actions/workflows/ci.yml/badge.svg)](https://github.com/sagmans/serverpro/actions/workflows/ci.yml)
 
 Small, security-focused server provisioner.
 
@@ -33,7 +33,7 @@ Bugs and feature work are tracked in GitHub Issues. Security reports must follow
 Install latest:
 
 ```sh
-go install github.com/assagman/serverpro/cmd/serverpro@latest
+go install github.com/sagmans/serverpro/cmd/serverpro@latest
 export PATH="$(go env GOPATH)/bin:$PATH"
 serverpro --help
 ```
@@ -41,7 +41,7 @@ serverpro --help
 Install a specific release (recommended):
 
 ```sh
-go install github.com/assagman/serverpro/cmd/serverpro@vX.Y.Z
+go install github.com/sagmans/serverpro/cmd/serverpro@vX.Y.Z
 ```
 
 If `GOBIN` is set, add that directory to `PATH` instead. Requires Go 1.26.5+.

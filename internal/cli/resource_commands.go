@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/assagman/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/spf13/cobra"
 )
 

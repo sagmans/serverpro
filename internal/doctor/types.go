@@ -1,6 +1,6 @@
 package doctor
 
-import "github.com/assagman/serverpro/internal/compute"
+import "github.com/sagmans/serverpro/internal/compute"
 
 type Status string
 

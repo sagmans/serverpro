@@ -3,8 +3,8 @@ package vultr
 import (
 	"strconv"
 
-	"github.com/assagman/serverpro/internal/cloudinit"
-	"github.com/assagman/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/cloudinit"
+	"github.com/sagmans/serverpro/internal/compute"
 )
 
 func mapCatalog(catalog Catalog, location string) compute.Catalog {

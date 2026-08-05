@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/assagman/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/compute"
 )
 
 func (p ComputeProvider) Power(ctx context.Context, request compute.PowerRequest) (compute.ServerStatus, compute.Diagnostics) {

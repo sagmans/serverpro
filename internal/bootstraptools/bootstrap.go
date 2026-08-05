@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/assagman/serverpro/internal/shell"
+	"github.com/sagmans/serverpro/internal/shell"
 )
 
 const (

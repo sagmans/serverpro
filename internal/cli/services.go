@@ -4,16 +4,16 @@ import (
 	"context"
 	"time"
 
-	"github.com/assagman/serverpro/internal/bootstraptools"
-	"github.com/assagman/serverpro/internal/compute"
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/credentials"
-	"github.com/assagman/serverpro/internal/doctor"
-	"github.com/assagman/serverpro/internal/lifecycle"
-	"github.com/assagman/serverpro/internal/provider/cloudflare"
-	"github.com/assagman/serverpro/internal/provider/tailscale"
-	"github.com/assagman/serverpro/internal/remote"
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/bootstraptools"
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/credentials"
+	"github.com/sagmans/serverpro/internal/doctor"
+	"github.com/sagmans/serverpro/internal/lifecycle"
+	"github.com/sagmans/serverpro/internal/provider/cloudflare"
+	"github.com/sagmans/serverpro/internal/provider/tailscale"
+	"github.com/sagmans/serverpro/internal/remote"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 type serviceHooks struct {

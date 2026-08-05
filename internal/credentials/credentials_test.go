@@ -3,7 +3,7 @@ package credentials
 import (
 	"testing"
 
-	"github.com/assagman/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/config"
 )
 
 func credentialsTestHome(t *testing.T) string {

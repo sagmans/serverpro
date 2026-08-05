@@ -6,12 +6,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/assagman/serverpro/internal/bootstraptools"
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/network"
-	"github.com/assagman/serverpro/internal/remote"
-	"github.com/assagman/serverpro/internal/state"
-	"github.com/assagman/serverpro/internal/tunnel"
+	"github.com/sagmans/serverpro/internal/bootstraptools"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/network"
+	"github.com/sagmans/serverpro/internal/remote"
+	"github.com/sagmans/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/tunnel"
 )
 
 func waitRemoteReady(ctx context.Context, r remote.Runner, cfg config.Config, st state.State) error {

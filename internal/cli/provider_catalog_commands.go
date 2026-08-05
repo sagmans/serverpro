@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/assagman/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/compute"
 )
 
 type providerRow struct {

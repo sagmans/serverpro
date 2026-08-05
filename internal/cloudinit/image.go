@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/assagman/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/compute"
 )
 
 const (

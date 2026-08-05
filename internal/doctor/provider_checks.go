@@ -7,11 +7,11 @@ import (
 	"net"
 	"time"
 
-	"github.com/assagman/serverpro/internal/compute"
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/ownership"
-	"github.com/assagman/serverpro/internal/provider/tailscale"
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/ownership"
+	"github.com/sagmans/serverpro/internal/provider/tailscale"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 func checkComputeServer(ctx context.Context, cfg config.Config, st state.State, account compute.Account, client ComputeClient) Result {

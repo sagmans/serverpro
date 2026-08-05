@@ -3,7 +3,7 @@ package credentials
 import (
 	"fmt"
 
-	"github.com/assagman/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/config"
 )
 
 func (s Set) Validate() error {

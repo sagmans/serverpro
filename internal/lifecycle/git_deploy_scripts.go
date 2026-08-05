@@ -1,6 +1,6 @@
 package lifecycle
 
-import "github.com/assagman/serverpro/internal/shell"
+import "github.com/sagmans/serverpro/internal/shell"
 
 func gitDeployKeyScript(user string, repo githubSSHRepo) string {
 	marker := "# serverpro git deploy access " + repo.owner + "/" + repo.name

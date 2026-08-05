@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/assagman/serverpro/internal/shell"
+	"github.com/sagmans/serverpro/internal/shell"
 )
 
 type Runner interface {

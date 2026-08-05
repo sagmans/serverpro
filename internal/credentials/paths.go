@@ -3,8 +3,8 @@ package credentials
 import (
 	"fmt"
 
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/privatefile"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/privatefile"
 )
 
 func validateConfigScope(cfg config.Config) error {

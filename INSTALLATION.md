@@ -20,7 +20,7 @@ paths are ready.
 Latest release:
 
 ```sh
-go install github.com/assagman/serverpro/cmd/serverpro@latest
+go install github.com/sagmans/serverpro/cmd/serverpro@latest
 export PATH="$(go env GOPATH)/bin:$PATH"
 serverpro --help
 ```
@@ -28,7 +28,7 @@ serverpro --help
 Specific release:
 
 ```sh
-go install github.com/assagman/serverpro/cmd/serverpro@vX.Y.Z
+go install github.com/sagmans/serverpro/cmd/serverpro@vX.Y.Z
 ```
 
 If `GOBIN` is set, add that directory to `PATH` instead.
@@ -36,7 +36,7 @@ If `GOBIN` is set, add that directory to `PATH` instead.
 From source:
 
 ```sh
-git clone https://github.com/assagman/serverpro.git
+git clone https://github.com/sagmans/serverpro.git
 cd serverpro
 go build -o serverpro ./cmd/serverpro
 ./serverpro --help
@@ -121,7 +121,7 @@ schema number does not guarantee downgrade compatibility because safety metadata
 can grow between releases.
 
 ```sh
-go install github.com/assagman/serverpro/cmd/serverpro@latest
+go install github.com/sagmans/serverpro/cmd/serverpro@latest
 serverpro --version
 serverpro server list
 ```

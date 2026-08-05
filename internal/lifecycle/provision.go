@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/assagman/serverpro/internal/provider/httpjson"
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/provider/httpjson"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 // authKeyCleanupTimeout bounds best-effort deletion of the one-off bootstrap

@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/assagman/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/compute"
 )
 
 func (p ComputeProvider) Status(ctx context.Context, ref compute.ServerRef) (compute.ServerStatus, compute.Diagnostics) {

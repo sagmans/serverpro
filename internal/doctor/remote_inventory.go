@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/remote"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/remote"
 )
 
 func remoteInventory(ctx context.Context, r remote.Runner, user, host string) []InventoryItem {

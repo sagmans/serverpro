@@ -3,7 +3,7 @@ package cloudinit
 import (
 	"testing"
 
-	"github.com/assagman/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/compute"
 )
 
 func TestSupportsImageRequiresUbuntu2404(t *testing.T) {

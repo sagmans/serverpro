@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/assagman/serverpro/internal/compute"
-	"github.com/assagman/serverpro/internal/redact"
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/redact"
 )
 
 const supportedImageReference = "ubuntu-24-04-x64"

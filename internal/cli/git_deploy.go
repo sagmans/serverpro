@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/lifecycle"
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/lifecycle"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 func (a *app) maybeSetupGitDeployAccess(ctx context.Context, cfg config.Config, st state.State, sudoPassword string) error {

@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/assagman/serverpro/internal/compute"
-	"github.com/assagman/serverpro/internal/ownership"
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/ownership"
 )
 
 func recoverServerRecords(servers []Server, firewalls []Firewall) ([]compute.ServerRecord, error) {

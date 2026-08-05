@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/assagman/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/compute"
 )
 
 func TestComputeProviderCatalogReturnsOnlyProviderSizes(t *testing.T) {

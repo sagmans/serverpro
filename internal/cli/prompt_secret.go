@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/assagman/serverpro/internal/filedescriptor"
+	"github.com/sagmans/serverpro/internal/filedescriptor"
 	"golang.org/x/term"
 )
 

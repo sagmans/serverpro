@@ -3,7 +3,7 @@ package config
 import (
 	"strings"
 
-	"github.com/assagman/serverpro/internal/ownership"
+	"github.com/sagmans/serverpro/internal/ownership"
 )
 
 func ApplyDefaults(c *Config) {

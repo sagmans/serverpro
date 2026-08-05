@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/assagman/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/config"
 )
 
 func TestConfigPathHelpersUseManagedTargetPaths(t *testing.T) {

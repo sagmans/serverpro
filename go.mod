@@ -1,4 +1,4 @@
-module github.com/assagman/serverpro
+module github.com/sagmans/serverpro
 
 go 1.26.5
 

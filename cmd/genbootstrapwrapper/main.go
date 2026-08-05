@@ -7,7 +7,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/assagman/serverpro/internal/bootstraptools"
+	"github.com/sagmans/serverpro/internal/bootstraptools"
 )
 
 func main() {

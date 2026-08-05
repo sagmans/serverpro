@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"os"
 
-	"github.com/assagman/serverpro/internal/privatefile"
+	"github.com/sagmans/serverpro/internal/privatefile"
 	"gopkg.in/yaml.v3"
 )
 

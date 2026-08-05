@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/assagman/serverpro/internal/provider/httpjson"
+	"github.com/sagmans/serverpro/internal/provider/httpjson"
 )
 
 func TestValidateAccountUsesTunnelListPermission(t *testing.T) {

@@ -3,7 +3,7 @@ set -eu
 
 # Explicit archive members prevent ignored workspace files from entering releases.
 PROJECT_NAME="serverpro"
-MODULE_PATH="github.com/assagman/serverpro"
+MODULE_PATH="github.com/sagmans/serverpro"
 DEFAULT_TARGET_LINUX_AMD64="linux/amd64"
 DEFAULT_TARGET_LINUX_ARM64="linux/arm64"
 DEFAULT_TARGET_DARWIN_AMD64="darwin/amd64"

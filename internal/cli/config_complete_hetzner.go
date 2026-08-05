@@ -1,6 +1,6 @@
 package cli
 
-import "github.com/assagman/serverpro/internal/config"
+import "github.com/sagmans/serverpro/internal/config"
 
 func (a *app) completeComputeConfig(cfg *config.Config, ask bool) error {
 	choices := catalogChoiceSet{locations: computeLocationChoices(), sizes: computeSizeChoices(), images: computeImageChoices()}

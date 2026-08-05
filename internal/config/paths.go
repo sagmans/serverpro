@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/assagman/serverpro/internal/servername"
+	"github.com/sagmans/serverpro/internal/servername"
 )
 
 func RegistryPath() string {

@@ -1,8 +1,8 @@
 package config
 
 import (
-	"github.com/assagman/serverpro/internal/ownership"
-	"github.com/assagman/serverpro/internal/servername"
+	"github.com/sagmans/serverpro/internal/ownership"
+	"github.com/sagmans/serverpro/internal/servername"
 )
 
 func Example(project string) Config {

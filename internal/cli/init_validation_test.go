@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/assagman/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/config"
 )
 
 func TestCreateDryRunMissingConfigDoesNotWriteLocalFiles(t *testing.T) {

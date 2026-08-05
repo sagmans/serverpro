@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/assagman/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/config"
 )
 
 func TestSaveRejectsEmptyCredentialPath(t *testing.T) {

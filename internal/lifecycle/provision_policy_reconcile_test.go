@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/assagman/serverpro/internal/provider/tailscale"
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/provider/tailscale"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 func TestReconcilePendingTailscalePolicyPromotesConfirmedWrite(t *testing.T) {

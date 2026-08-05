@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/remote"
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/remote"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 func GenerateGitDeployKey(ctx context.Context, r remote.Runner, cfg config.Config, st state.State, repoURL string) (string, error) {

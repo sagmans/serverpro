@@ -5,7 +5,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/assagman/serverpro/internal/shell"
+	"github.com/sagmans/serverpro/internal/shell"
 )
 
 func templateFuncs() template.FuncMap {

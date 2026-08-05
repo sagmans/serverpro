@@ -1,6 +1,6 @@
 package credentials
 
-import "github.com/assagman/serverpro/internal/config"
+import "github.com/sagmans/serverpro/internal/config"
 
 func Load(cfg config.Config) (Set, error) {
 	creds, err := LoadPartial(cfg)

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/assagman/serverpro/internal/bootstraptools"
-	"github.com/assagman/serverpro/internal/redact"
+	"github.com/sagmans/serverpro/internal/bootstraptools"
+	"github.com/sagmans/serverpro/internal/redact"
 	"github.com/spf13/cobra"
 )
 

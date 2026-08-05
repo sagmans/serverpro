@@ -3,7 +3,7 @@ package credentials
 import (
 	"os"
 
-	"github.com/assagman/serverpro/internal/privatefile"
+	"github.com/sagmans/serverpro/internal/privatefile"
 )
 
 func loadJSON(path string) (Set, error) {

@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/assagman/serverpro/internal/privatefile"
+	"github.com/sagmans/serverpro/internal/privatefile"
 )
 
 func LoadRegistry(path string) (Registry, error) {

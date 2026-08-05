@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/provider/tailscale"
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/provider/tailscale"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 // MatchTailscaleDevice finds the mesh node for an imported compute hostname.

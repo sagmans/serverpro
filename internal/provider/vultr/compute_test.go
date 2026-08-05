@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/assagman/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/compute"
 )
 
 func TestComputeProviderSupportsOnlyBootstrapImageReference(t *testing.T) {

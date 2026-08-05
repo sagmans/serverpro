@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 // loadState adds target context to missing explicit state files.

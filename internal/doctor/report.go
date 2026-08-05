@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/assagman/serverpro/internal/redact"
+	"github.com/sagmans/serverpro/internal/redact"
 )
 
 type Report struct {

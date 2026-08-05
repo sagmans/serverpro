@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/assagman/serverpro/internal/compute"
-	"github.com/assagman/serverpro/internal/ingress"
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/ingress"
 	"github.com/spf13/cobra"
 )
 

@@ -3,8 +3,8 @@ package cli
 import (
 	"fmt"
 
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 func (a *app) loadConfigForPreview() (config.Config, error) {

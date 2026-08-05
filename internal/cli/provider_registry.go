@@ -1,10 +1,10 @@
 package cli
 
 import (
-	"github.com/assagman/serverpro/internal/compute"
-	"github.com/assagman/serverpro/internal/provider/digitalocean"
-	"github.com/assagman/serverpro/internal/provider/hetzner"
-	"github.com/assagman/serverpro/internal/provider/vultr"
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/provider/digitalocean"
+	"github.com/sagmans/serverpro/internal/provider/hetzner"
+	"github.com/sagmans/serverpro/internal/provider/vultr"
 )
 
 func (a *app) providerRegistry() *compute.Registry {

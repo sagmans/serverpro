@@ -3,7 +3,7 @@ package cli
 import (
 	"strings"
 
-	"github.com/assagman/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/config"
 )
 
 func (a *app) completeTailscaleConfig(cfg *config.Config, ask bool) error {

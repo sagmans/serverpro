@@ -1,6 +1,6 @@
 package network
 
-import "github.com/assagman/serverpro/internal/config"
+import "github.com/sagmans/serverpro/internal/config"
 
 func LockdownScript(cfg config.Config) string {
 	if cfg.Network.Egress.Mode == "open" {

@@ -3,8 +3,8 @@ package doctor
 import (
 	"testing"
 
-	"github.com/assagman/serverpro/internal/credentials"
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/credentials"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 func TestStateSecretScanFailsOnCredentialLeak(t *testing.T) {

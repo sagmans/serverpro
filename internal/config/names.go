@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/assagman/serverpro/internal/servername"
+	"github.com/sagmans/serverpro/internal/servername"
 )
 
 func ServerResourceName(project, server string) string {

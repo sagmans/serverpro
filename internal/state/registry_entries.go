@@ -4,7 +4,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/assagman/serverpro/internal/servername"
+	"github.com/sagmans/serverpro/internal/servername"
 )
 
 func (r *Registry) UpsertNamespace(namespace string) {

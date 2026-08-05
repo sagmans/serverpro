@@ -1,6 +1,6 @@
 package cli
 
-import "github.com/assagman/serverpro/internal/config"
+import "github.com/sagmans/serverpro/internal/config"
 
 func (a *app) completeConfig(cfg *config.Config, exists bool) error {
 	ask := !exists && !a.nonInteractive

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/assagman/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/compute"
 )
 
 func TestComputeProviderDeleteCleansAccessPolicyWithoutServerID(t *testing.T) {

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/assagman/serverpro/internal/bootstraptools"
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/bootstraptools"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 func TestBootstrapGitRunsDeployAccessByDefaultWhenInteractive(t *testing.T) {

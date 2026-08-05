@@ -1,6 +1,6 @@
 package cli
 
-import "github.com/assagman/serverpro/internal/config"
+import "github.com/sagmans/serverpro/internal/config"
 
 func (a *app) completeConfigIdentity(cfg *config.Config, ask bool) error {
 	if ask && cfg.Project == "" {

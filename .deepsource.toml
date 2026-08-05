@@ -5,7 +5,7 @@ name = "go"
 enabled = true
 
   [analyzers.meta]
-  import_root = "github.com/assagman/serverpro"
+  import_root = "github.com/sagmans/serverpro"
 
 [[analyzers]]
 name = "shell"

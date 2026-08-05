@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/assagman/serverpro/internal/cloudinit"
-	"github.com/assagman/serverpro/internal/compute"
-	"github.com/assagman/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/cloudinit"
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/config"
 )
 
 func validateCreateImageReference(provider compute.Provider, image string) error {

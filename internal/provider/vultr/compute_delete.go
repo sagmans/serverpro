@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/assagman/serverpro/internal/compute"
-	"github.com/assagman/serverpro/internal/provider/httpjson"
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/provider/httpjson"
 )
 
 func (p ComputeProvider) Delete(ctx context.Context, request compute.DeleteServerRequest) compute.Diagnostics {

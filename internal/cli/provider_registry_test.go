@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	"github.com/assagman/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/compute"
 )
 
 func TestProviderRegistryIncludesBuiltInProviders(t *testing.T) {

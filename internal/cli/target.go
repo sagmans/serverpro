@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/servername"
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/servername"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 func targetServer(server string) string {

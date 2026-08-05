@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/ingress"
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/ingress"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 type ingressMutationRow struct {

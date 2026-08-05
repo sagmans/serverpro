@@ -6,10 +6,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/assagman/serverpro/internal/compute"
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/credentials"
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/credentials"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 var defaultServerOperationTimeout = 10 * time.Minute

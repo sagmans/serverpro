@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/assagman/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/config"
 )
 
 func createDryRunConfigPath(t *testing.T) (string, string) {

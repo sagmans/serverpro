@@ -5,9 +5,9 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/assagman/serverpro/internal/compute"
-	"github.com/assagman/serverpro/internal/ownership"
-	"github.com/assagman/serverpro/internal/redact"
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/ownership"
+	"github.com/sagmans/serverpro/internal/redact"
 )
 
 var bootstrapSecretPatterns = []*regexp.Regexp{

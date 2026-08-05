@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/assagman/serverpro/internal/compute"
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/credentials"
-	"github.com/assagman/serverpro/internal/lifecycle"
-	"github.com/assagman/serverpro/internal/passwordhash"
-	"github.com/assagman/serverpro/internal/redact"
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/credentials"
+	"github.com/sagmans/serverpro/internal/lifecycle"
+	"github.com/sagmans/serverpro/internal/passwordhash"
+	"github.com/sagmans/serverpro/internal/redact"
 	"github.com/spf13/cobra"
 )
 

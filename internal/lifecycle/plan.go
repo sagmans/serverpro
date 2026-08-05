@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/assagman/serverpro/internal/bootstraptools"
-	"github.com/assagman/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/bootstraptools"
+	"github.com/sagmans/serverpro/internal/config"
 )
 
 type PlanAction struct {

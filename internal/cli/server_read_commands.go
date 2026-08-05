@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/assagman/serverpro/internal/compute"
-	"github.com/assagman/serverpro/internal/config"
-	"github.com/assagman/serverpro/internal/doctor"
-	"github.com/assagman/serverpro/internal/passwordhash"
-	"github.com/assagman/serverpro/internal/redact"
-	"github.com/assagman/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/doctor"
+	"github.com/sagmans/serverpro/internal/passwordhash"
+	"github.com/sagmans/serverpro/internal/redact"
+	"github.com/sagmans/serverpro/internal/state"
 	"gopkg.in/yaml.v3"
 )
 

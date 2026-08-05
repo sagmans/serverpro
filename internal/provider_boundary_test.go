@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	digitalOceanAdapterImport = "github.com/assagman/serverpro/internal/provider/digitalocean"
-	hetznerAdapterImport      = "github.com/assagman/serverpro/internal/provider/hetzner"
-	vultrAdapterImport        = "github.com/assagman/serverpro/internal/provider/vultr"
+	digitalOceanAdapterImport = "github.com/sagmans/serverpro/internal/provider/digitalocean"
+	hetznerAdapterImport      = "github.com/sagmans/serverpro/internal/provider/hetzner"
+	vultrAdapterImport        = "github.com/sagmans/serverpro/internal/provider/vultr"
 )
 
 var providerSpecificTermAllowlist = map[string]bool{

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/assagman/serverpro/internal/bootstraptools"
+	"github.com/sagmans/serverpro/internal/bootstraptools"
 )
 
 type remoteCall struct {

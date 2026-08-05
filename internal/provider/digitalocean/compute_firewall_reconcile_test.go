@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/assagman/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/compute"
 )
 
 func TestComputeProviderCreateRemovesOnlyExactLegacySTUNRuleFromCheckpoint(t *testing.T) {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/assagman/serverpro/internal/bootstraptools"
-	"github.com/assagman/serverpro/internal/remote"
+	"github.com/sagmans/serverpro/internal/bootstraptools"
+	"github.com/sagmans/serverpro/internal/remote"
 )
 
 func remoteToolChecks(ctx context.Context, r remote.Runner, user, host string, opt Options) []Result {

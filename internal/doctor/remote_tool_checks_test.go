@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/assagman/serverpro/internal/bootstraptools"
-	"github.com/assagman/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/bootstraptools"
+	"github.com/sagmans/serverpro/internal/config"
 )
 
 func TestRemoteToolChecksPassWhenInstalled(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/assagman/serverpro/internal/provider/httpjson"
+	"github.com/sagmans/serverpro/internal/provider/httpjson"
 )
 
 const tunnelActiveConnectionsCode = 1022

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/assagman/serverpro/internal/provider/httpjson"
+	"github.com/sagmans/serverpro/internal/provider/httpjson"
 )
 
 type Client struct {
