@@ -42,6 +42,15 @@ default.
   `false` disables it. Restricted egress still permits outbound SSH (22/tcp)
   for git-over-SSH workflows; `serverpro server doctor NAME --fix` adds the rule
   to hosts provisioned before it existed.
+- GitHub development access is opt-in and least-privilege by default: the
+  read-only deploy key flow stays the default; full account-key access grants
+  the server git write to every repo the account can write, so pair it with
+  branch protection and signed-commit requirements on important repositories.
+- The GitHub PAT enters only through a masked prompt, travels over SSH stdin,
+  and is stored as a `0600` gh `hosts.yml`; it never appears in config, state,
+  logs, or process lists. Server-side SSH signing keys live on the host: any
+  process running as the admin user can sign commits, an accepted boundary for
+  single-admin servers.
 - Current selectable ingress modes are `none` and `cloudflare-tunnel`.
 - Cloudflare tunnel lifecycle can create or adopt an account tunnel. Ingress
   route commands record pending local metadata only; routes are not made

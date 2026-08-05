@@ -160,11 +160,25 @@ hardening:
   apparmor: true
   ufw: true
   journald_persistent: true
+git:
+  identity:
+    name: ""
+    email: ""
+  signing: false
+  access: none
 ```
 
 `network.egress.mode: restricted` permits only DNS, NTP, HTTP(S), outbound
 SSH (22/tcp, for git-over-SSH), Cloudflare Tunnel, and Tailscale egress;
 `open` allows all outbound traffic.
+
+The optional `git` section records the GitHub development setup chosen during
+interactive create/bootstrap: `access: none` leaves git untouched,
+`deploy-key` is the read-only single-repo flow, and `account-key` is full
+development access (account SSH key, git identity, optional SSH commit
+signing, gh CLI PAT auth). All values are prompted interactively; the PAT and
+private keys are never written to config or state. `serverpro server doctor`
+re-checks the account-key setup and fixes config-only drift.
 
 Legacy config files containing only `project` still load, but every save rewrites
 that identity as `namespace`. Files containing both fields must use the same

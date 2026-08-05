@@ -303,6 +303,9 @@ never replaced.
   disabling it requires an explicit `false`. Restricted egress permits
   outbound SSH (22/tcp) so git-over-SSH keeps working; doctor detects and
   repairs pre-existing hosts missing the rule.
+- GitHub access levels are explicit operator choices: `none`, read-only
+  `deploy-key`, or full-development `account-key`; secrets (PAT, private keys)
+  never persist in config or state, only the non-secret `git` section does.
 - Compute provider, location, size, and image are explicit operator choices.
 - Provider ownership metadata uses `managed-by`, `serverpro-namespace`, and
   `serverpro-server` across Hetzner, Vultr, and DigitalOcean; flat tag values
