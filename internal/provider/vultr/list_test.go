@@ -21,7 +21,7 @@ func TestListInstancesPagesAndMapsFirewall(t *testing.T) {
 		}
 		calls++
 		if calls == 1 {
-			_, _ = w.Write([]byte(`{"instances":[{"id":"abc","label":"cloudagents-dev","region":"ewr","plan":"vc2-1c-1gb","os_id":2284,"main_ip":"203.0.113.20","power_status":"running","firewall_group_id":"fw-1","tags":["managed-by:serverpro","serverpro-namespace:cloudagents","serverpro-server:dev"]}],"meta":{"links":{"next":"cursor-2","prev":""}}}`))
+			_, _ = w.Write([]byte(`{"instances":[{"id":"abc","label":"example-dev","region":"ewr","plan":"vc2-1c-1gb","os_id":2284,"main_ip":"203.0.113.20","power_status":"running","firewall_group_id":"fw-1","tags":["managed-by:serverpro","serverpro-namespace:example","serverpro-server:dev"]}],"meta":{"links":{"next":"cursor-2","prev":""}}}`))
 			return
 		}
 		_, _ = w.Write([]byte(`{"instances":[{"id":"xyz","label":"other","region":"ewr","plan":"vc2-1c-1gb","os_id":2284,"main_ip":"203.0.113.21","power_status":"running","tags":[]}],"meta":{"links":{"next":"","prev":""}}}`))
@@ -44,7 +44,7 @@ func TestListInstancesPagesAndMapsFirewall(t *testing.T) {
 		t.Fatal(err)
 	}
 	namespace, server, ok := ownership.OwnershipFromLabels(records[0].Labels)
-	if !ok || namespace != "cloudagents" || server != "dev" {
+	if !ok || namespace != "example" || server != "dev" {
 		t.Fatalf("record=%+v", records[0])
 	}
 	policyID, found := compute.ManagedResourceID(records[0].ManagedResources, compute.ManagedResourceAccessPolicy)

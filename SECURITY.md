@@ -150,7 +150,7 @@ non-SemVer tags and existing releases, never clobbers assets, smoke-tests native
 binaries, and pairs every target archive with checksums, an SPDX SBOM, and
 signed Sigstore provenance and SBOM attestations. SemVer prerelease tags are
 published as GitHub prereleases. Repository-level tag protection and
-immutable-release settings remain required defense in depth (issue #103).
+immutable-release settings remain required defense in depth.
 
 ## Safe operations
 
