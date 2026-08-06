@@ -28,7 +28,15 @@ func SetupGitAccountKey(ctx context.Context, r remote.Runner, cfg config.Config,
 	if err := gitIdentityRunnerOK(cfg, st); err != nil {
 		return "", err
 	}
-	out, err := remote.WithTimeout(r, 2*time.Minute).Run(ctx, cfg.Admin.Username, st.Tailscale.Name, gitAccountKeyScript(cfg.Admin.Username))
+	var deployRepo *githubSSHRepo
+	if cfg.Git.DeployRepository != "" {
+		repo, err := parseGitHubSSHRepoURL(cfg.Git.DeployRepository)
+		if err != nil {
+			return "", fmt.Errorf("prepare managed Git deploy migration: %w", err)
+		}
+		deployRepo = &repo
+	}
+	out, err := remote.WithTimeout(r, 2*time.Minute).Run(ctx, cfg.Admin.Username, st.Tailscale.Name, gitAccountKeyScript(cfg.Admin.Username, deployRepo))
 	if err != nil {
 		return "", fmt.Errorf("generate GitHub account key: %w", err)
 	}

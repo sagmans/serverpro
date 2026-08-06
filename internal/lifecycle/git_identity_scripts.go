@@ -45,26 +45,34 @@ fi
 `
 }
 
-func gitAccountKeyScript(user string) string {
-	return targetUserHomeScript(user) + `
-ssh_dir="${TARGET_HOME}/.ssh"
-key_path="${ssh_dir}/id_ed25519"
-config_path="${ssh_dir}/config"
-known_hosts_path="${ssh_dir}/known_hosts"
-install -d -m 0700 -o "${TARGET_USER}" -g "${TARGET_GID}" "${ssh_dir}"
-if [ ! -f "${key_path}" ]; then
-  runuser -u "${TARGET_USER}" -- ssh-keygen -q -t ed25519 -N '' -C ` + shell.Quote("serverpro account key "+user) + ` -f "${key_path}"
+func ed25519KeyConvergenceScript(comment string) string {
+	return `if [ ! -f "${key_path}" ]; then
+  runuser -u "${TARGET_USER}" -- ssh-keygen -q -t ed25519 -N '' -C ` + shell.Quote(comment) + ` -f "${key_path}"
 elif [ ! -f "${key_path}.pub" ]; then
   runuser -u "${TARGET_USER}" -- sh -c 'ssh-keygen -y -f "$1" >"$1.pub"' sh "${key_path}"
 fi
 chown "${TARGET_USER}:${TARGET_GID}" "${key_path}" "${key_path}.pub"
 chmod 0600 "${key_path}"
 chmod 0644 "${key_path}.pub"
-touch "${config_path}" "${known_hosts_path}"
+`
+}
+
+func gitAccountKeyScript(user string, deployRepo *githubSSHRepo) string {
+	deployCleanup := ""
+	if deployRepo != nil {
+		deployCleanup = gitDeployAccessCleanupScript(*deployRepo)
+	}
+	return targetUserHomeScript(user) + `
+ssh_dir="${TARGET_HOME}/.ssh"
+key_path="${ssh_dir}/id_ed25519"
+config_path="${ssh_dir}/config"
+known_hosts_path="${ssh_dir}/known_hosts"
+install -d -m 0700 -o "${TARGET_USER}" -g "${TARGET_GID}" "${ssh_dir}"
+` + ed25519KeyConvergenceScript("serverpro account key "+user) + `touch "${config_path}" "${known_hosts_path}"
 chown "${TARGET_USER}:${TARGET_GID}" "${config_path}" "${known_hosts_path}"
 chmod 0600 "${config_path}"
 chmod 0644 "${known_hosts_path}"
-marker='# serverpro github account access'
+` + deployCleanup + `marker='# serverpro github account access'
 if ! grep -Fxq "${marker}" "${config_path}"; then
   cat >>"${config_path}" <<EOF
 
@@ -108,15 +116,7 @@ func gitSigningKeyScript(user string) string {
 ssh_dir="${TARGET_HOME}/.ssh"
 key_path="${ssh_dir}/id_ed25519_sign"
 install -d -m 0700 -o "${TARGET_USER}" -g "${TARGET_GID}" "${ssh_dir}"
-if [ ! -f "${key_path}" ]; then
-  runuser -u "${TARGET_USER}" -- ssh-keygen -q -t ed25519 -N '' -C ` + shell.Quote("serverpro signing key "+user) + ` -f "${key_path}"
-elif [ ! -f "${key_path}.pub" ]; then
-  runuser -u "${TARGET_USER}" -- sh -c 'ssh-keygen -y -f "$1" >"$1.pub"' sh "${key_path}"
-fi
-chown "${TARGET_USER}:${TARGET_GID}" "${key_path}" "${key_path}.pub"
-chmod 0600 "${key_path}"
-chmod 0644 "${key_path}.pub"
-git_config() { runuser -u "${TARGET_USER}" -- env HOME="${TARGET_HOME}" git config --global "$@"; }
+` + ed25519KeyConvergenceScript("serverpro signing key "+user) + `git_config() { runuser -u "${TARGET_USER}" -- env HOME="${TARGET_HOME}" git config --global "$@"; }
 git_config gpg.format ssh
 git_config user.signingkey "${key_path}.pub"
 git_config commit.gpgsign true

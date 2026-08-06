@@ -3,6 +3,9 @@ package lifecycle
 import (
 	"context"
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -59,6 +62,145 @@ func TestSetupGitAccountKeyGeneratesDefaultKeyAndAccountHostEntry(t *testing.T) 
 	}
 	if strings.Contains(script, "cat \"${key_path}\"") {
 		t.Fatalf("script prints private key:\n%s", script)
+	}
+}
+
+func TestSetupGitAccountKeyRemovesManagedDeployRoutingDuringMigration(t *testing.T) {
+	r := &gitRemote{out: "ssh-ed25519 AAAATEST serverpro account key\n"}
+	cfg, st := gitIdentityFixture()
+	cfg.Git.DeployRepository = "git@github.com:example/example-app.git"
+	if _, err := SetupGitAccountKey(context.Background(), r, cfg, st); err != nil {
+		t.Fatal(err)
+	}
+	script := r.scripts[0]
+	for _, want := range []string{
+		"deploy_marker='# serverpro git deploy access example/example-app'",
+		"git config --global --unset-all 'url.git@serverpro-github-example-example-app:example/example-app.git.insteadOf'",
+		`$0 == deploy_marker { dropping=1; next }`,
+		`dropping && $0 == "  IdentitiesOnly yes" { dropping=0; next }`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("migration script missing %q:\n%s", want, script)
+		}
+	}
+}
+
+func TestGitDeployAccessCleanupRemovesOnlyManagedRoutingAndReruns(t *testing.T) {
+	home := t.TempDir()
+	configPath := filepath.Join(home, "ssh-config")
+	repo, err := parseGitHubSSHRepoURL("git@github.com:example/example-app.git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := `Host unrelated.example.com
+  User deploy
+
+# serverpro git deploy access example/example-app
+Host serverpro-github-example-example-app
+  HostName ssh.github.com
+  Port 443
+  User git
+  IdentityFile ~/.ssh/serverpro_deploy_key_example_example-app
+  IdentitiesOnly yes
+`
+	if err := os.WriteFile(configPath, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setFixtureGitConfig(t, home, "url."+repo.aliasURL()+".insteadOf", repo.url)
+	script := gitDeployAccessCleanupScript(repo)
+	if err := runGitDeployCleanupFixture(home, configPath, script); err != nil {
+		t.Fatalf("cleanup failed: %v", err)
+	}
+	if err := runGitDeployCleanupFixture(home, configPath, script); err != nil {
+		t.Fatalf("cleanup rerun failed: %v", err)
+	}
+	updated, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(updated), "Host unrelated.example.com") {
+		t.Fatalf("cleanup removed unrelated SSH config:\n%s", updated)
+	}
+	for _, removed := range []string{"serverpro git deploy access", repo.hostAlias(), repo.deployKeyName()} {
+		if strings.Contains(string(updated), removed) {
+			t.Fatalf("cleanup retained %q:\n%s", removed, updated)
+		}
+	}
+	if out, err := fixtureGitConfig(home, "--get-all", "url."+repo.aliasURL()+".insteadOf"); err == nil {
+		t.Fatalf("cleanup retained Git rewrite: %s", out)
+	}
+}
+
+func TestGitDeployAccessCleanupRejectsIncompleteBlockBeforeMutation(t *testing.T) {
+	home := t.TempDir()
+	configPath := filepath.Join(home, "ssh-config")
+	repo, err := parseGitHubSSHRepoURL("git@github.com:example/example-app.git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents := "# serverpro git deploy access example/example-app\nHost " + repo.hostAlias() + "\n"
+	if err := os.WriteFile(configPath, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rewriteKey := "url." + repo.aliasURL() + ".insteadOf"
+	setFixtureGitConfig(t, home, rewriteKey, repo.url)
+	if err := runGitDeployCleanupFixture(home, configPath, gitDeployAccessCleanupScript(repo)); err == nil {
+		t.Fatal("incomplete managed SSH block passed cleanup")
+	}
+	out, err := fixtureGitConfig(home, "--get-all", rewriteKey)
+	if err != nil || strings.TrimSpace(out) != repo.url {
+		t.Fatalf("failed cleanup mutated rewrite: output=%q error=%v", out, err)
+	}
+}
+
+func runGitDeployCleanupFixture(home, configPath, cleanupScript string) error {
+	const harness = `set -eu
+TARGET_USER=fixture
+TARGET_GID=fixture
+TARGET_HOME="${FIXTURE_HOME}"
+config_path="${FIXTURE_CONFIG}"
+runuser() {
+  shift
+  shift
+  if [ "${1:-}" = -- ]; then shift; fi
+  "$@"
+}
+chown() { :; }
+install() {
+  while [ "$#" -gt 2 ]; do shift; done
+  cp "$1" "$2"
+  chmod 0600 "$2"
+}
+`
+	cmd := exec.Command("bash", "-c", harness+cleanupScript)
+	cmd.Env = append(os.Environ(), "FIXTURE_HOME="+home, "FIXTURE_CONFIG="+configPath)
+	return cmd.Run()
+}
+
+func setFixtureGitConfig(t *testing.T, home, key, value string) {
+	t.Helper()
+	if out, err := fixtureGitConfig(home, key, value); err != nil {
+		t.Fatalf("set fixture git config: %v: %s", err, out)
+	}
+}
+
+func fixtureGitConfig(home string, args ...string) (string, error) {
+	commandArgs := append([]string{"config", "--global"}, args...)
+	cmd := exec.Command("git", commandArgs...)
+	cmd.Env = append(os.Environ(), "HOME="+home)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+func TestSetupGitAccountKeyRejectsInvalidManagedDeployRepository(t *testing.T) {
+	r := &gitRemote{out: "ssh-ed25519 AAAATEST serverpro account key\n"}
+	cfg, st := gitIdentityFixture()
+	cfg.Git.DeployRepository = "https://github.com/example/example-app"
+	if _, err := SetupGitAccountKey(context.Background(), r, cfg, st); err == nil || !strings.Contains(err.Error(), "GitHub SSH") {
+		t.Fatalf("invalid managed deploy repository error = %v", err)
+	}
+	if len(r.scripts) != 0 {
+		t.Fatal("invalid managed deploy repository reached remote mutation")
 	}
 }
 

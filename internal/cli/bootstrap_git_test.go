@@ -103,6 +103,34 @@ func TestBootstrapGitSkipsDeployKeyWhenRepoAccessAlreadyWorks(t *testing.T) {
 	}
 }
 
+func TestMaybeSetupGitDeployAccessPersistsExplicitNone(t *testing.T) {
+	cfgPath := createTestConfig(t)
+	if err := config.Update(cfgPath, func(current *config.Config) error {
+		current.Git = config.Git{
+			Access:   config.GitAccessAccountKey,
+			Identity: config.GitIdentity{Name: "buzz", Email: "buzz@example.com"},
+		}
+		return current.Validate()
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &app{configPath: cfgPath, stdin: strings.NewReader("n\n"), stdout: &bytes.Buffer{}}
+	if err := a.maybeSetupGitDeployAccess(context.Background(), cfg, state.State{}, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Git != (config.Git{Access: config.GitAccessNone}) {
+		t.Fatalf("explicit none intent = %+v", saved.Git)
+	}
+}
+
 func TestMaybeSetupGitDeployAccessRejectsInvalidRepoBeforeGeneratingKey(t *testing.T) {
 	var out bytes.Buffer
 	a := &app{stdin: strings.NewReader("y\nhttps://github.com/owner/repo\n"), stdout: &out, services: serviceHooks{

@@ -18,7 +18,7 @@ func TestPlanMentionsConnectorOnlyNoPublicSSH(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := b.String()
-	for _, want := range []string{"deny public ingress", "connector-only", "server tools", bootstraptools.DefaultToolsetDescription(), "Pi and gh authentication remain operator-owned", "doctor"} {
+	for _, want := range []string{"deny public ingress", "connector-only", "server tools", bootstraptools.DefaultToolsetDescription(), bootstraptools.AuthenticationBoundary, "doctor"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("plan missing %q\n%s", want, out)
 		}

@@ -137,10 +137,12 @@ executes it. Existing hosts with the deprecated active `sg` mise key migrate to
 also includes digest-verified Herdr plus its Pi lifecycle
 integration. Checksum-pinned GitHub tools publish Linux x86_64 and arm64 assets
 only, so the default `all` toolset (and doctor) requires one of those
-architectures; bootstrap rejects any other host before making changes. Pi, gh,
-and optional inspect authentication remain operator tasks; serverpro does not
-configure or store their credentials. Serverpro updates Herdr only
-during managed bootstrap and never starts, stops, or restarts Herdr sessions.
+architectures; bootstrap rejects any other host before making changes. The
+focused `git` target installs Git/OpenSSH plus target-user mise and gh before
+interactive GitHub setup. Full development access requires a masked PAT and
+stores gh credentials only on the managed host. Pi and optional inspect
+authentication remain operator tasks. Serverpro updates Herdr only during
+managed bootstrap and never starts, stops, or restarts Herdr sessions.
 `serverpro server doctor` reports stale exact pins, cached apt candidates for
 managed packages, and the Tailscale client/daemon release. `--fix` refreshes and
 upgrades those paths; a Tailscale repair schedules its daemon restart only after

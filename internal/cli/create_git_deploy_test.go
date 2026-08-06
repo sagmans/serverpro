@@ -50,8 +50,11 @@ func TestCreateOptionalGitDeployAccessGenerateAndVerify(t *testing.T) {
 			}
 			return nil
 		},
-		doctorReport: func(context.Context, config.Config, state.State, credentials.Set, string, string) doctor.Report {
+		doctorReport: func(_ context.Context, got config.Config, _ state.State, _ credentials.Set, _, _ string) doctor.Report {
 			calls = append(calls, "doctorReport")
+			if got.Git.Access != config.GitAccessDeployKey || got.Git.DeployRepository != "git@github.com:owner/repo.git" {
+				t.Fatalf("doctor git intent = %+v", got.Git)
+			}
 			return doctor.Report{Results: []doctor.Result{{Name: "smoke", Scope: "test", Status: doctor.Pass, Evidence: "ok"}}}
 		},
 	}}
@@ -67,6 +70,13 @@ func TestCreateOptionalGitDeployAccessGenerateAndVerify(t *testing.T) {
 	if verifiedRepo != "git@github.com:owner/repo.git" {
 		t.Fatalf("verified repo = %q", verifiedRepo)
 	}
+	saved, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Git.Access != config.GitAccessDeployKey || saved.Git.DeployRepository != verifiedRepo {
+		t.Fatalf("persisted deploy intent = %+v", saved.Git)
+	}
 	var report doctor.Report
 	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
 		t.Fatalf("create stdout is not one JSON report: %v\n%s", err, out.String())
@@ -81,6 +91,43 @@ func TestCreateOptionalGitDeployAccessGenerateAndVerify(t *testing.T) {
 		if strings.HasPrefix(line, "progress ") && (strings.Contains(line, "correct horse battery staple") || strings.Contains(line, "git@github.com:owner/repo.git")) {
 			t.Fatalf("progress leaked user data: %q", line)
 		}
+	}
+}
+
+func TestCreateGitAccountAccessRunsDoctorWithPersistedIntent(t *testing.T) {
+	cfgPath := createTestConfig(t)
+	const accountKey = "ssh-ed25519 AAAATEST account key"
+	var out bytes.Buffer
+	a := &app{configPath: cfgPath, provider: "hetzner", yes: true, stdin: strings.NewReader("correct horse battery staple\ny\nbuzz\nbuzz@example.com\nn\nghp_test\ny\n"), stdout: &out, services: serviceHooks{
+		preflight: func(context.Context, config.Config, credentials.Set) error { return nil },
+		runProvision: func(_ context.Context, got config.Config, stPath string, _ compute.Account, _ credentials.Set, _, _ string) (state.State, error) {
+			st := state.State{Namespace: got.Namespace, Server: got.Server, Tailscale: state.TailscaleState{Name: "demo-web"}}
+			return st, state.Save(stPath, st)
+		},
+		setupGitAccountKey: func(context.Context, config.Config, state.State, string) (string, error) {
+			return accountKey, nil
+		},
+		verifyGitHubSSH:      func(context.Context, config.Config, state.State, string) error { return nil },
+		configureGitIdentity: func(context.Context, config.Config, state.State, string) error { return nil },
+		setupGitSigningKey: func(context.Context, config.Config, state.State, string) (string, error) {
+			t.Fatal("signing was declined")
+			return "", nil
+		},
+		setupGitHubCLI: func(context.Context, config.Config, state.State, string, string) error { return nil },
+		doctorReport: func(_ context.Context, got config.Config, _ state.State, _ credentials.Set, _, _ string) doctor.Report {
+			if got.Git.Access != config.GitAccessAccountKey || got.Git.Identity.Name != "buzz" {
+				t.Fatalf("doctor received stale git intent: %+v", got.Git)
+			}
+			return doctor.Report{Results: []doctor.Result{{Name: "smoke", Scope: "test", Status: doctor.Pass, Evidence: "ok"}}}
+		},
+	}}
+	cmd := a.serverCreateCmd()
+	cmd.SetArgs([]string{"web"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "ghp_test") {
+		t.Fatalf("create output leaked PAT:\n%s", out.String())
 	}
 }
 

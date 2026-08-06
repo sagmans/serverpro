@@ -14,8 +14,12 @@ func (a *app) maybeSetupGitDeployAccess(ctx context.Context, cfg config.Config, 
 		return nil
 	}
 	ok, err := a.confirmDefault("Set up Git SSH deploy access for a private GitHub repo?", true)
-	if err != nil || !ok {
+	if err != nil {
 		return err
+	}
+	if !ok {
+		cfg.Git = config.Git{Access: config.GitAccessNone}
+		return a.persistGitConfig(cfg)
 	}
 	if progress != nil {
 		if err := progress.emit(progressPhaseGitDeploy); err != nil {
@@ -28,6 +32,12 @@ func (a *app) maybeSetupGitDeployAccess(ctx context.Context, cfg config.Config, 
 	}
 	repoURL, err = lifecycle.NormalizeGitHubSSHRepoURL(repoURL)
 	if err != nil {
+		return err
+	}
+	cfg.Git = config.Git{Access: config.GitAccessDeployKey, DeployRepository: repoURL}
+	// Persisting scope before remote key work keeps an interrupted deploy setup
+	// diagnosable and gives future access-mode reconciliation exact ownership.
+	if err := a.persistGitConfig(cfg); err != nil {
 		return err
 	}
 	if err := a.verifyGitDeployAccess(ctx, cfg, st, sudoPassword, repoURL); err == nil {

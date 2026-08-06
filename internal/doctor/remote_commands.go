@@ -64,32 +64,43 @@ func sshdChallengeResponseCommand() string {
 		"*) printf '%s\n' \"$out\"; exit 1 ;; esac"
 }
 
-// gitUserCommand runs git as the admin user with the resolved home so the
-// root-executed doctor batch reads the user's git configuration, not root's.
-func gitUserCommand(user, args string) string {
+const gitSigningPublicKeyRelativePath = ".ssh/id_ed25519_sign.pub"
+
+// gitUserConfigCommand resolves the admin home once because repeated command
+// fragments previously let shell list separators mask earlier failures.
+func gitUserConfigCommand(user, body string) string {
 	quotedUser := shell.Quote(user)
-	return "home=\"$(getent passwd " + quotedUser + " | cut -d: -f6)\"; " +
-		"runuser -u " + quotedUser + " -- env HOME=\"$home\" git " + args
+	return "set -eu\n" +
+		"home=\"$(getent passwd " + quotedUser + " | cut -d: -f6)\"\n" +
+		"test -n \"$home\"\n" +
+		"git_config() { runuser -u " + quotedUser + " -- env HOME=\"$home\" git config --global \"$@\"; }\n" +
+		body
 }
 
-func gitIdentityReadCommand(user string) string {
-	return gitUserCommand(user, "config --global user.name") + " >/dev/null && " + gitUserCommand(user, "config --global user.email") + " >/dev/null"
+func gitIdentityReadCommand(user string, identity config.GitIdentity) string {
+	return gitUserConfigCommand(user,
+		"test \"$(git_config --get user.name)\" = "+shell.Quote(identity.Name)+"\n"+
+			"test \"$(git_config --get user.email)\" = "+shell.Quote(identity.Email))
 }
 
 func gitIdentityFixCommand(user string, identity config.GitIdentity) string {
-	return gitUserCommand(user, "config --global user.name "+shell.Quote(identity.Name)) + " && " +
-		gitUserCommand(user, "config --global user.email "+shell.Quote(identity.Email))
+	return gitUserConfigCommand(user,
+		"git_config user.name "+shell.Quote(identity.Name)+"\n"+
+			"git_config user.email "+shell.Quote(identity.Email))
 }
 
 func gitSigningReadCommand(user string) string {
-	return "test \"$(" + gitUserCommand(user, "config --global gpg.format") + ")\" = ssh && " +
-		gitUserCommand(user, "config --global user.signingkey") + " >/dev/null"
+	return gitUserConfigCommand(user,
+		"test \"$(git_config --get gpg.format)\" = ssh\n"+
+			"test \"$(git_config --get user.signingkey)\" = \"$home/"+gitSigningPublicKeyRelativePath+"\"\n"+
+			"test \"$(git_config --get commit.gpgsign)\" = true")
 }
 
 func gitSigningFixCommand(user string) string {
-	return gitUserCommand(user, "config --global gpg.format ssh") + " && " +
-		gitUserCommand(user, "config --global user.signingkey \"$home/.ssh/id_ed25519_sign.pub\"") + " && " +
-		gitUserCommand(user, "config --global commit.gpgsign true")
+	return gitUserConfigCommand(user,
+		"git_config gpg.format ssh\n"+
+			"git_config user.signingkey \"$home/"+gitSigningPublicKeyRelativePath+"\"\n"+
+			"git_config commit.gpgsign true")
 }
 
 func githubSSHAuthReadCommand(user string) string {

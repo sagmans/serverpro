@@ -1299,6 +1299,13 @@ func TestInstallUserToolsRepairsOnlyFailedComponents(t *testing.T) {
 			mustNotContain: []string{"ast-grep@", "sem@", "--force herdr", "npm install -g", "integration install"},
 		},
 		{
+			name:           "git-gh-stale-only",
+			target:         "git",
+			stubs:          `target_managed_mise_tool_ready() { [[ $1 != gh\|* ]]; }`,
+			mustContain:    []string{"mise --yes install gh@" + GitHubCLIVersion},
+			mustNotContain: []string{"node@", "npm install -g", "herdr@"},
+		},
+		{
 			name:           "pi-stale-only",
 			target:         "pi",
 			stubs:          "target_pi_ready() { return 1; }",

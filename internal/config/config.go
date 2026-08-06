@@ -70,12 +70,21 @@ type GitIdentity struct {
 	Email string `yaml:"email" json:"email"`
 }
 
+type GitAccess string
+
+const (
+	GitAccessNone       GitAccess = "none"
+	GitAccessDeployKey  GitAccess = "deploy-key"
+	GitAccessAccountKey GitAccess = "account-key"
+)
+
 // Git carries non-secret git/GitHub setup intent; secrets (PAT, private keys)
 // are deliberately absent so they can never land in config or state files.
 type Git struct {
-	Identity GitIdentity `yaml:"identity" json:"identity"`
-	Signing  bool        `yaml:"signing" json:"signing"`
-	Access   string      `yaml:"access" json:"access"`
+	Identity         GitIdentity `yaml:"identity" json:"identity"`
+	Signing          bool        `yaml:"signing" json:"signing"`
+	Access           GitAccess   `yaml:"access" json:"access"`
+	DeployRepository string      `yaml:"deploy_repository,omitempty" json:"deploy_repository,omitempty"`
 }
 
 type Hardening struct {

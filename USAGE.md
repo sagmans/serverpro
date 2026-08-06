@@ -166,19 +166,25 @@ git:
     email: ""
   signing: false
   access: none
+  deploy_repository: ""
 ```
 
 `network.egress.mode: restricted` permits only DNS, NTP, HTTP(S), outbound
 SSH (22/tcp, for git-over-SSH), Cloudflare Tunnel, and Tailscale egress;
 `open` allows all outbound traffic.
 
-The optional `git` section records the GitHub development setup chosen during
+The optional `git` section records durable GitHub setup intent chosen during
 interactive create/bootstrap: `access: none` leaves git untouched,
-`deploy-key` is the read-only single-repo flow, and `account-key` is full
-development access (account SSH key, git identity, optional SSH commit
-signing, gh CLI PAT auth). All values are prompted interactively; the PAT and
-private keys are never written to config or state. `serverpro server doctor`
-re-checks the account-key setup and fixes config-only drift.
+`deploy-key` is the read-only single-repo flow and requires the normalized
+`deploy_repository`, and `account-key` is full development access (account SSH
+key, exact git identity, optional SSH commit signing, and required gh CLI PAT
+auth). Non-secret intent is saved before remote mutation so an interrupted flow
+remains diagnosable. The PAT and private keys are never written to local config
+or state; gh stores the PAT only on the managed host. A successful deploy-key to
+account-key transition removes the exact managed repository rewrite and SSH
+block, then clears `deploy_repository`. `serverpro server doctor` re-checks the
+account-key setup against the exact configured identity and signing state and
+fixes config-only drift.
 
 Legacy config files containing only `project` still load, but every save rewrites
 that identity as `namespace`. Files containing both fields must use the same
@@ -437,11 +443,12 @@ repair. Bootstrap reruns managed host-tool setup through Tailscale SSH with
 password-required sudo. The default `all` target
 installs the full managed toolset; run `serverpro server bootstrap --help` for
 the canonical list and pinned versions. Focused targets stay `git`, `docker`,
-`mise`, `node`, and `pi`; `git` also offers the read-only GitHub deploy-key
-flow when interactive. Pi and gh can carry credentials; inspect also exposes
-optional hosted/API and model authentication. Serverpro installs these tools
-but never authenticates them or stores their credentials. Pi is an AI coding
-agent with arbitrary shell-execution
+`mise`, `node`, and `pi`; `git` converges Git/OpenSSH plus target-user mise and
+gh before offering interactive full account-key or read-only deploy-key access.
+Full account-key access requires a masked PAT and stores gh credentials only on
+the managed host. Pi authentication remains operator-owned; inspect also
+exposes optional hosted/API and model authentication that serverpro does not
+configure. Pi is an AI coding agent with arbitrary shell-execution
 capability: installing it on a hardened host widens the admin-user trust
 boundary, so enable the `pi` or `all` target only where that is intended.
 Pi is installed via `npm install -g` under the mise-managed Node; npm

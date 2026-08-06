@@ -22,6 +22,30 @@ func TestInstallScriptTargetSelectsSingleFamily(t *testing.T) {
 	}
 }
 
+func TestGitTargetIncludesAccountAccessPrerequisites(t *testing.T) {
+	script, err := InstallScriptForUserTarget("deploy", TargetGit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runStart := strings.Index(script, "run_bootstrap_target() {")
+	verifyStart := strings.Index(script, "verify_installation() {")
+	mainStart := strings.Index(script, "main() {")
+	if runStart < 0 || verifyStart <= runStart || mainStart <= verifyStart {
+		t.Fatal("missing bootstrap target boundaries")
+	}
+	runBody := script[runStart:verifyStart]
+	verifyBody := script[verifyStart:mainStart]
+	for _, want := range []string{"git)\n      install_mise\n      install_git\n      install_user_tools_for_target git", "git) verify_git; verify_mise; verify_managed_mise_tool gh ;;"} {
+		body := runBody
+		if strings.HasPrefix(want, "git) verify") {
+			body = verifyBody
+		}
+		if !strings.Contains(body, want) {
+			t.Fatalf("git target missing prerequisite sequence %q", want)
+		}
+	}
+}
+
 func TestParseTargetDefaultsAndRejectsUnknown(t *testing.T) {
 	got, err := ParseTarget("")
 	if err != nil {
