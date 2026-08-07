@@ -10,6 +10,8 @@ type Config struct {
 	Access      Access      `yaml:"access" json:"access"`
 	Cloudflare  Cloudflare  `yaml:"cloudflare" json:"cloudflare"`
 	Hardening   Hardening   `yaml:"hardening" json:"hardening"`
+	// Git is optional: an omitted section keeps git/GitHub untouched on the host.
+	Git Git `yaml:"git,omitempty" json:"git,omitempty"`
 }
 
 type Credentials struct {
@@ -61,6 +63,28 @@ type TunnelConfig struct {
 	Enabled             bool   `yaml:"enabled" json:"enabled"`
 	Name                string `yaml:"name" json:"name"`
 	CreateConnectorOnly bool   `yaml:"create_connector_only" json:"create_connector_only"`
+}
+
+type GitIdentity struct {
+	Name  string `yaml:"name" json:"name"`
+	Email string `yaml:"email" json:"email"`
+}
+
+type GitAccess string
+
+const (
+	GitAccessNone       GitAccess = "none"
+	GitAccessDeployKey  GitAccess = "deploy-key"
+	GitAccessAccountKey GitAccess = "account-key"
+)
+
+// Git carries non-secret git/GitHub setup intent; secrets (PAT, private keys)
+// are deliberately absent so they can never land in config or state files.
+type Git struct {
+	Identity         GitIdentity `yaml:"identity" json:"identity"`
+	Signing          bool        `yaml:"signing" json:"signing"`
+	Access           GitAccess   `yaml:"access" json:"access"`
+	DeployRepository string      `yaml:"deploy_repository,omitempty" json:"deploy_repository,omitempty"`
 }
 
 type Hardening struct {

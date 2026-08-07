@@ -21,7 +21,7 @@ func TestBootstrapGitRunsDeployAccessByDefaultWhenInteractive(t *testing.T) {
 	verifyCalls := 0
 	var out bytes.Buffer
 	var progress bytes.Buffer
-	a := &app{configPath: cfgPath, statePath: stPath, stdin: strings.NewReader("correct horse battery staple\n\ngit@github.com:owner/repo.git\ny\n"), stdout: &out, stderr: &progress, services: serviceHooks{
+	a := &app{configPath: cfgPath, statePath: stPath, stdin: strings.NewReader("correct horse battery staple\n\n\ngit@github.com:owner/repo.git\ny\n"), stdout: &out, stderr: &progress, services: serviceHooks{
 		bootstrapTools: func(_ context.Context, got config.Config, st state.State, sudoPassword string, target bootstraptools.Target) error {
 			calls = append(calls, "bootstrap:"+string(target))
 			if target != bootstraptools.TargetGit || sudoPassword != "correct horse battery staple" || st.Tailscale.Name != "demo-web" {
@@ -76,7 +76,7 @@ func TestBootstrapGitSkipsDeployKeyWhenRepoAccessAlreadyWorks(t *testing.T) {
 	cfgPath, stPath := writeDoctorFixture(t)
 	var calls []string
 	var out bytes.Buffer
-	a := &app{configPath: cfgPath, statePath: stPath, stdin: strings.NewReader("correct horse battery staple\n\ngit@github.com:owner/repo.git\n"), stdout: &out, services: serviceHooks{
+	a := &app{configPath: cfgPath, statePath: stPath, stdin: strings.NewReader("correct horse battery staple\n\n\ngit@github.com:owner/repo.git\n"), stdout: &out, services: serviceHooks{
 		bootstrapTools: func(context.Context, config.Config, state.State, string, bootstraptools.Target) error {
 			calls = append(calls, "bootstrap")
 			return nil
@@ -100,6 +100,34 @@ func TestBootstrapGitSkipsDeployKeyWhenRepoAccessAlreadyWorks(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "Add this public key") {
 		t.Fatalf("unexpected deploy key guidance:\n%s", out.String())
+	}
+}
+
+func TestMaybeSetupGitDeployAccessPersistsExplicitNone(t *testing.T) {
+	cfgPath := createTestConfig(t)
+	if err := config.Update(cfgPath, func(current *config.Config) error {
+		current.Git = config.Git{
+			Access:   config.GitAccessAccountKey,
+			Identity: config.GitIdentity{Name: "buzz", Email: "buzz@example.com"},
+		}
+		return current.Validate()
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &app{configPath: cfgPath, stdin: strings.NewReader("n\n"), stdout: &bytes.Buffer{}}
+	if err := a.maybeSetupGitDeployAccess(context.Background(), cfg, state.State{}, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Git != (config.Git{Access: config.GitAccessNone}) {
+		t.Fatalf("explicit none intent = %+v", saved.Git)
 	}
 }
 

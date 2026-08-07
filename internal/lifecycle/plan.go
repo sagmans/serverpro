@@ -31,7 +31,7 @@ func BuildPlan(cfg config.Config) Plan {
 		actions = append(actions, PlanAction{"install", "cloudflare tunnel", "connector-only; no public hostname route by default"})
 	}
 	actions = append(actions,
-		PlanAction{"install", "server tools", bootstraptools.DefaultToolsetDescription() + "; Pi and gh authentication remain operator-owned"},
+		PlanAction{"install", "server tools", bootstraptools.DefaultToolsetDescription() + "; " + bootstraptools.AuthenticationBoundary},
 		PlanAction{"lockdown", "egress", cfg.Network.Egress.Mode + " best-effort policy"},
 		PlanAction{"validate", "doctor", "hardening, ingress, Tailscale SSH, tunnel, secret checks"},
 	)

@@ -981,6 +981,9 @@ configure_user_tools_for_target() {
   local target=$1 row
   ensure_mise_config_file
   case "${target}" in
+    git)
+      configure_managed_mise_tool "$(managed_mise_tool_row gh)"
+      ;;
     node|pi)
       configure_managed_mise_tool "$(managed_mise_tool_row node)"
       ;;
@@ -1108,7 +1111,13 @@ install_user_tools_for_target() {
   # one stale tool must not reinstall (or re-resolve) the healthy toolchain.
   local -a mise_installs=() force_mise_installs=()
   local install_pi=0 install_herdr=0
+  local row key version_env force version
   case "${target}" in
+    git)
+      row=$(managed_mise_tool_row gh)
+      version=$(managed_mise_tool_version gh)
+      target_managed_mise_tool_ready "${row}" || mise_installs+=("gh@${version}")
+      ;;
     node)
       target_node_ready || mise_installs+=("node@${node_version}")
       ;;
@@ -1117,7 +1126,6 @@ install_user_tools_for_target() {
       target_pi_ready "${node_version}" "${pi_version}" || install_pi=1
       ;;
     all)
-      local row key version_env force version
       while IFS= read -r row; do
         IFS='|' read -r key version_env _ _ _ _ _ _ _ _ force _ <<<"${row}"
         version=$(bootstrap_version_env "${version_env}")
@@ -1260,7 +1268,9 @@ run_bootstrap_target() {
       install_user_tools_for_target all
       ;;
     git)
+      install_mise
       install_git
+      install_user_tools_for_target git
       ;;
     docker)
       install_docker
@@ -1289,7 +1299,7 @@ verify_installation() {
       verify_mise
       verify_all_user_tools
       ;;
-    git) verify_git ;;
+    git) verify_git; verify_mise; verify_managed_mise_tool gh ;;
     docker) verify_docker ;;
     mise) verify_mise ;;
     node) verify_mise; verify_node ;;

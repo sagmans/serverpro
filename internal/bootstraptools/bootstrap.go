@@ -43,6 +43,7 @@ const (
 	PiToolName                = "@earendil-works/pi-coding-agent"
 	HerdrMiseBackend          = "github:ogulcancelik/herdr"
 	ManagedPackageCheckName   = "managed package updates"
+	AuthenticationBoundary    = "Pi authentication remains operator-owned; full GitHub development access requires a PAT, and serverpro stores gh credentials only on the managed remote host"
 )
 
 type Target string

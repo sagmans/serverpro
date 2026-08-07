@@ -128,7 +128,7 @@ func TestBootstrapHelpDocumentsToolsetAndAuthBoundary(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{bootstraptools.DefaultToolsetDescription(), "Pi and gh authentication remain operator-owned"} {
+	for _, want := range []string{bootstraptools.DefaultToolsetDescription(), bootstraptools.AuthenticationBoundary} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("help missing %q:\n%s", want, out.String())
 		}

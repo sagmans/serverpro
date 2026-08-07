@@ -66,6 +66,9 @@ func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
 			remoteStaticSpecification(warn("remote", "egress precision", "restricted mode is port/protocol best-effort; global 22/80/443 and Cloudflare edge 7844 remain open for git/updates/connectors")),
 		)
 	}
+	if cfg.Git.Access == config.GitAccessAccountKey {
+		specifications = append(specifications, remoteGitIdentitySpecifications(cfg)...)
+	}
 	if cfg.Network.Ingress != "none" {
 		specifications = append(specifications, remoteFixableSpecification("cloudflared", "systemctl is-active cloudflared", ""))
 	}
@@ -137,6 +140,22 @@ func remoteDNSResolutionSpecification() remoteCheckSpecification {
 			return []Result{pass("remote", "dns resolution", trim(out))}
 		},
 	}
+}
+
+// remoteGitIdentitySpecifications guards the account-key development setup:
+// config-only drift is fixed remotely, while key/PAT registration stays a
+// human step because remediation requires GitHub account access.
+func remoteGitIdentitySpecifications(cfg config.Config) []remoteCheckSpecification {
+	user := cfg.Admin.Username
+	specifications := []remoteCheckSpecification{
+		remoteFixableSpecification("git identity", gitIdentityReadCommand(user, cfg.Git.Identity), gitIdentityFixCommand(user, cfg.Git.Identity)),
+		remoteFixableSpecification("github ssh auth", githubSSHAuthReadCommand(user), ""),
+		remoteFixableSpecification("gh auth", ghAuthReadCommand(user), ""),
+	}
+	if cfg.Git.Signing {
+		specifications = append(specifications, remoteFixableSpecification("git signing", gitSigningReadCommand(user), gitSigningFixCommand(user)))
+	}
+	return specifications
 }
 
 func remoteStaticSpecification(result Result) remoteCheckSpecification {

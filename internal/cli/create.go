@@ -103,7 +103,8 @@ func (a *app) runCreateCommand(cmd *cobra.Command) error {
 	if err != nil {
 		return redact.New(a.redactionSecrets(creds)...).Error(err)
 	}
-	if err := a.maybeSetupGitDeployAccess(ctx, cfg, st, sudoPassword, progress); err != nil {
+	cfg, err = a.maybeSetupGitHubAccess(ctx, cfg, st, sudoPassword, progress)
+	if err != nil {
 		return redact.New(a.redactionSecrets(creds)...).Error(err)
 	}
 	if err := progress.emit(progressPhaseDoctor); err != nil {

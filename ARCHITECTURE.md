@@ -40,7 +40,13 @@ access paths for app-owned deployment flows.
   through checksum- or repository-verified update paths. Rust uses the default
   profile; Herdr includes its target-user Pi lifecycle integration.
 - Bootstrap target: named subset of managed host tools (`all`, `git`,
-  `docker`, `mise`, `node`, `pi`) selected for a bootstrap run.
+  `docker`, `mise`, `node`, `pi`) selected for a bootstrap run. The `git`
+  target includes Git/OpenSSH plus target-user mise and gh because interactive
+  full-development setup requires all three before account mutation begins.
+- GitHub development profile: the singular account-key model managed for one
+  server: one global author identity, one account SSH key, one optional signing
+  key, and one stored `gh` token. Fine-grained PATs cover one resource owner;
+  serverpro does not route multiple GitHub usernames or PAT owner profiles.
 
 ## Component map
 
@@ -86,9 +92,10 @@ access paths for app-owned deployment flows.
     Existing active `sg` config migrates through mise's config-aware removal
     before the canonical `ast-grep` identity is configured. Inspect's bare
     release binary is hashed before execution because upstream
-    exposes no version flag. Pi and digest-verified Herdr retain purpose-built
-    flows. mise downloads are checksum-verified and the
-    Docker repository key is GPG-pinned.
+    exposes no version flag. The focused `git` path converges target-user mise
+    and gh as account-access prerequisites. Pi and digest-verified Herdr retain
+    purpose-built flows. mise downloads are checksum-verified and the Docker
+    repository key is GPG-pinned.
 - Remote: `internal/remote`
   - Tailscale SSH execution with password-aware sudo. Operation wrappers pass
     context deadlines to every runner; Tailscale adds its fallback only when
@@ -176,7 +183,13 @@ flowchart LR
    whose checkpoint failed.
 9. Wait for Tailscale SSH and converge the managed host tools through the
    embedded bootstrap script.
-10. Run doctor.
+10. During interactive GitHub setup, persist the selected non-secret access
+    intent before remote mutation. Full development requires a PAT; deploy-key
+    intent includes its normalized repository scope. Switching from deploy-key
+    to account-key removes the managed repository rewrite and SSH block before
+    clearing that transitional scope.
+11. Run doctor with the reloaded intent, including exact configured Git identity
+    and signing checks for account-key access.
 
 ### Delete and tailnet policy
 
@@ -303,6 +316,11 @@ never replaced.
   disabling it requires an explicit `false`. Restricted egress permits
   outbound SSH (22/tcp) so git-over-SSH keeps working; doctor detects and
   repairs pre-existing hosts missing the rule.
+- GitHub access levels are explicit operator choices: `none`, read-only
+  `deploy-key`, or full-development `account-key`. Full development requires a
+  PAT. Secrets (PAT, private keys) never persist in config or state; the
+  non-secret `git` section records exact identity, signing, access, and deploy
+  repository scope needed for diagnosis and safe access-mode reconciliation.
 - Compute provider, location, size, and image are explicit operator choices.
 - Provider ownership metadata uses `managed-by`, `serverpro-namespace`, and
   `serverpro-server` across Hetzner, Vultr, and DigitalOcean; flat tag values

@@ -27,7 +27,7 @@ func (a *app) serverBootstrapCmd() *cobra.Command {
 		Short: "bootstrap tools on an existing managed server",
 		Long: "Bootstrap managed host tools on an existing server. The all target installs " +
 			bootstraptools.DefaultToolsetDescription() +
-			". Pi and gh authentication remain operator-owned; serverpro does not configure or store their credentials.",
+			". " + bootstraptools.AuthenticationBoundary + ".",
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			a.server = args[0]
@@ -64,7 +64,8 @@ func (a *app) serverBootstrapCmd() *cobra.Command {
 				return redact.New(a.runtimeSecrets...).Error(err)
 			}
 			if target.IncludesGit() {
-				if err := a.maybeSetupGitDeployAccess(ctx, cfg, st, sudoPassword, progress); err != nil {
+				cfg, err = a.maybeSetupGitHubAccess(ctx, cfg, st, sudoPassword, progress)
+				if err != nil {
 					return redact.New(a.runtimeSecrets...).Error(err)
 				}
 			}
