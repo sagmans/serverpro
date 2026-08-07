@@ -43,6 +43,10 @@ access paths for app-owned deployment flows.
   `docker`, `mise`, `node`, `pi`) selected for a bootstrap run. The `git`
   target includes Git/OpenSSH plus target-user mise and gh because interactive
   full-development setup requires all three before account mutation begins.
+- GitHub development profile: the singular account-key model managed for one
+  server: one global author identity, one account SSH key, one optional signing
+  key, and one stored `gh` token. Fine-grained PATs cover one resource owner;
+  serverpro does not route multiple GitHub usernames or PAT owner profiles.
 
 ## Component map
 

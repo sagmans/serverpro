@@ -186,6 +186,14 @@ block, then clears `deploy_repository`. `serverpro server doctor` re-checks the
 account-key setup against the exact configured identity and signing state and
 fixes config-only drift.
 
+Account-key setup currently manages one GitHub development profile per server:
+one global Git author identity, one account SSH key, one optional signing key,
+and one stored `gh` token. A fine-grained PAT belongs to exactly one resource
+owner, so `all repositories` covers only the selected personal account or
+organization. Git-over-SSH follows the account key's full account access, while
+`gh` API access remains limited to the PAT resource owner. Multiple GitHub
+usernames and multiple PAT resource-owner profiles are not managed.
+
 Legacy config files containing only `project` still load, but every save rewrites
 that identity as `namespace`. Files containing both fields must use the same
 value; divergent identities are rejected. Legacy credential and state JSON

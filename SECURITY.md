@@ -46,9 +46,14 @@ default.
   read-only deploy key flow stays the default; full account-key access requires
   a PAT and grants the server git write to every repo the account can write, so
   pair it with branch protection and signed-commit requirements on important
-  repositories. Changing from deploy-key to account-key removes only the exact
-  managed repository rewrite and marked SSH block before local deploy scope is
-  cleared; malformed managed blocks fail closed.
+  repositories. Account-key mode manages one GitHub development profile and
+  one stored `gh` token per server. A fine-grained PAT covers exactly one
+  resource owner even when `all repositories` is selected; that API boundary
+  does not narrow the account SSH key's broader Git access. Multiple GitHub
+  usernames and multiple PAT resource-owner profiles are unsupported. Changing
+  from deploy-key to account-key removes only the exact managed repository
+  rewrite and marked SSH block before local deploy scope is cleared; malformed
+  managed blocks fail closed.
 - The required full-development GitHub PAT enters only through a masked prompt,
   travels over SSH stdin, and is stored only on the managed host as a `0600` gh
   `hosts.yml`; it never appears in local config, state, logs, or process lists.
