@@ -147,6 +147,44 @@ func TestCompiledProviderOnlyImportRecovery(t *testing.T) {
 	requireSuccessJSON(t, remove)
 }
 
+func TestCompiledDigitalOceanLegacyImportRecovery(t *testing.T) {
+	fixture := newProviderFixture(t)
+	binary := buildE2EBinary(t)
+	fakeBin := writeFakeTailscale(t)
+	namespace := "e2e-legacy-import"
+	createHome := t.TempDir()
+	writeCredentials(t, createHome, namespace)
+	createEnv := journeyEnv(createHome, fakeBin, fixture.URL(), namespace)
+	artifacts := newArtifactLog(t, "digitalocean-legacy-import")
+
+	create := runCommand(binary, createEnv, "server", "create", testServer,
+		"--namespace", namespace, "--provider", "digitalocean",
+		"--location", "nyc3", "--size", "s-1vcpu-1gb", "--image", "ubuntu-24-04-x64",
+		"--ingress", "none", "--non-interactive", "--yes")
+	artifacts.record("create", create)
+	requireSuccessJSON(t, create)
+	fixture.useLegacyDigitalOceanFirewall()
+
+	importHome := t.TempDir()
+	importEnv := append(journeyEnv(importHome, fakeBin, fixture.URL(), namespace), "SERVERPRO_SERVER_PROVIDER_TOKEN="+testProviderToken)
+	imported := runCommand(binary, importEnv, "server", "import", testServer,
+		"--namespace", namespace, "--provider", "digitalocean", "--admin-user", "ops",
+		"--non-interactive", "--yes")
+	artifacts.record("import", imported)
+	if imported.err != nil {
+		t.Fatalf("legacy DigitalOcean import failed: %v\nstdout=%s\nstderr=%s", imported.err, imported.stdout, imported.stderr)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(imported.stdout), &rows); err != nil || len(rows) != 1 || rows[0]["status"] != "imported" {
+		t.Fatalf("invalid import result: err=%v stdout=%s", err, imported.stdout)
+	}
+
+	remove := runCommand(binary, createEnv, "server", "delete", testServer,
+		"--namespace", namespace, "--provider", "digitalocean", "--non-interactive", "--yes")
+	artifacts.record("delete", remove)
+	requireSuccessJSON(t, remove)
+}
+
 func TestE2EBinaryRejectsNonLoopbackProviderAPI(t *testing.T) {
 	binary := buildE2EBinary(t)
 	result := runCommand(binary, append(os.Environ(), "SERVERPRO_E2E_API_URL=https://api.example.invalid"), "--help")

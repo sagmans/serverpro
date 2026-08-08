@@ -127,15 +127,31 @@ func dropletID(record compute.ServerRecord) (int64, error) {
 	return id, nil
 }
 
-func recoverFirewallID(record compute.ServerRecord, firewalls []Firewall) (string, error) {
+func recoverFirewallID(record compute.ServerRecord, firewalls []Firewall, droplets []Droplet) (string, error) {
 	expectedName := firewallName(record.Name)
 	var matches []Firewall
+	var legacyImpactErr error
 	for _, firewall := range firewalls {
-		if firewall.Name == expectedName && firewallTargetsServer(firewall, record.Namespace, record.Server) {
-			matches = append(matches, firewall)
+		if firewall.Name != expectedName {
+			continue
 		}
+		if firewallTargetsServer(firewall, record.Namespace, record.Server) {
+			matches = append(matches, firewall)
+			continue
+		}
+		if !legacyFirewallTargetsServer(record, firewall) {
+			continue
+		}
+		if err := validateLegacyFirewallImpact(record, firewall, true, droplets); err != nil {
+			legacyImpactErr = err
+			continue
+		}
+		matches = append(matches, firewall)
 	}
 	if len(matches) == 0 {
+		if legacyImpactErr != nil {
+			return "", legacyImpactErr
+		}
 		return "", fmt.Errorf("provider access policy %q not found", expectedName)
 	}
 	if len(matches) > 1 {

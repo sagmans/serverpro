@@ -428,8 +428,11 @@ disabled-Tailscale config written by earlier releases and preserves existing
 service tokens when replacements are omitted. Vultr supplies its attached
 firewall-group ID; Hetzner and
 DigitalOcean require one exact owned `<server-name>-deny-public` firewall.
-Missing or ambiguous policy matches stop discovery/import instead of writing
-partial ownership state. Import stages config, credentials, state, and registry
+Its canonical target is one namespace/server-derived tag; a complete historical
+ownership-tag selector set is accepted only when full live Droplet inventory
+proves it matches no unrelated resource. Missing, ambiguous, incomplete, or
+unsafe policy matches stop discovery/import instead of writing partial
+ownership state. Import stages config, credentials, state, and registry
 behind a non-secret recovery marker. If a local write fails, rerun the same
 import without `--force`; a matching marker resumes the same artifact baseline
 and is removed after registry publication. For existing state, `--force` starts

@@ -287,8 +287,10 @@ also recovers the typed managed access-policy identity: Vultr uses the attached
 firewall-group ID, while Hetzner requires one exact owned
 `<server-name>-deny-public` firewall match. DigitalOcean requires that exact name,
 one namespace/server-derived target tag, and no direct droplet-ID attachments.
-Missing, ambiguous, or broadened policy matches fail closed rather than
-publishing deletion-incomplete state. Import writes a
+Historical firewalls using the complete legacy ownership-tag selector set are
+recoverable only when full live Droplet inventory proves no unrelated match.
+Missing, ambiguous, or otherwise broadened policy matches fail closed rather
+than publishing deletion-incomplete state. Import writes a
 non-secret transaction marker before config, credentials, state, and registry;
 it removes the marker only after registry publication. A matching retry resumes
 without `--force`, and discovery reports state without registry as `partial`.

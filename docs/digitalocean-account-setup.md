@@ -15,7 +15,9 @@ and recovery behavior.
 
 serverpro creates IPv4-backed droplets, ensures ownership tags, creates a
 tag-bound firewall, and submits bootstrap data as droplet user data. DNS records
-are not managed by serverpro.
+are not managed by serverpro. Import can recover a historical serverpro firewall
+using the complete legacy ownership-tag selector set only when full live Droplet
+inventory proves those broad selectors match no unrelated resource.
 
 ## Official docs
 

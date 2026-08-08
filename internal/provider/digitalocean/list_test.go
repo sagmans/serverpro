@@ -58,6 +58,59 @@ func TestListDropletsMapsTags(t *testing.T) {
 	}
 }
 
+func TestListRecoversBoundedLegacyAccessPolicy(t *testing.T) {
+	const targetDroplet = `{"id":99,"name":"demo-web","tags":["managed-by:serverpro","serverpro-namespace:demo","serverpro-server:web"]}`
+	const legacyFirewall = `{"id":"fw-9","name":"demo-web-deny-public","tags":["managed-by:serverpro","serverpro-namespace:demo","serverpro-server:web"]}`
+	handlerErr := testhttp.NewHandlerErrorRecorder(t)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/droplets":
+			_, _ = w.Write([]byte(`{"droplets":[` + targetDroplet + `],"links":{}}`))
+		case "/firewalls":
+			_, _ = w.Write([]byte(`{"firewalls":[` + legacyFirewall + `],"links":{}}`))
+		default:
+			handlerErr.Record(w, "unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer ts.Close()
+
+	provider := NewComputeProvider(func(token string) Client { return NewWithHTTP(token, ts.URL, ts.Client()) })
+	records, diagnostics := provider.List(context.Background(), compute.ListServersQuery{Account: compute.Account{Token: "token"}})
+	handlerErr.Check()
+	if err := diagnostics.Err(); err != nil {
+		t.Fatal(err)
+	}
+	policyID, found := compute.ManagedResourceID(records[0].ManagedResources, compute.ManagedResourceAccessPolicy)
+	if !found || policyID != "fw-9" {
+		t.Fatalf("legacy access policy not recovered: %+v", records[0])
+	}
+}
+
+func TestListRejectsLegacyAccessPolicyWithUnrelatedMatch(t *testing.T) {
+	const targetDroplet = `{"id":99,"name":"demo-web","tags":["managed-by:serverpro","serverpro-namespace:demo","serverpro-server:web"]}`
+	const unrelatedDroplet = `{"id":100,"name":"other-api","tags":["managed-by:serverpro","serverpro-namespace:other","serverpro-server:api"]}`
+	const legacyFirewall = `{"id":"fw-9","name":"demo-web-deny-public","tags":["managed-by:serverpro","serverpro-namespace:demo","serverpro-server:web"]}`
+	handlerErr := testhttp.NewHandlerErrorRecorder(t)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/droplets":
+			_, _ = w.Write([]byte(`{"droplets":[` + targetDroplet + `,` + unrelatedDroplet + `],"links":{}}`))
+		case "/firewalls":
+			_, _ = w.Write([]byte(`{"firewalls":[` + legacyFirewall + `],"links":{}}`))
+		default:
+			handlerErr.Record(w, "unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer ts.Close()
+
+	provider := NewComputeProvider(func(token string) Client { return NewWithHTTP(token, ts.URL, ts.Client()) })
+	_, diagnostics := provider.List(context.Background(), compute.ListServersQuery{Account: compute.Account{Token: "token"}})
+	handlerErr.Check()
+	if err := diagnostics.Err(); err == nil || !strings.Contains(err.Error(), "unrelated live droplet") {
+		t.Fatalf("diagnostics=%v", err)
+	}
+}
+
 func TestListRejectsIncompleteManagedAccessPolicyRecovery(t *testing.T) {
 	targetTag := firewallTargetTag("demo", "web")
 	for _, test := range []struct {

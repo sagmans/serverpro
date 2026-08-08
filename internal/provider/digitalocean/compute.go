@@ -76,7 +76,7 @@ func (p ComputeProvider) List(ctx context.Context, query compute.ListServersQuer
 		if _, _, ok := ownership.OwnershipFromLabels(out[index].Labels); !ok {
 			continue
 		}
-		policyID, err := recoverFirewallID(out[index], firewalls)
+		policyID, err := recoverFirewallID(out[index], firewalls, droplets)
 		if err != nil {
 			return nil, failure(query.Account.Token, "provider access policy recovery failed", err)
 		}
