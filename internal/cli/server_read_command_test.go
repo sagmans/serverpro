@@ -126,6 +126,34 @@ func TestServerSSHDryRunUsesTailscalePath(t *testing.T) {
 	}
 }
 
+func TestServerSSHMissingTailscaleHostReportsImportRecoveryCommand(t *testing.T) {
+	createTestHome(t)
+	stPath := config.ServerStatePath("demoapp", "webapp")
+	st := state.State{
+		Namespace: "demoapp",
+		Server:    "webapp",
+		Compute:   state.ComputeState{Provider: "hetzner", ID: "42", Name: "demoapp-webapp"},
+	}
+	if err := state.Save(stPath, st); err != nil {
+		t.Fatal(err)
+	}
+	reg := state.NewRegistry()
+	reg.Upsert(state.RegistryEntry{Namespace: "demoapp", Server: "webapp", StatePath: stPath})
+	if err := state.SaveRegistry(config.RegistryPath(), reg); err != nil {
+		t.Fatal(err)
+	}
+	a := &app{stdout: io.Discard, stderr: io.Discard, project: "demoapp", provider: "hetzner", dryRun: true}
+	cmd := a.serverSSHCmd()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"webapp"})
+	err := cmd.Execute()
+	want := "serverpro server import webapp -n demoapp -p hetzner --force --with-tailscale"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("missing Tailscale recovery error = %v", err)
+	}
+}
+
 func TestServerSSHPromptsAndPersistsMissingAdminUser(t *testing.T) {
 	createTestHome(t)
 	cfgPath := config.ServerConfigPath("demoapp", "webapp")

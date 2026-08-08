@@ -236,10 +236,14 @@ attachments, inventory failure, or another match aborts before mutation. The
 `serverpro server import` command rebuilds local config, credentials, typed
 policy state, and registry from that inventory after the operator re-supplies
 tokens. Optional `--with-tailscale` and `--with-cloudflare` reattach mesh/tunnel
-metadata when those APIs are reachable. Forced import of existing state first
-loads valid local config/state, then refreshes provider and explicitly enriched
-identities while preserving operator intent and non-recoverable policy evidence.
-Conditional config publication rejects concurrent appearance or edits;
+metadata when those APIs are reachable. Provider-only recovery keeps mandatory
+Tailscale access enabled while storing an incomplete private credential set for
+later interactive completion. Forced import repairs the disabled-Tailscale
+config emitted by earlier releases and merges omitted service tokens from the
+existing server-scoped credential file instead of erasing them. It then
+refreshes provider and explicitly enriched identities while preserving operator
+intent and non-recoverable policy evidence. Conditional config publication
+rejects concurrent appearance or edits;
 malformed or unreadable artifacts fail closed. Matching transaction retries
 retain that preserved baseline. Stronger tunnel provenance is preserved only
 when enrichment rediscovers the same tunnel. Imported tunnels

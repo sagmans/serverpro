@@ -94,6 +94,59 @@ func TestCompiledFullChainJourneys(t *testing.T) {
 	}
 }
 
+func TestCompiledProviderOnlyImportRecovery(t *testing.T) {
+	fixture := newProviderFixture(t)
+	binary := buildE2EBinary(t)
+	fakeBin := writeFakeTailscale(t)
+	namespace := "e2e-import"
+	createHome := t.TempDir()
+	writeCredentials(t, createHome, namespace)
+	createEnv := journeyEnv(createHome, fakeBin, fixture.URL(), namespace)
+	artifacts := newArtifactLog(t, "import-recovery")
+
+	create := runCommand(binary, createEnv, "server", "create", testServer,
+		"--namespace", namespace, "--provider", "vultr",
+		"--location", "ewr", "--size", "vc2-1c-1gb", "--image", "1743",
+		"--ingress", "none", "--non-interactive", "--yes")
+	artifacts.record("create", create)
+	requireSuccessJSON(t, create)
+
+	importHome := t.TempDir()
+	importEnv := append(journeyEnv(importHome, fakeBin, fixture.URL(), namespace), "SERVERPRO_SERVER_PROVIDER_TOKEN="+testProviderToken)
+	imported := runCommand(binary, importEnv, "server", "import", testServer,
+		"--namespace", namespace, "--provider", "vultr", "--admin-user", "ops",
+		"--non-interactive", "--yes")
+	artifacts.record("import", imported)
+	if imported.err != nil {
+		t.Fatalf("provider-only import failed: %v\nstdout=%s\nstderr=%s", imported.err, imported.stdout, imported.stderr)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(imported.stdout), &rows); err != nil || len(rows) != 1 || rows[0]["status"] != "imported" {
+		t.Fatalf("invalid import result: err=%v stdout=%s", err, imported.stdout)
+	}
+
+	doctor := runCommand(binary, importEnv, "server", "doctor", testServer,
+		"--namespace", namespace, "--provider", "vultr", "--dry-run", "--non-interactive")
+	artifacts.record("doctor-dry-run", doctor)
+	doctorJSON := requireSuccessJSON(t, doctor)
+	if doctorJSON["status"] != "planned" || doctorJSON["action"] != "doctor" {
+		t.Fatalf("unexpected doctor dry-run: %s", doctor.stdout)
+	}
+
+	ssh := runCommand(binary, importEnv, "server", "ssh", testServer,
+		"--namespace", namespace, "--provider", "vultr", "--dry-run", "--non-interactive")
+	artifacts.record("ssh-recovery", ssh)
+	wantRecovery := "serverpro server import web -n e2e-import -p vultr --force --with-tailscale"
+	if ssh.err == nil || !strings.Contains(ssh.stderr, wantRecovery) {
+		t.Fatalf("SSH recovery command missing: err=%v stderr=%q", ssh.err, ssh.stderr)
+	}
+
+	remove := runCommand(binary, createEnv, "server", "delete", testServer,
+		"--namespace", namespace, "--provider", "vultr", "--non-interactive", "--yes")
+	artifacts.record("delete", remove)
+	requireSuccessJSON(t, remove)
+}
+
 func TestE2EBinaryRejectsNonLoopbackProviderAPI(t *testing.T) {
 	binary := buildE2EBinary(t)
 	result := runCommand(binary, append(os.Environ(), "SERVERPRO_E2E_API_URL=https://api.example.invalid"), "--help")

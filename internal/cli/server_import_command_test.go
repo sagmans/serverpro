@@ -10,6 +10,7 @@ import (
 
 	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/ownership"
 	"github.com/sagmans/serverpro/internal/state"
 )
@@ -89,6 +90,45 @@ func TestServerImportAllWritesLocalState(t *testing.T) {
 	policyID, ok := compute.ManagedResourceID(st.Compute.ManagedResources, compute.ManagedResourceAccessPolicy)
 	if st.Compute.ID != "abc" || st.Compute.Provider != "vultr" || !ok || policyID != "fw-1" || len(st.Compute.ProviderState) != 0 {
 		t.Fatalf("state=%+v", st)
+	}
+}
+
+func TestServerImportWithoutTailscaleEnrichmentWritesRecoverableArtifacts(t *testing.T) {
+	createTestHome(t)
+	provider := listImportProvider{records: []compute.ServerRecord{{
+		Provider: "vultr", ID: "abc", Name: "example-dev", Location: "ewr", Size: "vc2-1c-1gb", Image: "2284",
+		Labels: ownership.ProviderLabels("example", "dev", nil),
+	}}}
+	var out bytes.Buffer
+	a := &app{
+		stdout:    &out,
+		stderr:    io.Discard,
+		provider:  "vultr",
+		all:       true,
+		yes:       true,
+		providers: providerRegistryForPower(t, provider),
+	}
+	t.Setenv("SERVERPRO_SERVER_PROVIDER_TOKEN", "provider-token")
+	cmd := a.serverImportCmd()
+	cmd.SetOut(&out)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"--admin-user", "ops"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(config.ServerConfigPath("example", "dev"))
+	if err != nil {
+		t.Fatalf("import wrote invalid config: %v", err)
+	}
+	if !cfg.Access.Tailscale.Enabled || !cfg.Access.Tailscale.SSH {
+		t.Fatalf("import disabled mandatory Tailscale access: %+v", cfg.Access.Tailscale)
+	}
+	creds, err := credentials.LoadPartial(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if creds.ServerProvider != "provider-token" || creds.Tailscale != "" {
+		t.Fatalf("partial credentials = %+v", creds)
 	}
 }
 

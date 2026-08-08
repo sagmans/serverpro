@@ -20,6 +20,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const missingTailscaleHostRecovery = "tailscale host missing from state; rerun serverpro server import %s -n %s -p %s --force --with-tailscale"
+
 type serverReadRow struct {
 	Namespace  string `json:"namespace"`
 	Server     string `json:"server"`
@@ -147,7 +149,7 @@ func (a *app) runServerSSH(ctx context.Context, name string) error {
 	st := ref.State
 	host := st.Tailscale.Name
 	if host == "" {
-		return fmt.Errorf("tailscale host missing from state; run serverpro server doctor %s", name)
+		return fmt.Errorf(missingTailscaleHostRecovery, name, st.Namespace, st.Compute.Provider)
 	}
 	user, err := a.resolveServerSSHUser(st, ref.ConfigPath)
 	if err != nil {

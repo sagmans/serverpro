@@ -150,6 +150,8 @@ func serveVultr(w http.ResponseWriter, r *http.Request, path string, state *fixt
 		state.serverTags = stringSlice(body["tags"])
 		state.serverLive = true
 		writeJSONResponse(w, map[string]any{"instance": vultrInstance(state)})
+	case r.Method == http.MethodGet && path == "/instances" && state.serverLive:
+		writeJSONResponse(w, map[string]any{"instances": []any{vultrInstance(state)}, "meta": map[string]any{"links": map[string]string{}}})
 	case r.Method == http.MethodGet && path == "/instances/instance-42" && state.serverLive:
 		writeJSONResponse(w, map[string]any{"instance": vultrInstance(state)})
 	case r.Method == http.MethodDelete && path == "/instances/instance-42" && state.serverLive:

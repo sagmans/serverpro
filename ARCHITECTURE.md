@@ -293,7 +293,11 @@ non-secret transaction marker before config, credentials, state, and registry;
 it removes the marker only after registry publication. A matching retry resumes
 without `--force`, and discovery reports state without registry as `partial`.
 Optional enrichers reattach Tailscale devices and Cloudflare tunnels by resource
-name. Forced import of an existing entry uses valid local config/state as its
+name. Provider-only recovery retains mandatory mesh intent and may publish a
+private incomplete credential set for later interactive completion. Forced
+import repairs the disabled-Tailscale config emitted by earlier releases and
+merges omitted service tokens from existing credentials instead of erasing
+them. Forced import of an existing entry uses valid local config/state as its
 baseline: live compute and explicit enrichment fields replace recoverable
 identity, while operator config, Tailscale policy evidence, ingress checkpoints,
 and creation time survive. Same-tunnel stronger Cloudflare provenance survives;

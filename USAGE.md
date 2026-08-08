@@ -419,7 +419,14 @@ serverpro server import --all -p vultr --dry-run
 
 Import claims only resources stamped with `managed-by=serverpro` ownership
 labels. It also restores the typed managed access-policy reference needed for
-safe cleanup. Vultr supplies its attached firewall-group ID; Hetzner and
+safe cleanup. A provider-only import keeps mandatory Tailscale access enabled
+and stores supplied credentials as an incomplete server-scoped set; doctor can
+prompt for the missing Tailscale token. SSH additionally needs discovered mesh
+host state, so rerun the command with `--force --with-tailscale` before SSH when
+the initial import omitted enrichment. Forced import repairs the invalid
+disabled-Tailscale config written by earlier releases and preserves existing
+service tokens when replacements are omitted. Vultr supplies its attached
+firewall-group ID; Hetzner and
 DigitalOcean require one exact owned `<server-name>-deny-public` firewall.
 Missing or ambiguous policy matches stop discovery/import instead of writing
 partial ownership state. Import stages config, credentials, state, and registry

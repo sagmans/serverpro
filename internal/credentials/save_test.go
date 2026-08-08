@@ -32,6 +32,25 @@ func TestSaveUsesConfigNamespace(t *testing.T) {
 	}
 }
 
+func TestSavePartialStoresScopedIncompleteCredentials(t *testing.T) {
+	credentialsTestHome(t)
+	path := config.Expand(config.ServerCredentialsPath("prod", "server"))
+	cfg := testConfig("prod", path)
+	if err := SavePartial(cfg, Set{ServerProvider: "h"}); err != nil {
+		t.Fatal(err)
+	}
+	creds, err := LoadPartial(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if creds.Namespace != "prod" || creds.Server != "server" || creds.ServerProvider != "h" || creds.Tailscale != "" {
+		t.Fatalf("partial credentials = %+v", creds)
+	}
+	if _, err := Load(cfg); err == nil || !strings.Contains(err.Error(), "Tailscale API token") {
+		t.Fatalf("complete load accepted partial credentials: %v", err)
+	}
+}
+
 func TestSaveWritesPrivateJSON(t *testing.T) {
 	credentialsTestHome(t)
 	path := config.Expand(config.ServerCredentialsPath("prod", "server"))
