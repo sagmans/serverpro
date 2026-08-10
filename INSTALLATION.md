@@ -126,10 +126,10 @@ Create first installs checksum-pinned Tailscale binaries for supported amd64
 or arm64 Ubuntu hosts. Create and `serverpro server bootstrap NAME all` install the
 default host toolset. Run `serverpro server bootstrap --help` for the
 canonical managed tool list and pinned versions. The default set includes uv
-`0.12.0` through mise's explicit `aqua:astral-sh/uv` backend and Rust `1.97.1`
+`0.12.3` through mise's explicit `aqua:astral-sh/uv` backend and Rust `1.97.1`
 through `core:rust` with its default rustc, Cargo, rustfmt, Clippy, and docs
 profile. The curated developer set includes gh `2.97.0`, rg `15.2.0`, fd
-`10.4.2`, ast-grep `0.45.0`, sem `0.21.0`, and inspect `0.1.1`. The last
+`10.4.2`, ast-grep `0.45.1`, sem `0.21.0`, and inspect `0.1.1`. The last
 three use exact GitHub release backends plus architecture-specific asset
 checksums; inspect's bare binary is also hashed before doctor or bootstrap
 executes it. Existing hosts with the deprecated active `sg` mise key migrate to

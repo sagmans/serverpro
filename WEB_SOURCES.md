@@ -1,6 +1,6 @@
 # Web Sources for serverpro
 
-Date: 2026-07-31
+Date: 2026-08-10
 Scope: provider-agnostic serverpro references
 
 Prefer official provider/API docs. If guides conflict with API references, trust
@@ -109,16 +109,16 @@ https://tailscale.com/docs/reference/linux-dns
 https://tailscale.com/docs/reference/faq/dns-resolv-conf
 https://tailscale.com/kb/1337/acl-syntax
 https://pkgs.tailscale.com/stable/
-https://github.com/tailscale/tailscale/releases/tag/v1.98.10
+https://github.com/tailscale/tailscale/releases/tag/v1.102.2
 https://github.com/tailscale/tailscale/issues/20067
 ```
 
 Use: devices, keys, policy read, policy validate, policy update, and pinned
-first-boot/live-repair binaries. Reviewed 2026-07-31: stable release `1.98.10`;
+first-boot/live-repair binaries. Reviewed 2026-08-10: stable release `1.102.2`;
 amd64 tarball SHA-256
-`52490ce0832b245857e2afef7426d6ae5a4b49fb391412833cc95729bd23f7de`;
+`ad2cde12f8de95f7b93a1e0401e652291c603d42b9d60a33fb1741eb38ab04d8`;
 arm64 tarball SHA-256
-`d74a84e07cb1948d9f09a23ae161417c6127e562949773705c95d0762be2809d`.
+`2b64e9ade7e73034b5ec9e9bcd537f5ddd14ae3abb435e57e929e7486ae42660`.
 Serverpro supplies `GODEBUG=tlsmlkem=1` to the systemd service independently
 from the artifact build default. Recheck the stable release, checksums,
 advisory state, and binary build setting together when rotating this pin.
@@ -326,17 +326,17 @@ https://mise.jdx.dev/installing-mise.html
 https://mise.jdx.dev/cli/install.html
 https://mise.jdx.dev/cli/unuse.html
 https://mise.jdx.dev/dev-tools/backends/github.html
-https://github.com/jdx/mise/releases/tag/v2026.7.18
-https://api.github.com/repos/jdx/mise/releases/tags/v2026.7.18
+https://github.com/jdx/mise/releases/tag/v2026.8.3
+https://api.github.com/repos/jdx/mise/releases/tags/v2026.8.3
 ```
 
 Use: mise prerequisite, scoped managed-tool installation, legacy managed-tool
-removal, and pinned minimum version `2026.7.18`. Pinned release artifact
+removal, and pinned minimum version `2026.8.3`. Pinned release artifact
 SHA-256 values:
 
-- Linux x64: `2cae8dc54812fa60bf652e6ebdc69cfee110660cddb27053f5442fded19dbc7d`
-- Linux arm64: `0db0305237fd087862ae82175d619d288d321bae216ae1101cc733157a80b693`
-- Linux armv7: `6b3855491684ad7e69fba70e38d67c52a58ece39835dfdb0d53d057422637a72`
+- Linux x64: `8aaf21cc4b36681e90a96e9cdf13e5d7511e9773733f741b1a5f7756ba53b5fc`
+- Linux arm64: `8d0c6142607d814279de0e06f53c9e896b5d267bbced9ee6e2d9e1547fccca8f`
+- Linux armv7: `0b9f93b634e01c37b982e687915749c01265b9a084ce115e6a2b1b9c95c4e9d3`
 
 ### mise bootstrap
 
@@ -351,23 +351,21 @@ scoped managed-tool installs through `mise install`.
 ### Node.js
 
 ```text
-https://nodejs.org/en/blog/release/v24.18.1
+https://nodejs.org/en/blog/release/v24.19.0
 https://nodejs.org/en/blog/vulnerability/july-2026-security-releases/
 ```
 
-Use: pinned Node `24.18.1` LTS runtime and bundled npm `11.16.0`; the release
-includes the July 2026 security fixes while staying on the existing major line.
+Use: pinned Node `24.19.0` LTS runtime and bundled npm `11.17.0`; the release
+stays on the existing major line.
 
 ### uv
 
 ```text
-https://github.com/astral-sh/uv/releases/tag/0.12.0
+https://github.com/astral-sh/uv/releases/tag/0.12.3
 https://docs.astral.sh/uv/getting-started/installation/
 ```
 
-Use: pinned uv `0.12.0` through mise's explicit `aqua:astral-sh/uv` backend.
-Reviewed 2026-07-31; the mise registry entry advertises SHA-256 and GitHub
-release-workflow attestation verification.
+Use: pinned uv `0.12.3` through mise's explicit `aqua:astral-sh/uv` backend.
 
 ### Rust and rustup
 
@@ -389,8 +387,8 @@ https://mise.jdx.dev/dev-tools/backends/npm.html
 ```
 
 Use: reference for npm-backed mise tools. serverpro does NOT use the `npm:`
-backend; it installs Pi `0.83.0` via `npm install -g` under mise-managed Node
-`24.18.1` with lifecycle-script suppression
+backend; it installs Pi `0.84.1` via `npm install -g` under mise-managed Node
+`24.19.0` with lifecycle-script suppression
 (`npm_config_ignore_scripts=true`).
 
 ### Pi quickstart
@@ -399,7 +397,7 @@ backend; it installs Pi `0.83.0` via `npm install -g` under mise-managed Node
 https://pi.dev/docs/latest/quickstart
 ```
 
-Use: optional pinned Pi `0.83.0` bootstrap; authentication remains operator-owned.
+Use: optional pinned Pi `0.84.1` bootstrap; authentication remains operator-owned.
 
 ### tmux
 
@@ -415,16 +413,16 @@ Use: pinned tmux `3.7b` build/install reference.
 ```text
 https://herdr.dev/docs/install/
 https://herdr.dev/docs/integrations/
-https://github.com/ogulcancelik/herdr/releases/tag/v0.7.5
-https://api.github.com/repos/ogulcancelik/herdr/releases/tags/v0.7.5
+https://github.com/herdrdev/herdr/releases/tag/v0.8.0
+https://api.github.com/repos/herdrdev/herdr/releases/tags/v0.8.0
 ```
 
-Use: managed Herdr `0.7.5` installation through mise's explicit GitHub backend,
+Use: managed Herdr `0.8.0` installation through mise's explicit GitHub backend,
 package-manager update ownership, and target-user Pi integration status. Pinned
 release SHA-256 values:
 
-- Linux x64: `3dc83288073e4c2d3c679a30e7be97bcca9141c6fd17dbbb9219142e95c59253`
-- Linux arm64: `32e763a1499a6b694b1d708e4f062b743be1da9f34fcfa4d212d6db6fe09a8b9`
+- Linux x64: `b872ea7e40fa2cb17e857ac9b62b1bf26db7b403c622f5d2f3f5b35f6e9acd28`
+- Linux arm64: `f647ac66468d9efbc642fe534fb284468f0aea60641606fc008dfc0d82a3ca87`
 
 ### GitHub CLI
 
@@ -455,15 +453,15 @@ Use: pinned `fd` `10.4.2` tool reference.
 
 ```text
 https://ast-grep.github.io/
-https://github.com/ast-grep/ast-grep/releases/tag/0.45.0
-https://api.github.com/repos/ast-grep/ast-grep/releases/tags/0.45.0
+https://github.com/ast-grep/ast-grep/releases/tag/0.45.1
+https://api.github.com/repos/ast-grep/ast-grep/releases/tags/0.45.1
 ```
 
-Use: pinned ast-grep `0.45.0` through mise's GitHub backend. Reviewed
-2026-07-31. Pinned release SHA-256 values:
+Use: pinned ast-grep `0.45.1` through mise's GitHub backend. Pinned release
+SHA-256 values:
 
-- Linux x64: `78931ae35ebac33d9a72b3aecea3e3d62d6e5b0b718ac8bbedfbe69d68421e41`
-- Linux arm64: `62b60892dafacfa76d6de87157659f880bbf85ff38bdab52db12f1f14ec60f94`
+- Linux x64: `76fb6555be6734fb5057dba8d2fb756430f374bb9e1af694cf1ce00e13238d63`
+- Linux arm64: `9ee7ec49aada3dc05135d21977af089a33fc3154ada25bab102daca90b5098f2`
 
 ### sem
 

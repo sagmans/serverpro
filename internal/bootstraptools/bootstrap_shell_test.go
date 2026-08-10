@@ -240,10 +240,10 @@ func TestShellValidateUserToken(t *testing.T) {
 
 func TestShellValidateMiseBackend(t *testing.T) {
 	assertShellValidator(t, `validate_mise_backend NAME "$TESTVAL"`, []validatorCase{
-		{"github", "github:ogulcancelik/herdr", false},
-		{"missing-backend", "ogulcancelik/herdr", true},
-		{"missing-repository", "github:ogulcancelik", true},
-		{"extra-path", "github:ogulcancelik/herdr/release", true},
+		{"github", "github:herdrdev/herdr", false},
+		{"missing-backend", "herdrdev/herdr", true},
+		{"missing-repository", "github:herdrdev", true},
+		{"extra-path", "github:herdrdev/herdr/release", true},
 		{"shell-metacharacter", "github:owner/repo;id", true},
 	})
 }
@@ -598,8 +598,8 @@ var miseVersionCases = []struct {
 	wantOK  bool
 }{
 	{"equal", MinimumMiseVersion, true},
-	{"release-date-suffix", MinimumMiseVersion + " (2026-07-23)", true},
-	{"newer", "2026.8.0", true},
+	{"release-date-suffix", MinimumMiseVersion + " (2026-08-03)", true},
+	{"newer", "2026.9.0", true},
 	{"older", "2026.7.17", false},
 }
 
@@ -855,9 +855,9 @@ func TestShellVersionAtLeast(t *testing.T) {
 		wantOK      bool
 	}{
 		{"equal-minimum", MinimumMiseVersion, true},
-		{"release-date-suffix", MinimumMiseVersion + " (2026-07-23)", true},
-		{"newer-patch", "2026.7.19", true},
-		{"newer-minor", "2026.8.1", true},
+		{"release-date-suffix", MinimumMiseVersion + " (2026-08-03)", true},
+		{"newer-patch", "2026.8.4", true},
+		{"newer-minor", "2026.9.1", true},
 		{"newer-year", "2027.1.1", true},
 		{"older-patch", "2026.7.17", false},
 		{"older-with-release-date", "2026.7.17 (2026-07-30)", false},
@@ -952,7 +952,7 @@ func TestShellMiseCheckCommandVersionMatrix(t *testing.T) {
 // fetch_verified_mise_binary runs hermetically; tests override one stage to
 // exercise a specific failure gate.
 const fetchFixtureStubs = `
-bootstrap_min_mise_version() { printf '2026.7.18'; }
+bootstrap_min_mise_version() { printf '2026.8.3'; }
 mise_release_arch() { printf 'x64'; }
 bootstrap_sha256_env() { printf '%064d' 0; }
 mktemp() {
@@ -972,7 +972,7 @@ curl() {
   done
   printf 'archive' >"$out"
 }
-sha256sum() { printf 'mise-v2026.7.18-linux-x64.tar.gz: OK\n'; }
+sha256sum() { printf 'mise-v2026.8.3-linux-x64.tar.gz: OK\n'; }
 tar() {
   mkdir -p "$TEST_TMP/download/mise/bin"
   printf 'binary' >"$TEST_TMP/download/mise/bin/mise"
