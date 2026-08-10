@@ -13,6 +13,7 @@ import (
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/ownership"
+	"github.com/sagmans/serverpro/internal/privatefile"
 	"github.com/sagmans/serverpro/internal/state"
 )
 
@@ -242,6 +243,135 @@ func TestImportAllForcePreservesExistingIntentAndOwnershipEvidence(t *testing.T)
 	}
 	if gotState.Cloudflare.Provenance != state.CloudflareTunnelCreated || len(gotState.Ingress) != 1 || !gotState.CreatedAt.Equal(createdAt) {
 		t.Fatalf("local state intent not preserved: %+v", gotState)
+	}
+}
+
+func TestImportAllForcePreservesExistingCredentialsWhenTokensOmitted(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	stateRegistryPath = defaultRegistryPath
+	cfg := config.ExampleServer("demo", "web")
+	if err := config.Save(config.ServerConfigPath("demo", "web"), cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := credentials.Save(cfg, credentials.Set{ServerProvider: "old-provider-token", Tailscale: "existing-tailscale-token"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := state.Save(config.ServerStatePath("demo", "web"), state.State{
+		Namespace: "demo",
+		Server:    "web",
+		Compute:   state.ComputeState{Provider: "hetzner", ID: "42"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	results, err := ImportAll(context.Background(), ImportOptions{
+		Candidates:    []Candidate{importTestCandidate()},
+		ProviderToken: "new-provider-token",
+		Force:         true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Status != "imported" {
+		t.Fatalf("results=%+v", results)
+	}
+	got, err := credentials.Load(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ServerProvider != "new-provider-token" || got.Tailscale != "existing-tailscale-token" {
+		t.Fatalf("credentials not merged safely: %+v", got)
+	}
+}
+
+func TestImportAllForceRepairsDisabledMandatoryTailscaleAccess(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	stateRegistryPath = defaultRegistryPath
+	cfgPath := config.ServerConfigPath("demo", "web")
+	cfg := config.ExampleServer("demo", "web")
+	cfg.Access.Tailscale.Enabled = false
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	stPath := config.ServerStatePath("demo", "web")
+	if err := state.Save(stPath, state.State{
+		Namespace: "demo",
+		Server:    "web",
+		Compute:   state.ComputeState{Provider: "hetzner", ID: "42"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	results, err := ImportAll(context.Background(), ImportOptions{
+		Candidates:     []Candidate{importTestCandidate()},
+		ProviderToken:  "provider-token",
+		TailscaleToken: "tailscale-token",
+		WithTailscale:  true,
+		Force:          true,
+		EnrichTailscale: func(context.Context, Candidate, config.Config) (state.TailscaleState, error) {
+			return state.TailscaleState{Name: "demo-web.example.ts.net", NodeID: "node-1"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Status != "imported" {
+		t.Fatalf("results=%+v", results)
+	}
+	gotCfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("repaired config remains invalid: %v", err)
+	}
+	if !gotCfg.Access.Tailscale.Enabled || !gotCfg.Access.Tailscale.SSH {
+		t.Fatalf("mandatory Tailscale access not repaired: %+v", gotCfg.Access.Tailscale)
+	}
+	gotState, err := state.Load(stPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotState.Tailscale.Name != "demo-web.example.ts.net" || gotState.Tailscale.NodeID != "node-1" {
+		t.Fatalf("Tailscale identity not enriched: %+v", gotState.Tailscale)
+	}
+}
+
+func TestImportAllResumeRepairsDisabledMandatoryTailscaleAccess(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	stateRegistryPath = defaultRegistryPath
+	candidate := importTestCandidate()
+	cfgPath := config.ServerConfigPath("demo", "web")
+	cfg := config.ExampleServer("demo", "web")
+	cfg.Access.Tailscale.Enabled = false
+	if err := config.Save(cfgPath, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := credentials.SavePartial(cfg, credentials.Set{ServerProvider: "provider-token"}); err != nil {
+		t.Fatal(err)
+	}
+	stPath := config.ServerStatePath("demo", "web")
+	if err := state.Save(stPath, state.State{
+		Namespace: "demo",
+		Server:    "web",
+		Compute:   state.ComputeState{Provider: "hetzner", ID: "42"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := privatefile.AtomicWriteJSON(importMarkerPath(stPath), markerForCandidate(candidate), privatefile.WriteOptions{Sync: true}); err != nil {
+		t.Fatal(err)
+	}
+	results, err := ImportAll(context.Background(), ImportOptions{
+		Candidates:    []Candidate{candidate},
+		ProviderToken: "provider-token",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Status != "imported" {
+		t.Fatalf("results=%+v", results)
+	}
+	gotCfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("resumed config remains invalid: %v", err)
+	}
+	if !gotCfg.Access.Tailscale.Enabled || !gotCfg.Access.Tailscale.SSH {
+		t.Fatalf("mandatory Tailscale access not repaired: %+v", gotCfg.Access.Tailscale)
 	}
 }
 

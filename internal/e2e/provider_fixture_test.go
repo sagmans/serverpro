@@ -12,6 +12,8 @@ import (
 	"testing"
 )
 
+const fixtureFirewallTargetTagPrefix = "serverpro-firewall-target:"
+
 type providerFixture struct {
 	server *httptest.Server
 	mu     sync.Mutex
@@ -37,6 +39,23 @@ func newProviderFixture(t *testing.T) *providerFixture {
 }
 
 func (f *providerFixture) URL() string { return f.server.URL }
+
+func (f *providerFixture) useLegacyDigitalOceanFirewall() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	state := f.states["digitalocean"]
+	if state == nil {
+		return
+	}
+	legacyTags := make([]string, 0, len(state.serverTags))
+	for _, tag := range state.serverTags {
+		if !strings.HasPrefix(tag, fixtureFirewallTargetTagPrefix) {
+			legacyTags = append(legacyTags, tag)
+		}
+	}
+	state.serverTags = legacyTags
+	state.firewallTags = append([]string(nil), legacyTags...)
+}
 
 func (f *providerFixture) resourceCount(provider string) int {
 	f.mu.Lock()
@@ -150,6 +169,8 @@ func serveVultr(w http.ResponseWriter, r *http.Request, path string, state *fixt
 		state.serverTags = stringSlice(body["tags"])
 		state.serverLive = true
 		writeJSONResponse(w, map[string]any{"instance": vultrInstance(state)})
+	case r.Method == http.MethodGet && path == "/instances" && state.serverLive:
+		writeJSONResponse(w, map[string]any{"instances": []any{vultrInstance(state)}, "meta": map[string]any{"links": map[string]string{}}})
 	case r.Method == http.MethodGet && path == "/instances/instance-42" && state.serverLive:
 		writeJSONResponse(w, map[string]any{"instance": vultrInstance(state)})
 	case r.Method == http.MethodDelete && path == "/instances/instance-42" && state.serverLive:
@@ -197,6 +218,10 @@ func serveDigitalOcean(w http.ResponseWriter, r *http.Request, path string, stat
 		state.serverTags = stringSlice(body["tags"])
 		state.serverLive = true
 		writeJSONResponse(w, map[string]any{"droplet": digitalOceanDroplet(state)})
+	case r.Method == http.MethodGet && path == "/droplets" && state.serverLive:
+		writeJSONResponse(w, map[string]any{"droplets": []any{digitalOceanDroplet(state)}, "links": map[string]any{}})
+	case r.Method == http.MethodGet && path == "/firewalls" && state.firewallLive:
+		writeJSONResponse(w, map[string]any{"firewalls": []any{digitalOceanFirewall(state)}, "links": map[string]any{}})
 	case r.Method == http.MethodGet && path == "/droplets/42" && state.serverLive:
 		writeJSONResponse(w, map[string]any{"droplet": digitalOceanDroplet(state)})
 	case r.Method == http.MethodDelete && path == "/droplets/42" && state.serverLive:

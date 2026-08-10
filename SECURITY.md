@@ -223,23 +223,29 @@ to the operator unchanged.
 `serverpro server discover` lists compute resources labeled
 `managed-by=serverpro` on a provider token. For managed Hetzner resources,
 discovery also requires one exact ownership-labeled access-policy match.
-DigitalOcean additionally requires exactly one namespace/server-derived
-firewall target tag and no direct droplet-ID attachments; recovery and deletion
-reject missing, ambiguous, foreign, or broadened selectors. Resumed creation
+DigitalOcean canonical policy requires exactly one namespace/server-derived
+firewall target tag and no direct droplet-ID attachments. Recovery also accepts
+the complete historical ownership-tag selector set only when full live Droplet
+inventory proves no unrelated match; missing, ambiguous, foreign, incomplete,
+or otherwise broadened selectors fail closed. Resumed creation
 refetches every checkpointed access policy before compute mutation and rejects
 foreign identity, broadened rules/selectors, or direct attachments; Vultr may
 reconcile only missing required rules. DigitalOcean deletion likewise fetches
 and validates both the tracked Droplet and firewall before either DELETE.
-Historical firewalls with exact ownership-tag selectors require a complete live
-Droplet inventory proving no unrelated match; missing/extra selectors, direct
+Historical firewalls with exact ownership-tag selectors require this bounded
+inventory proof for import and deletion; missing/extra selectors, direct
 attachments, inventory failure, or another match aborts before mutation. The
 `serverpro server import` command rebuilds local config, credentials, typed
 policy state, and registry from that inventory after the operator re-supplies
 tokens. Optional `--with-tailscale` and `--with-cloudflare` reattach mesh/tunnel
-metadata when those APIs are reachable. Forced import of existing state first
-loads valid local config/state, then refreshes provider and explicitly enriched
-identities while preserving operator intent and non-recoverable policy evidence.
-Conditional config publication rejects concurrent appearance or edits;
+metadata when those APIs are reachable. Provider-only recovery keeps mandatory
+Tailscale access enabled while storing an incomplete private credential set for
+later interactive completion. Forced import repairs the disabled-Tailscale
+config emitted by earlier releases and merges omitted service tokens from the
+existing server-scoped credential file instead of erasing them. It then
+refreshes provider and explicitly enriched identities while preserving operator
+intent and non-recoverable policy evidence. Conditional config publication
+rejects concurrent appearance or edits;
 malformed or unreadable artifacts fail closed. Matching transaction retries
 retain that preserved baseline. Stronger tunnel provenance is preserved only
 when enrichment rediscovers the same tunnel. Imported tunnels

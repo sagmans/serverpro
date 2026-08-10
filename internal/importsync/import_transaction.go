@@ -100,14 +100,24 @@ func writeImportArtifacts(cfg config.Config, st state.State, cfgPath, stPath str
 	}); err != nil {
 		return err
 	}
-	creds := credentials.Set{
-		Namespace:      cfg.Namespace,
-		Server:         cfg.Server,
-		ServerProvider: opts.ProviderToken,
-		Tailscale:      opts.TailscaleToken,
-		Cloudflare:     opts.CloudflareToken,
+	creds := credentials.Set{}
+	if opts.existingCredentials != nil {
+		creds = *opts.existingCredentials
 	}
-	if err := runImportWrite(opts, importWriteCredentials, func() error { return credentials.Save(cfg, creds) }); err != nil {
+	creds.Namespace = cfg.Namespace
+	creds.Server = cfg.Server
+	creds.ServerProvider = opts.ProviderToken
+	if opts.TailscaleToken != "" {
+		creds.Tailscale = opts.TailscaleToken
+	}
+	if opts.CloudflareToken != "" {
+		creds.Cloudflare = opts.CloudflareToken
+	}
+	saveCredentials := credentials.Save
+	if len(creds.MissingForConfig(cfg)) > 0 {
+		saveCredentials = credentials.SavePartial
+	}
+	if err := runImportWrite(opts, importWriteCredentials, func() error { return saveCredentials(cfg, creds) }); err != nil {
 		return err
 	}
 	if err := runImportWrite(opts, importWriteState, func() error { return state.Save(stPath, st) }); err != nil {

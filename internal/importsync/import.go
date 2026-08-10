@@ -9,6 +9,7 @@ import (
 
 	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/ownership"
 	"github.com/sagmans/serverpro/internal/state"
 )
@@ -31,6 +32,7 @@ type ImportOptions struct {
 	EnrichCloudflare     func(context.Context, Candidate, config.Config) (state.CloudflareState, error)
 	existingConfig       *config.Config
 	existingConfigSource []byte
+	existingCredentials  *credentials.Set
 	existingState        *state.State
 	checkConfigSource    bool
 	beforeWrite          func(importWriteStage) error
@@ -140,14 +142,22 @@ func executeImportAttempt(ctx context.Context, attempt importAttempt, opts Impor
 		source, readErr := os.ReadFile(config.Expand(attempt.configPath))
 		if readErr == nil {
 			existingConfig, loadErr := config.LoadPartialBytes(source)
-			if loadErr == nil && opts.Force {
-				loadErr = existingConfig.Validate()
+			if loadErr == nil {
+				restoreMandatoryTailscaleAccess(&existingConfig)
+				if opts.Force {
+					loadErr = existingConfig.Validate()
+				}
 			}
 			if loadErr != nil {
 				return importFailed(attempt.result, "load existing config: %v", loadErr)
 			}
+			existingCredentials, credentialsErr := credentials.LoadPartial(existingConfig)
+			if credentialsErr != nil {
+				return importFailed(attempt.result, "load existing credentials: %v", credentialsErr)
+			}
 			opts.existingConfig = &existingConfig
 			opts.existingConfigSource = source
+			opts.existingCredentials = &existingCredentials
 		} else if !errors.Is(readErr, os.ErrNotExist) {
 			return importFailed(attempt.result, "load existing config: %v", readErr)
 		}
@@ -163,6 +173,13 @@ func executeImportAttempt(ctx context.Context, attempt importAttempt, opts Impor
 		return importFailed(attempt.result, "%v", err)
 	}
 	return importStatus(attempt.result, "imported", "")
+}
+
+func restoreMandatoryTailscaleAccess(cfg *config.Config) {
+	defaults := config.Default().Access.Tailscale
+	// WHY: early provider-only imports wrote this impossible MVP state; forced recovery must heal it before validating preserved intent.
+	cfg.Access.Tailscale.Enabled = defaults.Enabled
+	cfg.Access.Tailscale.SSH = defaults.SSH
 }
 
 func enrichImportArtifacts(ctx context.Context, candidate Candidate, opts ImportOptions) (config.Config, state.State, error) {
@@ -255,10 +272,6 @@ func buildImportConfig(candidate Candidate, opts ImportOptions) config.Config {
 	cfg.Compute.Labels = ownership.ConfigLabels(candidate.Namespace, candidate.Server, cfg.Compute.Labels)
 	if opts.WithCloudflare && opts.CloudflareAcctID != "" {
 		cfg.Cloudflare.AccountID = opts.CloudflareAcctID
-	}
-	// Provider-only recovery still keeps mesh intent; tokens may be filled later for doctor/ssh.
-	if opts.existingConfig == nil && opts.TailscaleToken == "" {
-		cfg.Access.Tailscale.Enabled = false
 	}
 	if opts.existingConfig == nil && opts.CloudflareToken == "" {
 		cfg.Cloudflare.Tunnel.Enabled = false

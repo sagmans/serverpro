@@ -272,7 +272,7 @@ func TestRecoverFirewallIDRejectsDirectDropletAttachments(t *testing.T) {
 		Name:       firewallName(record.Name),
 		Tags:       firewallTargetTags(record.Namespace, record.Server),
 		DropletIDs: []int64{987654},
-	}})
+	}}, nil)
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("err=%v", err)
 	}
