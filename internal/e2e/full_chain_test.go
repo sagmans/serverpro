@@ -179,7 +179,7 @@ func TestCompiledDigitalOceanLegacyImportRecovery(t *testing.T) {
 		t.Fatalf("invalid import result: err=%v stdout=%s", err, imported.stdout)
 	}
 
-	remove := runCommand(binary, createEnv, "server", "delete", testServer,
+	remove := runCommand(binary, importEnv, "server", "delete", testServer,
 		"--namespace", namespace, "--provider", "digitalocean", "--non-interactive", "--yes")
 	artifacts.record("delete", remove)
 	requireSuccessJSON(t, remove)
