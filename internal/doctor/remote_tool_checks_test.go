@@ -38,7 +38,7 @@ func TestRemoteToolChecksPassWhenInstalled(t *testing.T) {
 		{name: "sem " + bootstraptools.SemVersion, out: "sem " + bootstraptools.SemVersion},
 		{name: "inspect " + bootstraptools.InspectVersion, out: "inspect " + bootstraptools.InspectVersion + "\nsha256 " + bootstraptools.InspectLinuxX64SHA256},
 		{name: "herdr " + bootstraptools.HerdrVersion, out: "herdr " + bootstraptools.HerdrVersion + "\nsha256 " + bootstraptools.HerdrLinuxX64SHA256},
-		{name: "herdr pi integration", out: "pi: current (v6)"},
+		{name: "herdr pi integration", out: "pi: current"},
 	}
 	responses := make(map[string][]remoteCall, len(toolEvidence))
 	for _, tool := range toolEvidence {
@@ -77,7 +77,7 @@ func TestRemoteToolChecksFixRunsBootstrapOnce(t *testing.T) {
 		{name: "sem " + bootstraptools.SemVersion, err: "sem missing", out: "sem " + bootstraptools.SemVersion},
 		{name: "inspect " + bootstraptools.InspectVersion, err: "inspect missing", out: "inspect " + bootstraptools.InspectVersion},
 		{name: "herdr " + bootstraptools.HerdrVersion, err: "herdr missing", out: "herdr " + bootstraptools.HerdrVersion},
-		{name: "herdr pi integration", err: "pi integration missing", out: "pi: current (v6)"},
+		{name: "herdr pi integration", err: "pi integration missing", out: "pi: current"},
 		{name: "managed package updates", err: "updates available", out: "current"},
 	}
 	responses := make(map[string][]remoteCall, len(missingTools))

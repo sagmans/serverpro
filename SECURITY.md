@@ -140,7 +140,7 @@ Managed host tools install through integrity-checked sources, not
   release. Bootstrap installs the bundled Pi integration under the target user's
   private Pi agent directory and does not invoke Herdr self-update or session
   lifecycle commands.
-- Tailscale `1.98.10` first-boot and repair binaries are fetched only for
+- Tailscale `1.102.2` first-boot and repair binaries are fetched only for
   reviewed amd64 or arm64 architectures, checked against pinned SHA-256 digests,
   and extracted by exact member name. Unsupported architectures and mismatches
   stop before install. Serverpro explicitly sets `GODEBUG=tlsmlkem=1` for

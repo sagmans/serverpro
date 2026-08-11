@@ -472,11 +472,11 @@ boundary, so enable the `pi` or `all` target only where that is intended.
 Pi is installed via `npm install -g` under the mise-managed Node; npm
 dependencies resolve at install time and are not checksum-vendored, which is a
 residual supply-chain risk to weigh before enabling the `pi` target. The `all`
-target also installs uv `0.12.0` through mise's explicit `aqua:astral-sh/uv`
+target also installs uv `0.12.3` through mise's explicit `aqua:astral-sh/uv`
 backend and Rust `1.97.1` through `core:rust` with the default rustc, Cargo,
 rustfmt, Clippy, and docs profile. Doctor checks those exact versions and all
 Rust default-profile components. It also installs gh `2.97.0`, rg `15.2.0`, fd
-`10.4.2`, ast-grep `0.45.0`, sem `0.21.0`, and inspect `0.1.1`. ast-grep, sem,
+`10.4.2`, ast-grep `0.45.1`, sem `0.21.0`, and inspect `0.1.1`. ast-grep, sem,
 and inspect use checksum-pinned GitHub release assets; inspect's bare binary
 digest is checked before execution. On existing hosts, `all` removes the active
 deprecated `sg` mise key before managing `ast-grep`; mise prunes the old install

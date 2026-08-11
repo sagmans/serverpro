@@ -274,7 +274,7 @@ while IFS= read -r path; do
 	fi
 done <<<"$command_inventory"
 
-run_ok_text_grep "server bootstrap help names managed toolset" 'Pi 0\.83\.0.*uv 0\.12\.0.*Rust 1\.97\.1.*Herdr 0\.7\.5.*gh 2\.97\.0' "$bin" server bootstrap --help
+run_ok_text_grep "server bootstrap help names managed toolset" 'Pi 0\.84\.1.*uv 0\.12\.3.*Rust 1\.97\.1.*Herdr 0\.8\.0.*gh 2\.97\.0' "$bin" server bootstrap --help
 
 run_ok "root no args shows help" "$bin"
 run_ok "version flag" "$bin" --version
