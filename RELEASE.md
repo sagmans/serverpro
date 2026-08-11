@@ -25,7 +25,9 @@ or make DNS, Cloudflare, Tailscale, or server changes as part of this procedure.
 - The local checkout is clean and synchronized with `origin/main`.
 - A Git signing identity is already configured and available. SSH signing also
   needs a trusted `gpg.ssh.allowedSignersFile` before local signature
-  verification can succeed. Do not change Git configuration during a release.
+  verification can succeed. If Git configuration does not supply one, set
+  `ALLOWED_SIGNERS_FILE` to a reviewed maintainer-key file; never fetch trust
+  material during a release. Do not change Git configuration during a release.
 - GitHub CLI authentication can read this repository and workflow runs.
 - Repository settings protect `v*` tags and require immutable releases.
 
@@ -74,7 +76,11 @@ tag; never use a lightweight or unsigned tag for a release.
 ```sh
 git tag -s "${TAG}" -m "serverpro ${TAG}" "${COMMIT}"
 test "$(git rev-parse "${TAG}^{commit}")" = "${COMMIT}"
-git tag -v "${TAG}"
+if [ -n "${ALLOWED_SIGNERS_FILE:-}" ]; then
+  git -c "gpg.ssh.allowedSignersFile=${ALLOWED_SIGNERS_FILE}" tag -v "${TAG}"
+else
+  git tag -v "${TAG}"
+fi
 git push origin "refs/tags/${TAG}"
 ```
 
