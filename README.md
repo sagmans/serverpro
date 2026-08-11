@@ -95,6 +95,7 @@ for provider catalog choices such as location, size, and image.
 - [Security](SECURITY.md)
 - [Architecture](ARCHITECTURE.md)
 - [Development](DEVELOPMENT.md)
+- [Release procedure](RELEASE.md)
 - [Testing Matrix](TESTING.md)
 - [Contributing](CONTRIBUTING.md)
 - [License](LICENSE)

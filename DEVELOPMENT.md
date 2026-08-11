@@ -104,25 +104,9 @@ serverpro server create web -n mynamespace -p hetzner \
 
 ## Release
 
-Tag releases as strict SemVer `vX.Y.Z` (prerelease/build suffixes are accepted).
-A tag invokes the reusable CI workflow on that exact commit before any build.
-Native fixed-architecture runners build Linux and macOS `amd64`/`arm64`
-binaries; every binary is smoke-tested before upload, then packaged into a
-deterministic target archive. Each target gets its own SPDX SBOM, provenance
-bundle, and SBOM bundle before the publication job can run. Publication refuses
-existing releases, never clobbers assets, and marks SemVer prerelease tags as
-GitHub prereleases; build metadata alone does not make a prerelease. Windows
-builds are out of scope.
-
-Run both non-live gates before tagging:
-
-```sh
-make check
-make test-full-chain-e2e
-```
-
-GitHub repository settings must separately protect `v*` tags and enable
-immutable releases.
+Follow `RELEASE.md` for the signed-tag, GitHub-release, verification, and
+failure procedure. It requires `make check` and `make test-full-chain-e2e`, and
+excludes manual asset publication and infrastructure deployment.
 
 ## Documentation rules
 
