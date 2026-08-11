@@ -9,6 +9,8 @@ RELEASE_WORKFLOW=${ROOT}/.github/workflows/release.yml
 INSTALLATION_DOC=${ROOT}/INSTALLATION.md
 MISE_CONFIG=${ROOT}/mise.toml
 GO_VERSION=1.26.5
+CHECKOUT_SHA=3d3c42e5aac5ba805825da76410c181273ba90b1
+SETUP_GO_SHA=b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
 ATTEST_PROVENANCE_SHA=0f67c3f4856b2e3261c31976d6725780e5e4c373
 ATTEST_SBOM_SHA=f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6
 SBOM_ACTION_SHA=e22c389904149dbc22b58101806040fa8d37a610
@@ -49,10 +51,14 @@ done
 
 assert_contains "${MISE_CONFIG}" "go = \"${GO_VERSION}\""
 assert_contains "${CI_WORKFLOW}" "workflow_call:"
+assert_contains "${CI_WORKFLOW}" "actions/checkout@${CHECKOUT_SHA}"
+assert_contains "${CI_WORKFLOW}" "actions/setup-go@${SETUP_GO_SHA}"
 assert_contains "${CI_WORKFLOW}" "go-version: \"${GO_VERSION}\""
 assert_absent "${CI_WORKFLOW}" "1.26.x"
 assert_absent "${CI_WORKFLOW}" "check-latest: true"
 assert_contains "${RELEASE_WORKFLOW}" "uses: ./.github/workflows/ci.yml"
+assert_contains "${RELEASE_WORKFLOW}" "actions/checkout@${CHECKOUT_SHA}"
+assert_contains "${RELEASE_WORKFLOW}" "actions/setup-go@${SETUP_GO_SHA}"
 assert_contains "${RELEASE_WORKFLOW}" "go-version: \"${GO_VERSION}\""
 assert_contains "${RELEASE_WORKFLOW}" "bash scripts/validate-release-tag.sh \"\${GITHUB_REF_NAME}\""
 assert_contains "${RELEASE_WORKFLOW}" "gh release view \"\${GITHUB_REF_NAME}\""

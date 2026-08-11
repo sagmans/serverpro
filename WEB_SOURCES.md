@@ -1,6 +1,6 @@
 # Web Sources for serverpro
 
-Date: 2026-08-10
+Date: 2026-08-11
 Scope: provider-agnostic serverpro references
 
 Prefer official provider/API docs. If guides conflict with API references, trust
@@ -563,8 +563,9 @@ https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attesta
 https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/verify-attestations-offline
 https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/verify-release-integrity
 https://cli.github.com/manual/gh_attestation_verify
-https://github.com/actions/checkout/releases/tag/v4.3.1
-https://github.com/actions/setup-go/releases/tag/v5.6.0
+https://github.com/actions/checkout/releases/tag/v7.0.1
+https://github.com/actions/setup-go/releases/tag/v7.0.0
+https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 https://github.com/actions/upload-artifact/releases/tag/v7.0.1
 https://github.com/actions/download-artifact/releases/tag/v8.0.1
 https://github.com/actions/attest-build-provenance/releases/tag/v4.1.1
@@ -575,10 +576,11 @@ https://github.com/anchore/syft/releases/tag/v1.48.0
 
 Use: release workflow, native runner architecture, artifact transport, SPDX
 SBOM, signed provenance, attached-bundle verification, and release-integrity
-guidance. Reviewed 2026-07-23: checkout is pinned to `v4.3.1`, setup-go to
-`v5.6.0`, and the release runner uses Go `1.26.5`; upload/download/attestation
-actions are pinned to the tags listed above, with commit SHAs recorded in the
-workflow comments; Syft is pinned to `v1.48.0`.
+guidance. Reviewed 2026-08-11: checkout is pinned to `v7.0.1` and setup-go to
+`v7.0.0`; both declare the supported Node 24 JavaScript action runtime, and the
+release runner uses Go `1.26.5`. Upload/download/attestation actions are pinned
+to the tags listed above, with commit SHAs recorded in workflow comments; Syft
+is pinned to `v1.48.0`.
 `macos-15-intel` supplies amd64 and `macos-15` supplies arm64 for native smoke
 execution. Recheck action release notes, runtime requirements, and Syft security
 advisories before rotating any pin.
