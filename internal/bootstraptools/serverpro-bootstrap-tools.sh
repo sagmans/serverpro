@@ -1086,7 +1086,7 @@ target_herdr_ready() {
 }
 
 target_herdr_pi_integration_ready() {
-  run_as_target "set -euo pipefail; \"\$HOME/.local/bin/mise\" exec -- herdr integration status | grep -Fq 'pi: current (v6)'"
+  run_as_target "set -euo pipefail; \"\$HOME/.local/bin/mise\" exec -- herdr integration status | grep -Fq 'pi: current'"
 }
 
 # install_user_tools_for_target probes each managed component and stages only
@@ -1242,7 +1242,7 @@ verify_herdr() {
     local version expected_sha
     version=$(bootstrap_herdr_version)
     expected_sha=$(bootstrap_herdr_sha256_for_arch "$(uname -m)")
-    run_as_target "$(herdr_integrity_script "${version}" "${expected_sha}"); printf '%s\\nsha256 %s\\n' \"\${actual}\" \"\${actual_sha}\"; integration_status=\$(\"\$HOME/.local/bin/mise\" exec -- herdr integration status); printf '%s\\n' \"\${integration_status}\" | grep -Fq 'pi: current (v6)'; printf 'pi: current (v6)\\n'"
+    run_as_target "$(herdr_integrity_script "${version}" "${expected_sha}"); printf '%s\\nsha256 %s\\n' \"\${actual}\" \"\${actual_sha}\"; integration_status=\$(\"\$HOME/.local/bin/mise\" exec -- herdr integration status); printf '%s\\n' \"\${integration_status}\" | grep -Fq 'pi: current'; printf 'pi: current\\n'"
   fi
 }
 

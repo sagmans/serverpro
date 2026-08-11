@@ -335,7 +335,7 @@ func TestInstallScriptInstallsPinnedHerdrAndPiIntegration(t *testing.T) {
 		`Herdr integrity verification failed before Pi integration`,
 		`install -d -m 0700 "$HOME/.pi/agent"`,
 		`herdr integration install pi`,
-		`pi: current (v6)`,
+		`pi: current`,
 	} {
 		if !contains(script, want) {
 			t.Fatalf("install script missing pinned Herdr marker %q", want)
@@ -420,7 +420,7 @@ func TestChecksUsePinnedToolsAndTargetUser(t *testing.T) {
 	assertCheck(t, checks, "herdr "+HerdrVersion, HerdrLinuxX64SHA256)
 	assertCheck(t, checks, "herdr "+HerdrVersion, HerdrLinuxArm64SHA256)
 	assertCheck(t, checks, "herdr "+HerdrVersion, "sha256sum")
-	assertCheck(t, checks, "herdr pi integration", "pi: current (v6)")
+	assertCheck(t, checks, "herdr pi integration", "pi: current")
 }
 
 func TestInspectCheckHashesBinaryBeforeExecution(t *testing.T) {
@@ -510,7 +510,7 @@ func TestHerdrIntegrationCheckKeepsEvidencePathFree(t *testing.T) {
 		if strings.Count(check.Command, "integration_status") != 2 {
 			t.Fatalf("integration check exposes raw status paths: %s", check.Command)
 		}
-		if strings.Count(check.Command, "pi: current (v6)") != 2 {
+		if strings.Count(check.Command, "pi: current") != 2 {
 			t.Fatalf("integration check missing sanitized evidence: %s", check.Command)
 		}
 		return

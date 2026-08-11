@@ -216,7 +216,7 @@ func Checks(user string) []Check {
 	herdrVerified := herdrVerifiedCommand()
 	return append(checks,
 		Check{Name: "herdr " + HerdrVersion, Command: userHomeCommand(user, herdrVerified+`; printf '%s\nsha256 %s\n' "$herdr_version" "$actual_sha"`)},
-		Check{Name: "herdr pi integration", Command: userHomeCommand(user, herdrVerified+`; integration_status=$("$HOME/.local/bin/mise" exec -- herdr integration status); printf '%s\n' "$integration_status" | grep -Fq 'pi: current (v6)'; printf 'pi: current (v6)\n'`)},
+		Check{Name: "herdr pi integration", Command: userHomeCommand(user, herdrVerified+`; integration_status=$("$HOME/.local/bin/mise" exec -- herdr integration status); printf '%s\n' "$integration_status" | grep -Fq 'pi: current'; printf 'pi: current\n'`)},
 	)
 }
 

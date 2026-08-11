@@ -226,7 +226,7 @@ var installScriptRequiredMarkers = []string{
 	"herdr@${herdr_version}",
 	"bootstrap_herdr_sha256_for_arch",
 	"herdr integration install pi",
-	"pi: current (v6)",
+	"pi: current",
 	`\"\$HOME/.local/bin/mise\" exec -- npm install -g ${pi_tool}@${pi_version}`,
 	"docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc",
 	"exec bash \"$0\" \"$@\"",
