@@ -32,6 +32,7 @@ rather than leaving a gap. A doc that drifts from code is worse than no doc.
 - `INSTALLATION.md` — install and setup reference.
 - `USAGE.md` — user and operator reference.
 - `DEVELOPMENT.md` — contributor workflow reference.
+- `RELEASE.md` — signed-tag and GitHub release procedure.
 - `TESTING.md` — test matrix, quality gates, and dogfood reference.
 - `CONTRIBUTING.md` — public contribution guidance.
 - `.github/pull_request_template.md` — pull request author checklist.
