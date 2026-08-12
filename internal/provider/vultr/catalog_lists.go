@@ -16,7 +16,7 @@ func (c Client) Regions(ctx context.Context) ([]Region, error) {
 			pageMeta
 		}
 		err := c.api.Do(ctx, http.MethodGet, catalogListPath("/regions", cursor), nil, &res)
-		return res.Regions, res.pageMeta.Meta.Links.Next, err
+		return res.Regions, res.Meta.Links.Next, err
 	})
 }
 
@@ -27,7 +27,7 @@ func (c Client) Plans(ctx context.Context) ([]Plan, error) {
 			pageMeta
 		}
 		err := c.api.Do(ctx, http.MethodGet, catalogListPath("/plans", cursor), nil, &res)
-		return res.Plans, res.pageMeta.Meta.Links.Next, err
+		return res.Plans, res.Meta.Links.Next, err
 	})
 }
 
@@ -38,7 +38,7 @@ func (c Client) OS(ctx context.Context) ([]OS, error) {
 			pageMeta
 		}
 		err := c.api.Do(ctx, http.MethodGet, catalogListPath("/os", cursor), nil, &res)
-		return res.OS, res.pageMeta.Meta.Links.Next, err
+		return res.OS, res.Meta.Links.Next, err
 	})
 }
 

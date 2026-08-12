@@ -183,11 +183,13 @@ Power and delete operations require:
 - Cloudflare tunnel deletion only when state proves `created` provenance;
   adopted, imported, unknown, and legacy provenance are retained
 
-State is removed only after provider deletion succeeds. Create, import, and
-single-server delete acquire one state-owned shared-namespace/exclusive-server
-workflow lock in canonical order and release in reverse. Nonblocking flock retry
-honors command cancellation and deadlines. Namespace create/delete take the
-namespace lock exclusively. Namespace delete rejects canonical config,
+State is removed only after provider deletion succeeds. Registry reads and
+workflow-lock creation use root-scoped filesystem operations so symlinks cannot
+escape the selected registry parent or nearest accessible lock-path ancestor.
+Create, import, and single-server delete acquire one state-owned
+shared-namespace/exclusive-server workflow lock in canonical order and release
+in reverse. Nonblocking flock retry honors command cancellation and deadlines.
+Namespace create/delete take the namespace lock exclusively. Namespace delete rejects canonical config,
 credential, state, or import-marker artifacts lacking registry authority before
 approval, then revalidates the complete registry set plus each parsed state or
 missing-state status after locking, so partial imports and replacement authority

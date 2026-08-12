@@ -6,9 +6,13 @@ VALIDATOR=${ROOT}/scripts/validate-release-tag.sh
 CLASSIFIER=${ROOT}/scripts/classify-release-tag.sh
 CI_WORKFLOW=${ROOT}/.github/workflows/ci.yml
 RELEASE_WORKFLOW=${ROOT}/.github/workflows/release.yml
+GO_MOD=${ROOT}/go.mod
+README_DOC=${ROOT}/README.md
 INSTALLATION_DOC=${ROOT}/INSTALLATION.md
+DEVELOPMENT_DOC=${ROOT}/DEVELOPMENT.md
 MISE_CONFIG=${ROOT}/mise.toml
 GO_VERSION=1.26.5
+LEGACY_GO_MINIMUM=1.26+
 CHECKOUT_SHA=3d3c42e5aac5ba805825da76410c181273ba90b1
 SETUP_GO_SHA=b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
 ATTEST_PROVENANCE_SHA=0f67c3f4856b2e3261c31976d6725780e5e4c373
@@ -34,6 +38,15 @@ assert_absent() {
   fi
 }
 
+assert_line_count() {
+  local file=$1
+  local text=$2
+  local expected=$3
+  local actual
+  actual=$(grep -Fxc -- "${text}" "${file}" || true)
+  [[ ${actual} == "${expected}" ]] || fail "${file#"${ROOT}/"} has ${actual} exact lines ${text}; want ${expected}"
+}
+
 for tag in v0.0.0 v1.2.3 v1.2.3-alpha.1 v1.2.3+build.5 v1.2.3-rc.1+build.5; do
   bash "${VALIDATOR}" "${tag}" || fail "valid release tag rejected: ${tag}"
 done
@@ -49,17 +62,23 @@ for case in v1.2.3:false v1.2.3+build.5:false v1.2.3-alpha.1:true v1.2.3-rc.1+bu
   [[ ${actual} == "${expected}" ]] || fail "release tag ${tag} classified ${actual}; want ${expected}"
 done
 
-assert_contains "${MISE_CONFIG}" "go = \"${GO_VERSION}\""
+assert_line_count "${GO_MOD}" "go ${GO_VERSION}" 1
+assert_line_count "${MISE_CONFIG}" "go = \"${GO_VERSION}\"" 1
+assert_line_count "${README_DOC}" "If \`GOBIN\` is set, add that directory to \`PATH\` instead. Requires Go ${GO_VERSION}+." 1
+assert_absent "${README_DOC}" "Requires Go ${LEGACY_GO_MINIMUM}."
+assert_line_count "${INSTALLATION_DOC}" "- Go ${GO_VERSION}+" 1
+assert_absent "${INSTALLATION_DOC}" "- Go ${LEGACY_GO_MINIMUM}"
+assert_line_count "${DEVELOPMENT_DOC}" "- Go ${GO_VERSION} is the supported development, CI, and release toolchain." 1
 assert_contains "${CI_WORKFLOW}" "workflow_call:"
 assert_contains "${CI_WORKFLOW}" "actions/checkout@${CHECKOUT_SHA}"
 assert_contains "${CI_WORKFLOW}" "actions/setup-go@${SETUP_GO_SHA}"
-assert_contains "${CI_WORKFLOW}" "go-version: \"${GO_VERSION}\""
+assert_line_count "${CI_WORKFLOW}" "          go-version: \"${GO_VERSION}\"" 2
 assert_absent "${CI_WORKFLOW}" "1.26.x"
 assert_absent "${CI_WORKFLOW}" "check-latest: true"
 assert_contains "${RELEASE_WORKFLOW}" "uses: ./.github/workflows/ci.yml"
 assert_contains "${RELEASE_WORKFLOW}" "actions/checkout@${CHECKOUT_SHA}"
 assert_contains "${RELEASE_WORKFLOW}" "actions/setup-go@${SETUP_GO_SHA}"
-assert_contains "${RELEASE_WORKFLOW}" "go-version: \"${GO_VERSION}\""
+assert_line_count "${RELEASE_WORKFLOW}" "          go-version: \"${GO_VERSION}\"" 1
 assert_contains "${RELEASE_WORKFLOW}" "bash scripts/validate-release-tag.sh \"\${GITHUB_REF_NAME}\""
 assert_contains "${RELEASE_WORKFLOW}" "gh release view \"\${GITHUB_REF_NAME}\""
 assert_contains "${RELEASE_WORKFLOW}" "macos-15-intel"

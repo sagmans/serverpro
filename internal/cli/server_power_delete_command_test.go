@@ -725,20 +725,27 @@ func TestServerDeleteRetainsRegistryWhenDurableStateRemovalFails(t *testing.T) {
 	}
 	createServerReadFixture(t)
 	stPath := config.Expand(config.ServerStatePath("demoapp", "webapp"))
+	unlock, err := state.LockServerOperation(context.Background(), stPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock()
 	stateDir := filepath.Dir(stPath)
-	if err := os.Chmod(stateDir, 0o300); err != nil {
+	// Keep the pre-existing workflow lock usable so this fixture isolates the
+	// intended failure: local state removal after provider deletion.
+	if err := os.Chmod(stateDir, 0o500); err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = os.Chmod(stateDir, 0o700) }()
 
 	provider := &powerDeleteFakeProvider{}
 	a := &app{stdout: io.Discard, stderr: io.Discard, project: "demoapp", provider: "hetzner", yes: true, providers: providerRegistryForPower(t, provider)}
-	err := a.runServerDelete(context.Background(), "webapp")
+	err = a.runServerDelete(context.Background(), "webapp")
 	if err == nil {
 		t.Fatal("delete reported success without durable state removal")
 	}
 	if !provider.deleted {
-		t.Fatal("provider deletion did not precede local durable removal")
+		t.Fatalf("provider deletion did not precede local durable removal: %v", err)
 	}
 	reg, loadErr := state.LoadRegistry(config.RegistryPath())
 	if loadErr != nil {

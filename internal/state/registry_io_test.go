@@ -2,6 +2,7 @@ package state
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -28,6 +29,22 @@ func TestLoadMissingReturnsEmptyRegistry(t *testing.T) {
 	}
 	if len(reg.List("")) != 0 {
 		t.Fatalf("expected empty registry: %+v", reg)
+	}
+}
+
+func TestLoadRegistryRejectsSymlinkedParent(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	outsidePath := filepath.Join(outside, "registry.json")
+	if err := os.WriteFile(outsidePath, []byte(`{"namespaces":{"escaped":{"servers":{}}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "linked")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadRegistry(filepath.Join(link, "registry.json")); err == nil {
+		t.Fatal("registry read escaped through symlinked parent")
 	}
 }
 
@@ -125,11 +142,15 @@ func TestSaveLoadRegistryFile(t *testing.T) {
 
 func TestUpdateRegistryCoordinatesConcurrentProcesses(t *testing.T) {
 	path := stateTestPath(t, "registry.json")
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
 	commands := make([]*exec.Cmd, registryProcessWorkerCount)
 	outputs := make([]bytes.Buffer, registryProcessWorkerCount)
 	for worker := range commands {
 		server := fmt.Sprintf("worker-%d", worker)
-		cmd := exec.Command(os.Args[0], "-test.run=^TestUpdateRegistryProcessHelper$")
+		cmd := exec.CommandContext(context.Background(), executable, "-test.run=^TestUpdateRegistryProcessHelper$")
 		cmd.Env = append(os.Environ(),
 			registryProcessHelperEnv+"=1",
 			registryProcessPathEnv+"="+path,

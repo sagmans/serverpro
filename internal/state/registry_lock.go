@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sagmans/serverpro/internal/filedescriptor"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -155,19 +156,79 @@ func lockFileModeContext(ctx context.Context, lockPath string, mode int) (func()
 }
 
 func openLockFile(lockPath string) (*os.File, int, error) {
-	if err := os.MkdirAll(filepath.Dir(lockPath), 0o700); err != nil {
-		return nil, 0, err
-	}
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	parent, name, err := openParentDirectory(lockPath, true)
 	if err != nil {
 		return nil, 0, err
 	}
-	fd, err := filedescriptor.Int(f)
+	fd, openErr := unix.Openat(int(parent.Fd()), name, unix.O_CREAT|unix.O_RDWR|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
+	closeErr := parent.Close()
+	if openErr != nil {
+		return nil, 0, openErr
+	}
+	f := os.NewFile(uintptr(fd), lockPath)
+	if f == nil {
+		_ = unix.Close(fd)
+		return nil, 0, fmt.Errorf("open lock file %s", lockPath)
+	}
+	if closeErr != nil {
+		_ = f.Close()
+		return nil, 0, closeErr
+	}
+	fileDescriptor, err := filedescriptor.Int(f)
 	if err != nil {
 		_ = f.Close()
 		return nil, 0, err
 	}
-	return f, fd, nil
+	return f, fileDescriptor, nil
+}
+
+func openParentDirectory(path string, create bool) (*os.File, string, error) {
+	absolutePath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, "", err
+	}
+	current, err := os.Open(string(os.PathSeparator))
+	if err != nil {
+		return nil, "", err
+	}
+	parent := filepath.Dir(absolutePath)
+	firstComponent := true
+	for _, component := range strings.Split(strings.TrimPrefix(parent, string(os.PathSeparator)), string(os.PathSeparator)) {
+		if component == "" || component == "." {
+			continue
+		}
+		if create {
+			mkdirErr := unix.Mkdirat(int(current.Fd()), component, 0o700)
+			if mkdirErr != nil && !errors.Is(mkdirErr, syscall.EEXIST) {
+				_ = current.Close()
+				return nil, "", mkdirErr
+			}
+		}
+		flags := unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC
+		// The first component beneath / is root-owned and may be a platform alias
+		// such as macOS /var. Every operator-controlled descendant stays no-follow.
+		if !firstComponent {
+			flags |= unix.O_NOFOLLOW
+		}
+		fd, openErr := unix.Openat(int(current.Fd()), component, flags, 0)
+		if openErr != nil {
+			_ = current.Close()
+			return nil, "", openErr
+		}
+		next := os.NewFile(uintptr(fd), component)
+		if next == nil {
+			_ = unix.Close(fd)
+			_ = current.Close()
+			return nil, "", fmt.Errorf("open path component %s", component)
+		}
+		if err := current.Close(); err != nil {
+			_ = next.Close()
+			return nil, "", err
+		}
+		current = next
+		firstComponent = false
+	}
+	return current, filepath.Base(absolutePath), nil
 }
 
 func lockFileRelease(f *os.File, fd int) func() {

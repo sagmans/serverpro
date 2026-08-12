@@ -86,7 +86,7 @@ func (c Client) ListFirewallRules(ctx context.Context, groupID string) ([]Firewa
 	return pagedList(func(cursor string) ([]FirewallRule, string, error) {
 		var res firewallRulesResponse
 		err := c.api.Do(ctx, http.MethodGet, catalogListPath(path, cursor), nil, &res)
-		return res.FirewallRules, res.pageMeta.Meta.Links.Next, err
+		return res.FirewallRules, res.Meta.Links.Next, err
 	})
 }
 
@@ -141,7 +141,7 @@ func (c Client) ListInstances(ctx context.Context) ([]Instance, error) {
 			pageMeta
 		}
 		err := c.api.Do(ctx, http.MethodGet, catalogListPath("/instances", cursor), nil, &res)
-		return res.Instances, res.pageMeta.Meta.Links.Next, err
+		return res.Instances, res.Meta.Links.Next, err
 	})
 }
 

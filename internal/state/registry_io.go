@@ -4,14 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
 	"github.com/sagmans/serverpro/internal/privatefile"
+	"golang.org/x/sys/unix"
 )
 
 func LoadRegistry(path string) (Registry, error) {
-	b, err := os.ReadFile(path)
+	b, err := readRegistryFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return NewRegistry(), nil
@@ -32,6 +34,36 @@ func LoadRegistry(path string) (Registry, error) {
 	}
 	r.normalize()
 	return r, nil
+}
+
+func readRegistryFile(path string) ([]byte, error) {
+	parent, name, err := openParentDirectory(path, false)
+	if err != nil {
+		return nil, err
+	}
+	fd, openErr := unix.Openat(int(parent.Fd()), name, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	closeErr := parent.Close()
+	if openErr != nil {
+		return nil, openErr
+	}
+	file := os.NewFile(uintptr(fd), path)
+	if file == nil {
+		_ = unix.Close(fd)
+		return nil, fmt.Errorf("open registry file %s", path)
+	}
+	if closeErr != nil {
+		_ = file.Close()
+		return nil, closeErr
+	}
+	body, readErr := io.ReadAll(file)
+	fileCloseErr := file.Close()
+	if readErr != nil {
+		return nil, readErr
+	}
+	if fileCloseErr != nil {
+		return nil, fileCloseErr
+	}
+	return body, nil
 }
 
 func mergeRegistryNamespaces(canonical, legacy map[string]RegistryNamespace) (map[string]RegistryNamespace, error) {
