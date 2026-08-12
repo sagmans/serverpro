@@ -5,8 +5,10 @@ BIN_DIR := .bin
 BINARY ?= serverpro
 LINK_BIN_DIR ?= $(HOME)/.local/bin
 LINK_BIN := $(LINK_BIN_DIR)/$(BINARY)
-GOLANGCI_LINT_VERSION := v1.64.5
-GOVULNCHECK_VERSION := v1.3.0
+GOLANGCI_LINT_VERSION := v2.12.2
+GOVULNCHECK_VERSION := v1.6.0
+GOLANGCI_LINT_MODULE := github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+GOVULNCHECK_MODULE := golang.org/x/vuln/cmd/govulncheck
 GOLANGCI_LINT := $(BIN_DIR)/golangci-lint
 GOVULNCHECK := $(BIN_DIR)/govulncheck
 GOLANGCI_LINT_STAMP := $(BIN_DIR)/.golangci-lint-$(GOLANGCI_LINT_VERSION)
@@ -125,11 +127,11 @@ install-hooks:
 ${GOLANGCI_LINT_STAMP}:
 	mkdir -p "${BIN_DIR}"
 	rm -f "${GOLANGCI_LINT}"
-	GOBIN="${ABS_BIN_DIR}" "${GO}" install "github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
+	GOBIN="${ABS_BIN_DIR}" "${GO}" install "${GOLANGCI_LINT_MODULE}@${GOLANGCI_LINT_VERSION}"
 	touch "$@"
 
 ${GOVULNCHECK_STAMP}:
 	mkdir -p "${BIN_DIR}"
 	rm -f "${GOVULNCHECK}"
-	GOBIN="${ABS_BIN_DIR}" "${GO}" install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+	GOBIN="${ABS_BIN_DIR}" "${GO}" install "${GOVULNCHECK_MODULE}@${GOVULNCHECK_VERSION}"
 	touch "$@"

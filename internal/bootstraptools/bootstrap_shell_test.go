@@ -620,7 +620,7 @@ func fakeMiseHome(t *testing.T, version string) (home, binDir string) {
 	t.Helper()
 	home = t.TempDir()
 	binDir = filepath.Join(home, ".local", "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	writeFakeMise(t, filepath.Join(binDir, "mise"), version)
@@ -645,7 +645,7 @@ func TestShellTargetUVReadyVersionMatrix(t *testing.T) {
 			miseBin := filepath.Join(home, ".local", "bin")
 			toolBin := filepath.Join(home, "tools")
 			for _, dir := range []string{miseBin, toolBin} {
-				if err := os.MkdirAll(dir, 0o755); err != nil {
+				if err := os.MkdirAll(dir, 0o700); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -700,7 +700,7 @@ func TestShellTargetRustReadyComponentMatrix(t *testing.T) {
 			miseBin := filepath.Join(home, ".local", "bin")
 			toolBin := filepath.Join(home, "tools")
 			for _, dir := range []string{miseBin, toolBin} {
-				if err := os.MkdirAll(dir, 0o755); err != nil {
+				if err := os.MkdirAll(dir, 0o700); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -754,7 +754,7 @@ func TestManagedMiseDoctorProbeMatrix(t *testing.T) {
 	miseDir := filepath.Join(home, ".local", "bin")
 	toolDir := filepath.Join(home, "tools")
 	for _, dir := range []string{miseDir, toolDir} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1111,7 +1111,7 @@ func TestManagedPackageUpdatesCommandReportsSimulationState(t *testing.T) {
 func TestConfigureUserToolsForTargetExecutesCanonicalSettings(t *testing.T) {
 	home := t.TempDir()
 	binDir := filepath.Join(home, "bin")
-	if err := os.Mkdir(binDir, 0o755); err != nil {
+	if err := os.Mkdir(binDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	miseLog := filepath.Join(home, "mise.log")
@@ -1178,7 +1178,7 @@ func TestRemoveLegacySGToolForTarget(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			home := t.TempDir()
 			binDir := filepath.Join(home, "bin")
-			if err := os.Mkdir(binDir, 0o755); err != nil {
+			if err := os.Mkdir(binDir, 0o700); err != nil {
 				t.Fatal(err)
 			}
 			miseLog := filepath.Join(home, "mise.log")
@@ -1390,7 +1390,7 @@ func TestShellTargetHerdrReadyVerifiesDigestBeforeExecution(t *testing.T) {
 			fakeBin := filepath.Join(dir, "bin")
 			miseBin := filepath.Join(fakeHome, ".local", "bin")
 			for _, d := range []string{fakeBin, miseBin} {
-				if err := os.MkdirAll(d, 0o755); err != nil {
+				if err := os.MkdirAll(d, 0o700); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -1469,7 +1469,7 @@ func TestShellTargetNewManagedVersionProbeMatrix(t *testing.T) {
 			miseBin := filepath.Join(home, ".local", "bin")
 			toolBin := filepath.Join(home, "tools")
 			for _, dir := range []string{miseBin, toolBin} {
-				if err := os.MkdirAll(dir, 0o755); err != nil {
+				if err := os.MkdirAll(dir, 0o700); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -1536,7 +1536,7 @@ func TestShellTargetInspectReadyHashesBeforeExecution(t *testing.T) {
 			fakeBin := filepath.Join(dir, "bin")
 			miseBin := filepath.Join(fakeHome, ".local", "bin")
 			for _, d := range []string{fakeBin, miseBin} {
-				if err := os.MkdirAll(d, 0o755); err != nil {
+				if err := os.MkdirAll(d, 0o700); err != nil {
 					t.Fatal(err)
 				}
 			}

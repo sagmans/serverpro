@@ -25,7 +25,11 @@ func (timeoutProbeError) Temporary() bool { return true }
 
 func TestPublicSSHProbeClosesSuccessfulConnection(t *testing.T) {
 	client, server := net.Pipe()
-	defer server.Close()
+	t.Cleanup(func() {
+		if err := server.Close(); err != nil {
+			t.Errorf("close probe server connection: %v", err)
+		}
+	})
 	conn := &trackingConn{Conn: client}
 	err := publicSSHProbeWithDialer(context.Background(), "203.0.113.10", func(_ context.Context, network, address string) (net.Conn, error) {
 		if network != "tcp" || address != "203.0.113.10:22" {

@@ -205,7 +205,7 @@ func TestAccountSurfaceIsRemoved(t *testing.T) {
 			cmd.SetErr(io.Discard)
 			cmd.SetArgs(args)
 			err := cmd.Execute()
-			if err == nil || !(strings.Contains(err.Error(), "unknown command") || strings.Contains(err.Error(), "unknown flag")) {
+			if err == nil || (!strings.Contains(err.Error(), "unknown command") && !strings.Contains(err.Error(), "unknown flag")) {
 				t.Fatalf("expected removed account surface rejection, got %v", err)
 			}
 		})

@@ -25,6 +25,22 @@ func TestLockServerOperationRejectsNonDirectoryParent(t *testing.T) {
 	}
 }
 
+func TestLockServerOperationRejectsSymlinkedAncestor(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	link := filepath.Join(root, "linked")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatal(err)
+	}
+	statePath := filepath.Join(link, "nested", "state.json")
+	if _, err := LockServerOperation(context.Background(), statePath); err == nil {
+		t.Fatal("lock accepted symlinked ancestor")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "nested", "state.json.operation.lock")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("lock escaped through symlinked ancestor: %v", err)
+	}
+}
+
 func TestLockServerOperationSerializesSameState(t *testing.T) {
 	path := stateTestPath(t, "state.json")
 	unlockFirst, err := LockServerOperation(context.Background(), path)

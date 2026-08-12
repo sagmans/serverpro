@@ -20,7 +20,7 @@ func (c Client) Regions(ctx context.Context) ([]Region, error) {
 		if err := c.api.Do(ctx, http.MethodGet, catalogListPath("/regions", page, nil), nil, &res); err != nil {
 			return nil, nil, err
 		}
-		next, err := nextPage(res.pageMeta.Links.Pages.Next)
+		next, err := nextPage(res.Links.Pages.Next)
 		return res.Regions, next, err
 	})
 }
@@ -34,7 +34,7 @@ func (c Client) Sizes(ctx context.Context) ([]Size, error) {
 		if err := c.api.Do(ctx, http.MethodGet, catalogListPath("/sizes", page, nil), nil, &res); err != nil {
 			return nil, nil, err
 		}
-		next, err := nextPage(res.pageMeta.Links.Pages.Next)
+		next, err := nextPage(res.Links.Pages.Next)
 		return res.Sizes, next, err
 	})
 }
@@ -48,7 +48,7 @@ func (c Client) Images(ctx context.Context) ([]Image, error) {
 		if err := c.api.Do(ctx, http.MethodGet, catalogListPath("/images", page, map[string]string{"type": "distribution"}), nil, &res); err != nil {
 			return nil, nil, err
 		}
-		next, err := nextPage(res.pageMeta.Links.Pages.Next)
+		next, err := nextPage(res.Links.Pages.Next)
 		return res.Images, next, err
 	})
 }

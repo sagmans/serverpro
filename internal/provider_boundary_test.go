@@ -27,6 +27,7 @@ var providerSpecificTermAllowlist = map[string]bool{
 }
 
 func TestGenericPackagesDoNotImportProviderAdapters(t *testing.T) {
+	root := openProviderBoundaryRoot(t)
 	for _, tc := range []struct {
 		name       string
 		importPath string
@@ -47,7 +48,7 @@ func TestGenericPackagesDoNotImportProviderAdapters(t *testing.T) {
 				if strings.HasPrefix(clean, filePathClean(tc.adapterDir)+string(os.PathSeparator)) || providerAdapterImportAllowlist[clean] {
 					return nil
 				}
-				content, err := os.ReadFile(path)
+				content, err := root.ReadFile(path)
 				if err != nil {
 					return err
 				}
@@ -74,6 +75,7 @@ func TestProductionCodeDoesNotUseLegacyProjectFlagOutput(t *testing.T) {
 
 func assertProductionCodeExcludesTerms(t *testing.T, terms []string, adapterDirs []string, allowlist map[string]bool) {
 	t.Helper()
+	root := openProviderBoundaryRoot(t)
 	err := filepath.WalkDir(".", func(path string, entry os.DirEntry, err error) error {
 		if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return err
@@ -87,7 +89,7 @@ func assertProductionCodeExcludesTerms(t *testing.T, terms []string, adapterDirs
 		if allowlist[clean] {
 			return nil
 		}
-		content, err := os.ReadFile(path)
+		content, err := root.ReadFile(path)
 		if err != nil {
 			return err
 		}
@@ -102,6 +104,20 @@ func assertProductionCodeExcludesTerms(t *testing.T, terms []string, adapterDirs
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func openProviderBoundaryRoot(t *testing.T) *os.Root {
+	t.Helper()
+	root, err := os.OpenRoot(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := root.Close(); err != nil {
+			t.Errorf("close provider boundary root: %v", err)
+		}
+	})
+	return root
 }
 
 func providerAdapterDirs() []string {

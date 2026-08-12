@@ -26,7 +26,11 @@ func TestCLISurfaceManifestAssignsEveryCommandEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
+	t.Cleanup(func() {
+		if err := file.Close(); err != nil {
+			t.Errorf("close CLI disposition manifest: %v", err)
+		}
+	})
 
 	dispositions := map[string]string{}
 	scanner := bufio.NewScanner(file)

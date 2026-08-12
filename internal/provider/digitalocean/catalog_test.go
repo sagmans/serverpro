@@ -67,13 +67,13 @@ func TestClientCatalogReadsPaginatedResponses(t *testing.T) {
 				_, _ = w.Write([]byte(`{"sizes":[{"slug":"s-1vcpu-1gb","memory":1024,"vcpus":1,"disk":25,"regions":["nyc3"],"available":true}],"links":{"pages":{}},"meta":{"total":1}}`))
 				return
 			}
-			_, _ = w.Write([]byte(fmt.Sprintf(`{"sizes":[],"links":{"pages":{"next":%q}},"meta":{"total":1}}`, nextPageURL("/sizes", 2))))
+			_, _ = fmt.Fprintf(w, `{"sizes":[],"links":{"pages":{"next":%q}},"meta":{"total":1}}`, nextPageURL("/sizes", 2))
 		case "/images":
 			if r.URL.Query().Get("page") == "2" {
 				_, _ = w.Write([]byte(`{"images":[{"id":123,"slug":"ubuntu-24-04-x64","name":"24.04 (LTS) x64","distribution":"Ubuntu","regions":["nyc3"],"status":"available","public":true,"type":"base"}],"links":{"pages":{}},"meta":{"total":1}}`))
 				return
 			}
-			_, _ = w.Write([]byte(fmt.Sprintf(`{"images":[],"links":{"pages":{"next":%q}},"meta":{"total":1}}`, nextPageURL("/images", 2))))
+			_, _ = fmt.Fprintf(w, `{"images":[],"links":{"pages":{"next":%q}},"meta":{"total":1}}`, nextPageURL("/images", 2))
 		default:
 			handlerErr.Record(w, "unexpected path %s", r.URL.Path)
 		}
@@ -99,7 +99,7 @@ func TestClientCatalogRejectsRepeatedPage(t *testing.T) {
 			return
 		}
 		requestCount++
-		_, _ = w.Write([]byte(fmt.Sprintf(`{"sizes":[],"links":{"pages":{"next":%q}},"meta":{"total":1}}`, nextPageURL("/sizes", 1))))
+		_, _ = fmt.Fprintf(w, `{"sizes":[],"links":{"pages":{"next":%q}},"meta":{"total":1}}`, nextPageURL("/sizes", 1))
 	}))
 	defer ts.Close()
 

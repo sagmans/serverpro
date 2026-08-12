@@ -69,20 +69,32 @@ func TestManualScriptRunsCanonicalWithoutExecutableBit(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	scriptsDir := filepath.Join(root, "scripts")
-	canonicalDir := filepath.Join(root, "internal", "bootstraptools")
-	if err := os.MkdirAll(scriptsDir, 0755); err != nil {
+	rootFS, err := os.OpenRoot(root)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(canonicalDir, 0755); err != nil {
+	t.Cleanup(func() {
+		if err := rootFS.Close(); err != nil {
+			t.Errorf("close bootstrap fixture root: %v", err)
+		}
+	})
+	const (
+		scriptsDirRelative   = "scripts"
+		canonicalDirRelative = "internal/bootstraptools"
+		wrapperRelative      = scriptsDirRelative + "/serverpro-bootstrap-tools.sh"
+		canonicalRelative    = canonicalDirRelative + "/serverpro-bootstrap-tools.sh"
+	)
+	if err := rootFS.MkdirAll(scriptsDirRelative, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	wrapperPath := filepath.Join(scriptsDir, "serverpro-bootstrap-tools.sh")
-	canonicalPath := filepath.Join(canonicalDir, "serverpro-bootstrap-tools.sh")
-	if err := os.WriteFile(wrapperPath, wrapper, 0755); err != nil {
+	if err := rootFS.MkdirAll(canonicalDirRelative, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(canonicalPath, []byte("#!/bin/sh\nprintf 'canonical:%s\\n' \"$1\"\n"), 0644); err != nil {
+	wrapperPath := filepath.Join(root, wrapperRelative)
+	if err := rootFS.WriteFile(wrapperRelative, wrapper, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := rootFS.WriteFile(canonicalRelative, []byte("#!/bin/sh\nprintf 'canonical:%s\\n' \"$1\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

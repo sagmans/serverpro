@@ -86,7 +86,7 @@ func (c Client) ListFirewalls(ctx context.Context) ([]Firewall, error) {
 		if err := c.api.Do(ctx, http.MethodGet, catalogListPath("/firewalls", page, nil), nil, &res); err != nil {
 			return nil, nil, err
 		}
-		next, err := nextPage(res.pageMeta.Links.Pages.Next)
+		next, err := nextPage(res.Links.Pages.Next)
 		return res.Firewalls, next, err
 	})
 }
@@ -130,7 +130,7 @@ func (c Client) FindDropletByName(ctx context.Context, name string) (Droplet, er
 		if err := c.api.Do(ctx, http.MethodGet, catalogListPath("/droplets", page, map[string]string{"name": name}), nil, &res); err != nil {
 			return nil, nil, err
 		}
-		next, err := nextPage(res.pageMeta.Links.Pages.Next)
+		next, err := nextPage(res.Links.Pages.Next)
 		return res.Droplets, next, err
 	})
 	if err != nil {
@@ -153,7 +153,7 @@ func (c Client) ListDroplets(ctx context.Context) ([]Droplet, error) {
 		if err := c.api.Do(ctx, http.MethodGet, catalogListPath("/droplets", page, nil), nil, &res); err != nil {
 			return nil, nil, err
 		}
-		next, err := nextPage(res.pageMeta.Links.Pages.Next)
+		next, err := nextPage(res.Links.Pages.Next)
 		return res.Droplets, next, err
 	})
 }

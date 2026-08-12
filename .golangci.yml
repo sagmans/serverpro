@@ -1,9 +1,10 @@
-# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.v1.64.jsonschema.json
+# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
+version: "2"
 run:
   go: "1.26"
   tests: true
 linters:
-  disable-all: true
+  default: none
   enable:
     - errcheck
     - gosec
@@ -12,26 +13,26 @@ linters:
     - revive
     - staticcheck
     - unused
-linters-settings:
-  gosec:
-    excludes:
-      - G101
-      - G204
-      - G302
-      - G304
-      - G306
-  revive:
-    rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: context-keys-type
-      - name: dot-imports
-      - name: error-naming
-      - name: error-return
-      - name: error-strings
-      - name: indent-error-flow
-      - name: range
-      - name: receiver-naming
-      - name: unreachable-code
-      - name: var-declaration
-      - name: var-naming
+  settings:
+    gosec:
+      excludes:
+        - G101
+        - G204
+        - G302
+        - G304
+        - G306
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: indent-error-flow
+        - name: range
+        - name: receiver-naming
+        - name: unreachable-code
+        - name: var-declaration
+        - name: var-naming

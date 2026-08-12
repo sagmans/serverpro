@@ -8,6 +8,36 @@ API references.
 
 ## Core references
 
+### Go toolchain and security floor
+
+```text
+https://go.dev/doc/devel/release
+https://go.dev/doc/toolchain
+https://go.dev/ref/mod
+https://pkg.go.dev/vuln/GO-2026-5856
+https://pkg.go.dev/vuln/GO-2026-4970
+```
+
+Use: minimum supported Go version and official vulnerability evidence. Reviewed
+2026-08-11: Go 1.26.5 fixes `crypto/tls` and `os` security issues affecting Go
+1.26.0 through 1.26.4. The `go` directive is the mandatory minimum toolchain
+version, so source builds require Go 1.26.5 or newer.
+
+### Go quality tools
+
+```text
+https://github.com/golangci/golangci-lint/releases/tag/v2.12.2
+https://api.github.com/repos/golangci/golangci-lint/releases/tags/v2.12.2
+https://golangci-lint.run/docs/product/migration-guide/
+https://github.com/golang/vuln/tree/v1.6.0
+https://api.github.com/repos/golang/vuln/git/ref/tags/v1.6.0
+```
+
+Use: project-local lint and vulnerability scanner pins. Reviewed 2026-08-11:
+golangci-lint `v2.12.2` is an immutable stable release; govulncheck `v1.6.0`
+is an exact official repository tag. Both require Go 1.25 or newer and support
+the Go 1.26.5 project toolchain.
+
 ### Hetzner Cloud API
 
 ```text
