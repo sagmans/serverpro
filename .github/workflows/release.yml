@@ -29,6 +29,12 @@ jobs:
       - name: Validate strict SemVer tag
         run: bash scripts/validate-release-tag.sh "${GITHUB_REF_NAME}"
 
+      - name: Verify tag provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SIGNER_ALLOWLIST: ${{ vars.RELEASE_SIGNER_ALLOWLIST }}
+        run: bash scripts/validate-release-provenance.sh "${GITHUB_REF_NAME}"
+
       - name: Refuse existing release
         env:
           GH_TOKEN: ${{ github.token }}

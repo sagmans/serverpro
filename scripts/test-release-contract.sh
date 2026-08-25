@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 VALIDATOR=${ROOT}/scripts/validate-release-tag.sh
 CLASSIFIER=${ROOT}/scripts/classify-release-tag.sh
+PROVENANCE=${ROOT}/scripts/validate-release-provenance.sh
 CI_WORKFLOW=${ROOT}/.github/workflows/ci.yml
 RELEASE_WORKFLOW=${ROOT}/.github/workflows/release.yml
 GO_MOD=${ROOT}/go.mod
@@ -80,6 +81,10 @@ assert_contains "${RELEASE_WORKFLOW}" "actions/checkout@${CHECKOUT_SHA}"
 assert_contains "${RELEASE_WORKFLOW}" "actions/setup-go@${SETUP_GO_SHA}"
 assert_line_count "${RELEASE_WORKFLOW}" "          go-version: \"${GO_VERSION}\"" 1
 assert_contains "${RELEASE_WORKFLOW}" "bash scripts/validate-release-tag.sh \"\${GITHUB_REF_NAME}\""
+assert_contains "${RELEASE_WORKFLOW}" "bash scripts/validate-release-provenance.sh \"\${GITHUB_REF_NAME}\""
+assert_contains "${RELEASE_WORKFLOW}" "RELEASE_SIGNER_ALLOWLIST: \${{ vars.RELEASE_SIGNER_ALLOWLIST }}"
+assert_line_count "${RELEASE_WORKFLOW}" "    needs: [checks, validate]" 1
+assert_contains "${RELEASE_WORKFLOW}" "needs: [checks, validate, package]"
 assert_contains "${RELEASE_WORKFLOW}" "gh release view \"\${GITHUB_REF_NAME}\""
 assert_contains "${RELEASE_WORKFLOW}" "macos-15-intel"
 assert_contains "${RELEASE_WORKFLOW}" "macos-15"
@@ -96,5 +101,69 @@ assert_contains "${INSTALLATION_DOC}" "gh release download \"\${version}\""
 assert_contains "${INSTALLATION_DOC}" "grep -F \"  \${archive}\" SHA256SUMS"
 assert_contains "${INSTALLATION_DOC}" "--bundle \"\${provenance_bundle}\""
 assert_contains "${INSTALLATION_DOC}" '--predicate-type https://spdx.dev/Document/v2.3'
+
+# --- release provenance validator scenarios (mocked gh API) ---
+PROV_SANDBOX=$(mktemp -d)
+git init -q --bare "${PROV_SANDBOX}/origin.git"
+git init -q -b main "${PROV_SANDBOX}/repo"
+git -C "${PROV_SANDBOX}/repo" config user.email dev@example.invalid
+git -C "${PROV_SANDBOX}/repo" config user.name contract-test
+# Sandbox tags must stay unsigned even when the operator's global Git
+# configuration forces signed annotated tags.
+git -C "${PROV_SANDBOX}/repo" config commit.gpgsign false
+git -C "${PROV_SANDBOX}/repo" config tag.gpgsign false
+git -C "${PROV_SANDBOX}/repo" config tag.forcesignannotated false
+git -C "${PROV_SANDBOX}/repo" remote add origin "${PROV_SANDBOX}/origin.git"
+git -C "${PROV_SANDBOX}/repo" commit --allow-empty -q -m base
+git -C "${PROV_SANDBOX}/repo" checkout -q -b feature
+git -C "${PROV_SANDBOX}/repo" commit --allow-empty -q -m off-main
+git -C "${PROV_SANDBOX}/repo" tag -a rel-offmain -m off-main
+git -C "${PROV_SANDBOX}/repo" checkout -q main
+git -C "${PROV_SANDBOX}/repo" tag rel-light main
+git -C "${PROV_SANDBOX}/repo" tag -a rel-main -m on-main
+git -C "${PROV_SANDBOX}/repo" push -q origin main
+
+mkdir "${PROV_SANDBOX}/bin"
+cat >"${PROV_SANDBOX}/bin/gh" <<'SHIM'
+#!/usr/bin/env bash
+if [[ ${1:-} == api && ${2:-} == *git/ref/tags/* ]]; then
+  if [[ ${3:-} == --jq ]]; then
+    printf '%s' "${FAKE_REF_SHA}"
+  else
+    printf '{"object":{"sha":"%s"}}' "${FAKE_REF_SHA}"
+  fi
+else
+  printf '{"tagger":{"email":"%s"},"verification":{"verified":%s,"reason":"%s"}}' \
+    "${FAKE_TAGGER_EMAIL}" "${FAKE_VERIFIED}" "${FAKE_REASON}"
+fi
+SHIM
+chmod +x "${PROV_SANDBOX}/bin/gh"
+
+provenance_case() {
+  local name=$1 expected=$2 tag=$3 ref_sha=$4 verified=$5 reason=$6 tagger=$7
+  if (cd "${PROV_SANDBOX}/repo" &&
+      export GITHUB_REPOSITORY=contract/serverpro \
+        PATH="${PROV_SANDBOX}/bin:${PATH}" \
+        FAKE_REF_SHA=${ref_sha} FAKE_VERIFIED=${verified} \
+        FAKE_REASON=${reason} FAKE_TAGGER_EMAIL=${tagger} &&
+      bash "${PROVENANCE}" "${tag}") >/dev/null 2>&1; then
+    [[ ${expected} == pass ]] || fail "provenance case accepted: ${name}"
+  else
+    [[ ${expected} == fail ]] || fail "provenance case rejected: ${name}"
+  fi
+}
+
+MAINTAINER_SIGNER=ahmetsercansagman@gmail.com
+TAG_OBJECT_SHA=$(git -C "${PROV_SANDBOX}/repo" rev-parse rel-main^{tag})
+OFFMAIN_OBJECT_SHA=$(git -C "${PROV_SANDBOX}/repo" rev-parse rel-offmain^{tag})
+
+provenance_case lightweight-tag fail rel-light '' false unsigned ''
+provenance_case annotated-off-main fail rel-offmain "${OFFMAIN_OBJECT_SHA}" true valid "${MAINTAINER_SIGNER}"
+provenance_case unsigned-tag fail rel-main "${TAG_OBJECT_SHA}" false unsigned "${MAINTAINER_SIGNER}"
+provenance_case unlisted-signer fail rel-main "${TAG_OBJECT_SHA}" true valid attacker@example.invalid
+provenance_case object-mismatch fail rel-main deadbeefdeadbeefdeadbeefdeadbeefdeadbeef true valid "${MAINTAINER_SIGNER}"
+provenance_case signed-on-main pass rel-main "${TAG_OBJECT_SHA}" true valid "${MAINTAINER_SIGNER}"
+
+rm -rf "${PROV_SANDBOX}"
 
 printf 'PASS | release contract\n'
