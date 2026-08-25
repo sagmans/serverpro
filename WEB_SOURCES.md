@@ -16,12 +16,22 @@ https://go.dev/doc/toolchain
 https://go.dev/ref/mod
 https://pkg.go.dev/vuln/GO-2026-5856
 https://pkg.go.dev/vuln/GO-2026-4970
+https://groups.google.com/g/golang-announce/c/94pEornpRlI
+https://www.openwall.com/lists/oss-security/2026/08/13/13
+https://pkg.go.dev/vuln/GO-2026-6218
+https://pkg.go.dev/vuln/GO-2026-6090
+https://pkg.go.dev/vuln/GO-2026-5972
+https://pkg.go.dev/vuln/GO-2026-5026
 ```
 
 Use: minimum supported Go version and official vulnerability evidence. Reviewed
 2026-08-11: Go 1.26.5 fixes `crypto/tls` and `os` security issues affecting Go
-1.26.0 through 1.26.4. The `go` directive is the mandatory minimum toolchain
-version, so source builds require Go 1.26.5 or newer.
+1.26.0 through 1.26.4. Reviewed 2026-08-26: Go 1.26.6 (released 2026-08-13,
+announced on golang-announce and oss-security) fixes ten security issues,
+including the four standard-library advisories govulncheck reported reachable
+from serverpro under Go 1.26.5 (`net/url`, `crypto/tls`, `encoding/asn1`, and
+the vendored `x/net/idna` path). The `go` directive is the mandatory minimum
+toolchain version, so source builds require Go 1.26.6 or newer.
 
 ### Go quality tools
 
@@ -36,7 +46,7 @@ https://api.github.com/repos/golang/vuln/git/ref/tags/v1.6.0
 Use: project-local lint and vulnerability scanner pins. Reviewed 2026-08-11:
 golangci-lint `v2.12.2` is an immutable stable release; govulncheck `v1.6.0`
 is an exact official repository tag. Both require Go 1.25 or newer and support
-the Go 1.26.5 project toolchain.
+the Go 1.26.6 project toolchain.
 
 ### Hetzner Cloud API
 
@@ -608,7 +618,7 @@ Use: release workflow, native runner architecture, artifact transport, SPDX
 SBOM, signed provenance, attached-bundle verification, and release-integrity
 guidance. Reviewed 2026-08-11: checkout is pinned to `v7.0.1` and setup-go to
 `v7.0.0`; both declare the supported Node 24 JavaScript action runtime, and the
-release runner uses Go `1.26.5`. Upload/download/attestation actions are pinned
+release runner uses Go `1.26.6`. Upload/download/attestation actions are pinned
 to the tags listed above, with commit SHAs recorded in workflow comments; Syft
 is pinned to `v1.48.0`.
 `macos-15-intel` supplies amd64 and `macos-15` supplies arm64 for native smoke

@@ -44,7 +44,7 @@ Install a specific release (recommended):
 go install github.com/sagmans/serverpro/cmd/serverpro@vX.Y.Z
 ```
 
-If `GOBIN` is set, add that directory to `PATH` instead. Requires Go 1.26.5+.
+If `GOBIN` is set, add that directory to `PATH` instead. Requires Go 1.26.6+.
 
 ## Provider setup
 
