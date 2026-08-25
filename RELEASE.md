@@ -29,7 +29,9 @@ or make DNS, Cloudflare, Tailscale, or server changes as part of this procedure.
   `ALLOWED_SIGNERS_FILE` to a reviewed maintainer-key file; never fetch trust
   material during a release. Do not change Git configuration during a release.
 - GitHub CLI authentication can read this repository and workflow runs.
-- Repository settings protect `v*` tags and require immutable releases.
+- Repository settings enforce release-tag protection: the `release-tags`
+  ruleset allows only repository administrators to create or delete `v*`
+  tags, and immutable releases prevent modification of anything published.
 
 ## Preflight
 
@@ -104,6 +106,13 @@ Linux/macOS `amd64`/`arm64` binaries, packages deterministic archives, creates
 per-target SPDX SBOMs and Sigstore provenance/SBOM attestations, then creates
 the immutable GitHub release. SemVer prerelease tags become GitHub prereleases.
 
+Before any build job runs, the `validate` job re-checks the tag server-side:
+it must be an annotated tag object, carry a signature GitHub reports as
+verified from a tagger identity on the release signer allowlist (override via
+the `RELEASE_SIGNER_ALLOWLIST` repository variable), and point at a commit
+that is an ancestor of `main`. A rejection here stops the release before any
+artifact is produced.
+
 Find the tag's run by the captured commit, then watch it to completion:
 
 ```sh
@@ -159,6 +168,9 @@ verification results in the release record or pull request.
 
 - A failed preflight or local gate stops the release before tagging.
 - A signing failure stops the release; do not relax signature requirements.
+- A provenance rejection (lightweight tag, missing or unverified signature,
+  tagger outside the allowlist, or commit not on `main`) stops the workflow
+  before build; fix the source branch and cut a fresh tag from `main`.
 - For a transient GitHub Actions failure, inspect the failed run and rerun the
   failed job only when the tagged source and publication inputs remain valid.
 - For a source, workflow, or release-input defect, fix it on `main`, rerun the
