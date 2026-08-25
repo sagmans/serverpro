@@ -32,6 +32,7 @@ var reviewedJobStepNames = map[string][]string{
 	"validate": {
 		"Check out tagged commit",
 		"Validate strict SemVer tag",
+		"Verify tag provenance",
 		"Refuse existing release",
 	},
 	"build": {
@@ -294,6 +295,23 @@ func TestReleaseWorkflowClassifiesPrereleasesBeforePublication(t *testing.T) {
 	}
 	if publish.Env["IS_PRERELEASE"] != "${{ steps.classify-release.outputs.prerelease }}" || !strings.Contains(publish.Run, "--prerelease") {
 		t.Fatalf("publication does not consume prerelease classification: %+v", publish)
+	}
+}
+
+func TestReleaseWorkflowValidatesTagProvenanceBeforeBuild(t *testing.T) {
+	wf := loadReleaseWorkflow(t)
+	validateJob := wf.Jobs["validate"]
+	step := findNamedStep(t, validateJob, "Verify tag provenance")
+	if step.Run != `bash scripts/validate-release-provenance.sh "${GITHUB_REF_NAME}"` {
+		t.Fatalf("provenance validation invocation = %q", step.Run)
+	}
+	if step.Env["GH_TOKEN"] != "${{ github.token }}" || step.Env["RELEASE_SIGNER_ALLOWLIST"] != "${{ vars.RELEASE_SIGNER_ALLOWLIST }}" {
+		t.Fatalf("provenance validation env = %#v", step.Env)
+	}
+	for index, item := range validateJob.Steps {
+		if item.Name == "Verify tag provenance" && index == 0 {
+			t.Fatal("provenance validation runs before the tagged commit is checked out")
+		}
 	}
 }
 
