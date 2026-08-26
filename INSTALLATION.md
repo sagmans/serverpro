@@ -6,7 +6,7 @@ paths are ready.
 
 ## Requirements
 
-- Go 1.26.5+
+- Go 1.26.6+
 - Git
 - `ssh`
 - `tailscale` CLI for local SSH checks and `serverpro server ssh`

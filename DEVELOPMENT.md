@@ -5,7 +5,7 @@ DEVELOPMENT.md is contributor workflow. User docs live in `README.md`,
 
 ## Toolchain
 
-- Go 1.26.5 is the supported development, CI, and release toolchain.
+- Go 1.26.6 is the supported development, CI, and release toolchain.
 - `mise.toml` owns the exact Go version pin.
 - `make check` is the primary local and CI gate;
   `make test-full-chain-e2e` is the separate required full-chain gate.
