@@ -15,9 +15,12 @@ func TestRemoteChecksCodesSudoAuthenticationFailure(t *testing.T) {
 		check: {{err: errors.New("permission denied")}},
 	}}
 	results := remoteChecksWithOptions(context.Background(), cfg, r, "prod-01", Options{})
-	if len(results) == 0 || results[0].Code != SudoPasswordAuthFailureCode {
-		t.Fatalf("sudo auth result code missing: %+v", results)
+	for _, result := range results {
+		if result.Name == "sudo password required" && result.Code == SudoPasswordAuthFailureCode {
+			return
+		}
 	}
+	t.Fatalf("sudo auth result code missing: %+v", results)
 }
 
 func TestRemoteChecksFailsWhenAdminHasNOPASSWDSudo(t *testing.T) {

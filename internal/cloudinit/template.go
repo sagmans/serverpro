@@ -1,22 +1,38 @@
 package cloudinit
 
-import "github.com/sagmans/serverpro/internal/tailscaletools"
+import (
+	"strings"
+
+	"github.com/sagmans/serverpro/internal/hostplatform"
+	"github.com/sagmans/serverpro/internal/tailscaletools"
+)
 
 const (
 	tailscaleVersion     = tailscaletools.Version
 	tailscaleAMD64SHA256 = tailscaletools.AMD64SHA256
 	tailscaleARM64SHA256 = tailscaletools.ARM64SHA256
-	cloudInitTemplate    = `#cloud-config
-package_update: true
-package_upgrade: true
-packages:
-  - curl
-  - ca-certificates
-  - gnupg
-  - ufw
-  - apparmor
-  - unattended-upgrades
-  - jq
+)
+
+var cloudInitTemplate = `#cloud-config
+bootcmd:
+  - |
+    set -eu
+    EXPECTED_HOST_OS=` + hostplatform.ManagedHostOS + `
+    EXPECTED_HOST_VERSION=` + hostplatform.ManagedHostVersion + `
+    EXPECTED_HOST_CODENAME=` + hostplatform.ManagedHostCodename + `
+    EXPECTED_HOST_ARCHITECTURES='` + strings.Join(hostplatform.ManagedHostKernelArchitectures(), " ") + `'
+    . /etc/os-release
+    if [ "${ID:-}" != "${EXPECTED_HOST_OS}" ] || [ "${VERSION_ID:-}" != "${EXPECTED_HOST_VERSION}" ] || [ "${VERSION_CODENAME:-${UBUNTU_CODENAME:-}}" != "${EXPECTED_HOST_CODENAME}" ]; then
+      printf 'unsupported managed host: %s %s (%s)\n' "${ID:-unknown}" "${VERSION_ID:-unknown}" "${VERSION_CODENAME:-${UBUNTU_CODENAME:-unknown}}" >&2
+      exit 1
+    fi
+    case " ${EXPECTED_HOST_ARCHITECTURES} " in
+      *" $(uname -m) "*) ;;
+      *)
+        printf 'unsupported managed-host architecture: %s\n' "$(uname -m)" >&2
+        exit 1
+        ;;
+    esac
 users:
   - default
   - name: {{ .Config.Admin.Username }}
@@ -60,6 +76,86 @@ write_files:
     content: |
       {"managed_by":"serverpro","namespace":{{ jsonString .Config.Namespace }}}
 runcmd:
+  - |
+    set -eu
+    export LC_ALL=C
+    TAILSCALE_TMP_DIR=
+    TAILSCALE_AUTH_KEY=$(cat /root/.serverpro-tailscale-authkey)
+
+    cleanup() {
+      unset TAILSCALE_AUTH_KEY
+      rm -f /root/.serverpro-tailscale-authkey /var/lib/cloud/instances/*/user-data.txt /var/lib/cloud/instances/*/user-data.txt.i
+      if [ -n "${TAILSCALE_TMP_DIR}" ]; then
+        rm -rf "${TAILSCALE_TMP_DIR}"
+      fi
+    }
+
+    trap cleanup EXIT
+    trap 'exit 1' HUP INT TERM
+    rm -f /root/.serverpro-tailscale-authkey /var/lib/cloud/instances/*/user-data.txt /var/lib/cloud/instances/*/user-data.txt.i
+
+    EXPECTED_HOST_OS=` + hostplatform.ManagedHostOS + `
+    EXPECTED_HOST_VERSION=` + hostplatform.ManagedHostVersion + `
+    EXPECTED_HOST_CODENAME=` + hostplatform.ManagedHostCodename + `
+    EXPECTED_HOST_ARCHITECTURES='` + strings.Join(hostplatform.ManagedHostKernelArchitectures(), " ") + `'
+    . /etc/os-release
+    if [ "${ID:-}" != "${EXPECTED_HOST_OS}" ] || [ "${VERSION_ID:-}" != "${EXPECTED_HOST_VERSION}" ] || [ "${VERSION_CODENAME:-${UBUNTU_CODENAME:-}}" != "${EXPECTED_HOST_CODENAME}" ]; then
+      printf 'unsupported managed host: %s %s (%s)\n' "${ID:-unknown}" "${VERSION_ID:-unknown}" "${VERSION_CODENAME:-${UBUNTU_CODENAME:-unknown}}" >&2
+      exit 1
+    fi
+    case " ${EXPECTED_HOST_ARCHITECTURES} " in
+      *" $(uname -m) "*) ;;
+      *)
+        printf 'unsupported managed-host architecture: %s\n' "$(uname -m)" >&2
+        exit 1
+        ;;
+    esac
+
+    PACKAGE_BASELINES='` + strings.ReplaceAll(hostplatform.PackageBaselineManifest(hostplatform.BasePackageBaselines()), "\n", "\n    ") + `'
+
+    installed_package_version() {
+      package_record=$(dpkg-query -W -f='${db:Status-Status}|${Version}' "$1" 2>/dev/null) || return 1
+      case "${package_record}" in
+        installed'|'*) printf '%s' "${package_record#installed|}" ;;
+        *) return 1 ;;
+      esac
+    }
+
+    verify_package_candidates() {
+      printf '%s\n' "${PACKAGE_BASELINES}" | while IFS='|' read -r package_name minimum_version; do
+        if installed_version=$(installed_package_version "${package_name}") && dpkg --compare-versions "${installed_version}" ge "${minimum_version}"; then
+          continue
+        fi
+        candidate_version=$(apt-cache policy "${package_name}" | awk '$1 == "Candidate:" { print $2; exit }')
+        if [ -z "${candidate_version}" ] || [ "${candidate_version}" = '(none)' ]; then
+          printf 'required package has no install candidate: %s\n' "${package_name}" >&2
+          return 1
+        fi
+        if ! dpkg --compare-versions "${candidate_version}" ge "${minimum_version}"; then
+          printf 'package candidate %s is below minimum %s: %s\n' "${package_name}" "${minimum_version}" "${candidate_version}" >&2
+          return 1
+        fi
+      done
+    }
+
+    verify_package_minimums() {
+      printf '%s\n' "${PACKAGE_BASELINES}" | while IFS='|' read -r package_name minimum_version; do
+        installed_version=$(installed_package_version "${package_name}") || {
+          printf 'required package is not installed: %s\n' "${package_name}" >&2
+          return 1
+        }
+        if ! dpkg --compare-versions "${installed_version}" ge "${minimum_version}"; then
+          printf 'package %s is below minimum %s: %s\n' "${package_name}" "${minimum_version}" "${installed_version}" >&2
+          return 1
+        fi
+      done
+    }
+
+    apt-get update
+    verify_package_candidates
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ` + strings.Join(hostplatform.PackageNames(hostplatform.BasePackageBaselines()), " ") + `
+    verify_package_minimums
   - mkdir -p /var/log/journal /var/lib/serverpro
   - systemctl restart systemd-journald
   - systemctl enable --now apparmor
@@ -84,20 +180,13 @@ runcmd:
     TAILSCALE_VERSION=` + tailscaleVersion + `
     TAILSCALE_SHA256_AMD64=` + tailscaleAMD64SHA256 + `
     TAILSCALE_SHA256_ARM64=` + tailscaleARM64SHA256 + `
-    TAILSCALE_TMP_DIR=
+    TAILSCALE_TMP_DIR=${TAILSCALE_TMP_DIR:-}
     TAILSCALE_DEFAULTS_PATH=/etc/default/tailscaled
     if [ -n "${SERVERPRO_TAILSCALE_SOURCE_ONLY:-}" ]; then
       # Executable tests redirect this append away from the host; production
       # cloud-init never accepts an alternate trusted service path.
       TAILSCALE_DEFAULTS_PATH=${SERVERPRO_TAILSCALE_DEFAULTS_PATH:-${TAILSCALE_DEFAULTS_PATH}}
     fi
-
-    cleanup() {
-      rm -f /root/.serverpro-tailscale-authkey /var/lib/cloud/instances/*/user-data.txt /var/lib/cloud/instances/*/user-data.txt.i
-      if [ -n "${TAILSCALE_TMP_DIR}" ]; then
-        rm -rf "${TAILSCALE_TMP_DIR}"
-      fi
-    }
 
     tailscale_arch() {
       case "$(uname -m)" in
@@ -152,9 +241,8 @@ runcmd:
     }
 
     main() {
-      trap cleanup EXIT
       install_tailscale
-      tailscale up --auth-key "$(cat /root/.serverpro-tailscale-authkey)" --ssh --hostname {{ shellQuote .Config.Compute.Name }} --advertise-tags {{ shellQuote (join .Config.Access.Tailscale.Tags ",") }}
+      tailscale up --auth-key "${TAILSCALE_AUTH_KEY}" --ssh --hostname {{ shellQuote .Config.Compute.Name }} --advertise-tags {{ shellQuote (join .Config.Access.Tailscale.Tags ",") }}
     }
 
     # The guard lets tests execute architecture checks without host mutation.
@@ -163,4 +251,3 @@ runcmd:
     fi
 final_message: "serverpro bootstrap complete"
 `
-)

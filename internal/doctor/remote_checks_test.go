@@ -11,6 +11,7 @@ import (
 	"github.com/sagmans/serverpro/internal/bootstraptools"
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/remote"
+	"github.com/sagmans/serverpro/internal/tunnel"
 )
 
 type batchRemote struct {
@@ -54,6 +55,46 @@ func (r *batchRemote) RunBatch(_ context.Context, _, _ string, commands []remote
 		}
 	}
 	return results, nil
+}
+
+func TestRemoteChecksSequentialUnsupportedPlatformBlocksFixes(t *testing.T) {
+	cfg := config.Example("prod")
+	ufwCheck := "ufw status verbose | grep -Fx 'Status: active'"
+	runner := &scriptedRemote{responses: map[string][]remoteCall{
+		remoteSupportedPlatformCommand(): {{err: errors.New("unsupported platform")}},
+		ufwCheck:                         {{err: errors.New("inactive")}},
+	}}
+	results := remoteChecksSequential(context.Background(), cfg, runner, "prod-01", Options{Fix: true})
+	if !hasResult(Report{Results: results}, "supported platform", Fail, "unsupported platform") {
+		t.Fatalf("missing platform failure: %+v", results)
+	}
+	if hasCommand(runner.commands, "ufw --force enable") || hasCommand(runner.commands, "serverpro-bootstrap-tools") {
+		t.Fatalf("unsupported platform reached live fixes: %+v", runner.commands)
+	}
+}
+
+func TestRemoteChecksBatchUnsupportedPlatformBlocksFixes(t *testing.T) {
+	cfg := config.Example("prod")
+	plan := buildRemoteReadPlan(cfg)
+	results := make([]remote.BatchResult, len(plan.commands))
+	ufwCheck := "ufw status verbose | grep -Fx 'Status: active'"
+	for i, command := range plan.commands {
+		results[i].Output = "ok"
+		switch command.Script {
+		case remoteSupportedPlatformCommand():
+			results[i].Err = errors.New("unsupported platform")
+		case ufwCheck:
+			results[i].Err = errors.New("inactive")
+		}
+	}
+	runner := &batchRemote{results: results}
+	got := remoteChecksWithOptions(context.Background(), cfg, runner, "prod-01", Options{Fix: true})
+	if !hasResult(Report{Results: got}, "supported platform", Fail, "unsupported platform") {
+		t.Fatalf("missing platform failure: %+v", got)
+	}
+	if runner.runCalls != 0 {
+		t.Fatalf("unsupported platform delegated live commands: %+v", runner.runScripts)
+	}
 }
 
 func TestRemoteChecksBatchReadOnlyCommandsOnce(t *testing.T) {
@@ -182,7 +223,7 @@ func TestRemoteChecksIncludesCloudflaredWhenIngressConfigured(t *testing.T) {
 	cfg := config.Example("prod")
 	cfg.Network.Ingress = "cloudflare-tunnel"
 	r := &scriptedRemote{responses: map[string][]remoteCall{
-		"systemctl is-active cloudflared": {{out: "active\n"}},
+		tunnel.CheckCommand(): {{out: "active\n"}},
 	}}
 	results := remoteChecksWithOptions(context.Background(), cfg, r, "prod-01", Options{})
 	if !hasResult(Report{Results: results}, "cloudflared", Pass, "active") {

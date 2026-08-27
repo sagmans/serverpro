@@ -34,7 +34,7 @@ func TestRunCreatesJITAuthKeyAndNeverStoresSecrets(t *testing.T) {
 	ts := &fakeTailscale{}
 	r := &fakeRemote{}
 	statePath := provisionStatePath(t)
-	st, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api", Cloudflare: "cf"}, StatePath: statePath, Clients: Clients{Compute: h, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: r}})
+	st, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: testTailscaleAPIToken, Cloudflare: testCloudflareAPIToken}, StatePath: statePath, Clients: Clients{Compute: h, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: r}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestRunCreatesJITAuthKeyAndNeverStoresSecrets(t *testing.T) {
 	if !strings.Contains(h.userData, testAdminPasswordHash) || strings.Contains(h.userData, "NOPASSWD") {
 		t.Fatalf("cloud-init missing password-required sudo state:\n%s", h.userData)
 	}
-	if strings.Contains(h.userData, "ts-api") || strings.Contains(h.userData, "cf") {
+	if strings.Contains(h.userData, testTailscaleAPIToken) || strings.Contains(h.userData, testCloudflareAPIToken) {
 		t.Fatal("cloud-init leaked provider token")
 	}
 	if st.Compute.ID != "2" || st.Tailscale.NodeID != "d1" || st.Tailscale.AuthKeyID != "" || st.Cloudflare.TunnelID != "tun1" {

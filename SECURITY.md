@@ -2,10 +2,24 @@
 
 Treat every non-dry-run command as live infrastructure work.
 
-## Supported versions
+## Supported versions and platforms
 
 Until `v1.0.0`, only the latest release and `main` receive security fixes.
 Older tags are best-effort.
+
+The supported controller is macOS 27 arm64. Managed hosts are Ubuntu 24.04 LTS
+(`noble`) on amd64 or arm64. Live create validates the selected provider catalog
+image before provider mutation; repair scripts validate the actual host before
+managed mutation. Cloud-init repeats the host check as defense in depth rather
+than acting as the sole gate. Go 1.26.6 is the
+source-build, development, CI, and release floor. `INSTALLATION.md` records the
+complete reviewed tool and package baseline.
+
+Exact artifact/runtime pins fail on drift. Direct apt dependencies use reviewed
+minimums instead: after repository refresh, needed signed candidates must meet
+the floor before package scripts run, installed results are verified, and newer
+security updates remain valid and are never downgraded. This avoids freezing security fixes while ensuring every
+previously unversioned direct dependency has an enforced baseline.
 
 ## Report a vulnerability
 
@@ -105,7 +119,9 @@ Per-command, decoded-aggregate, and transport byte ceilings return typed errors
 before hostile output can grow memory without bound. Read commands come from an
 explicit plan; unplanned reads never fall through to live execution, and
 per-command overflow, frame, or transport failures fail closed before any
-requested remediation runs.
+requested remediation runs. The first remote doctor check is a blocking
+OS/codename/architecture authority check; failure disables every later fix in
+both batched and sequential execution.
 
 Provider API calls never follow redirects that leave the credential's trust
 boundary. The shared provider HTTP client refuses redirect chains after five
@@ -125,31 +141,32 @@ Managed host tools install through integrity-checked sources, not
   keyring contains exactly one primary key with fingerprint
   `9DC858229FC7DD38854AE2D88D81803C0EBFCD88`; subkeys are allowed, but missing,
   substituted, or additional primary keys fail before publication.
-- mise is fetched as a release tarball and verified against its published
-  SHA-256 checksum before the target user installs it into `~/.local/bin`.
-- uv is pinned and installed through mise's explicit `aqua:astral-sh/uv`
-  backend. That registry entry advertises release SHA-256 and GitHub-attestation
-  verification; doctor verifies the resulting exact uv version.
-- Rust is pinned and installed through mise's `core:rust` backend with the
-  default rustup profile. Doctor verifies rustc, Cargo, rustfmt, Clippy, and Rust
+- mise `2026.8.14` is fetched as a release tarball and verified against its
+  published SHA-256 checksum before the target user installs it into
+  `~/.local/bin`; newer compatible mise releases remain valid.
+- uv `0.12.6` is pinned and installed through mise's explicit
+  `aqua:astral-sh/uv` backend. That registry entry advertises release SHA-256
+  and GitHub-attestation verification; doctor verifies the exact version.
+- Rust `1.98.0` is pinned and installed through mise's `core:rust` backend with
+  the default rustup profile. Doctor verifies rustc, Cargo, rustfmt, Clippy, and Rust
   docs. rustup downloads over HTTPS, but its official security documentation
   states download signatures are not yet enforced; this remains a trust
   boundary despite the exact version pin.
-- ast-grep, sem, and inspect are installed from exact mise GitHub backends
-  and versions. Their x86_64/arm64 release assets are pinned by reviewed
+- ast-grep `0.45.2`, sem `0.23.1`, and inspect `0.1.1` are installed from exact
+  mise GitHub backends and versions. Their x86_64/arm64 release assets are pinned by reviewed
   SHA-256 values; unsupported architectures fail before mutation. Doctor checks
   exact ast-grep and sem version output. Existing active `sg` mise configuration
   is removed through mise's config-aware `unuse` operation without invoking the
   deprecated binary. Inspect has no upstream version flag, so its bare release
   binary is hashed before any inspect execution and reported with
   sanitized evidence. A failed integrity probe forces same-version replacement.
-- Herdr is installed for the target user through mise's explicit GitHub backend
-  at a pinned version; bootstrap and doctor verify the resulting Linux binary
+- Herdr `0.8.2` is installed for the target user through mise's explicit GitHub
+  backend; bootstrap and doctor verify the resulting Linux binary
   against the architecture-specific SHA-256 digest published with that GitHub
   release. Bootstrap installs the bundled Pi integration under the target user's
   private Pi agent directory and does not invoke Herdr self-update or session
   lifecycle commands.
-- Tailscale `1.102.2` first-boot and repair binaries are fetched only for
+- Tailscale `1.102.3` first-boot and repair binaries are fetched only for
   reviewed amd64 or arm64 architectures, checked against pinned SHA-256 digests,
   and extracted by exact member name. Unsupported architectures and mismatches
   stop before install. Serverpro explicitly sets `GODEBUG=tlsmlkem=1` for
@@ -159,7 +176,19 @@ Managed host tools install through integrity-checked sources, not
 - Cloudflared's apt key is downloaded to a temporary file whose keyring must
   contain exactly one primary key with fingerprint
   `CC94B39C77AE7342A68B89628A682D308D4E5E73`. Missing, substituted, or additional
-  primary keys fail before the key can enter the trusted keyring.
+  primary keys fail before the key can enter the trusted keyring. The installer
+  uses the explicit noble repository and requires cloudflared `2026.8.2` or
+  newer; ingress-enabled doctor runs verify both that floor and service state.
+- Every directly installed Ubuntu, Docker, and Cloudflare apt package has a
+  reviewed minimum in `internal/hostplatform`. Installs preflight signed current
+  candidates before package scripts run, reject missing/below-floor packages,
+  force the C locale while parsing apt output, require dpkg state `installed`
+  rather than trusting stale `config-files` version metadata, verify installed
+  floors, preserve newer versions, and never request a downgrade.
+- Node.js `24.20.0` LTS and bundled npm `11.19.0` are exact. Pi `0.84.3` is
+  installed with lifecycle scripts disabled, but its npm dependency graph is
+  resolved at install time rather than vendored; enabling Pi retains this
+  residual package-registry trust boundary.
 - The bootstrap script runs as root, including system-package and apt work plus
   managed-artifact download, verification, extraction, and staging. Read-only
   doctor uses existing apt candidate metadata; `--fix` refreshes metadata before

@@ -6,7 +6,31 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sagmans/serverpro/internal/hostplatform"
 )
+
+func TestCheckCommandVerifiesPackageFloorAndService(t *testing.T) {
+	command := CheckCommand()
+	baseline := hostplatform.CloudflaredPackageBaseline()
+	for _, want := range []string{baseline.Name, baseline.MinimumVersion, "db:Status-Status", "dpkg --compare-versions", "systemctl is-active"} {
+		if !strings.Contains(command, want) {
+			t.Fatalf("check command missing %q: %s", want, command)
+		}
+	}
+}
+
+func TestCheckCommandRejectsRemovedPackageState(t *testing.T) {
+	binDir := t.TempDir()
+	writeFakeCommand(t, binDir, "dpkg-query", "case \"$*\" in *db:Status-Status*) printf 'config-files|3.0' ;; *) printf '3.0' ;; esac\n")
+	writeFakeCommand(t, binDir, "dpkg", "exit 0\n")
+	writeFakeCommand(t, binDir, "systemctl", "exit 0\n")
+	cmd := exec.Command("sh", "-c", CheckCommand())
+	cmd.Env = append(os.Environ(), "PATH="+binDir+":"+os.Getenv("PATH"))
+	if err := cmd.Run(); err == nil {
+		t.Fatal("removed cloudflared package passed the service check")
+	}
+}
 
 func TestInstallScriptCleansTokenFile(t *testing.T) {
 	s := InstallScript("cf-tunnel-token")
@@ -14,6 +38,87 @@ func TestInstallScriptCleansTokenFile(t *testing.T) {
 		if !strings.Contains(s, want) {
 			t.Fatalf("script missing %q\n%s", want, s)
 		}
+	}
+}
+
+func TestInstallScriptPinsSupportedHostAndCloudflaredMinimum(t *testing.T) {
+	s := InstallScript("cf-tunnel-token")
+	baseline := hostplatform.CloudflaredPackageBaseline()
+	for _, want := range []string{
+		"export LC_ALL=C",
+		"EXPECTED_HOST_OS=" + hostplatform.ManagedHostOS,
+		"EXPECTED_HOST_VERSION=" + hostplatform.ManagedHostVersion,
+		"EXPECTED_HOST_CODENAME=" + hostplatform.ManagedHostCodename,
+		"EXPECTED_HOST_ARCHITECTURES='x86_64 aarch64 arm64'",
+		"CLOUDFLARED_PACKAGE=" + baseline.Name,
+		"CLOUDFLARED_MINIMUM_VERSION=" + baseline.MinimumVersion,
+		"dpkg --compare-versions",
+		"cloudflared " + hostplatform.ManagedHostCodename + " main",
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("script missing %q\n%s", want, s)
+		}
+	}
+}
+
+func TestInstallScriptCloudflaredCandidateExecutableMatrix(t *testing.T) {
+	baseline := hostplatform.CloudflaredPackageBaseline()
+	for _, tc := range []struct {
+		name, installedState, installedVersion, candidate string
+		wantOK                                            bool
+	}{
+		{name: "candidate-at-floor", candidate: baseline.MinimumVersion, wantOK: true},
+		{name: "config-files-newer-candidate-below-floor", installedState: "config-files", installedVersion: "3.0", candidate: "0.0.0"},
+		{name: "candidate-below-floor", candidate: "0.0.0"},
+		{name: "missing-candidate", candidate: "(none)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			scriptPath := filepath.Join(dir, "install.sh")
+			if err := os.WriteFile(scriptPath, []byte(InstallScript("cf-tunnel-token")), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			binDir := filepath.Join(dir, "bin")
+			if err := os.Mkdir(binDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			writeFakeCommand(t, binDir, "dpkg-query", "[ -n \"$INSTALLED_STATE\" ] || exit 1\ncase \"$*\" in *db:Status-Status*) printf '%s|%s' \"$INSTALLED_STATE\" \"$INSTALLED_VERSION\" ;; *) printf '%s' \"$INSTALLED_VERSION\" ;; esac\n")
+			writeFakeCommand(t, binDir, "dpkg", "case \"${2:-}\" in 3.0) exit 0 ;; \"$CANDIDATE_VERSION\") [ \"${2:-}\" != 0.0.0 ] ;; *) exit 1 ;; esac\n")
+			writeFakeCommand(t, binDir, "apt-cache", "printf '  Candidate: %s\\n' \"$CANDIDATE_VERSION\"\n")
+			cmd := exec.Command("bash", "-c", `source "$1"; verify_cloudflared_candidate`, "test", scriptPath)
+			cmd.Env = append(os.Environ(),
+				"SERVERPRO_TUNNEL_SOURCE_ONLY=1",
+				"PATH="+binDir+":"+os.Getenv("PATH"),
+				"INSTALLED_STATE="+tc.installedState,
+				"INSTALLED_VERSION="+tc.installedVersion,
+				"CANDIDATE_VERSION="+tc.candidate,
+			)
+			err := cmd.Run()
+			if tc.wantOK && err != nil {
+				t.Fatalf("safe cloudflared candidate rejected: %v", err)
+			}
+			if !tc.wantOK && err == nil {
+				t.Fatal("unsafe cloudflared candidate accepted")
+			}
+		})
+	}
+}
+
+func TestInstallScriptPreflightsCloudflaredCandidateBeforeInstall(t *testing.T) {
+	s := InstallScript("cf-tunnel-token")
+	candidateCheck := strings.Index(s, "\n  verify_cloudflared_candidate\n")
+	install := strings.Index(s, `apt-get install -y "${CLOUDFLARED_PACKAGE}"`)
+	if candidateCheck < 0 || install < 0 || candidateCheck > install {
+		t.Fatalf("cloudflared candidate floor must be checked before package installation\n%s", s)
+	}
+}
+
+func TestInstallScriptRejectsUnsupportedHostBeforeMutation(t *testing.T) {
+	s := InstallScript("cf-tunnel-token")
+	hostGate := strings.Index(s, "main() {\n  require_supported_host")
+	mutation := strings.Index(s, "install -d -m 0755 /usr/share/keyrings")
+	if hostGate < 0 || mutation < 0 || hostGate > mutation {
+		t.Fatalf("supported-host gate must precede managed mutation\n%s", s)
 	}
 }
 

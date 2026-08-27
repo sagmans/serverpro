@@ -10,6 +10,29 @@ import (
 	"github.com/sagmans/serverpro/internal/credentials"
 )
 
+func TestPreflightRejectsUnsupportedManagedImageBeforeNetworkChecks(t *testing.T) {
+	cfg := config.ExampleServer("demo", "web")
+	cfg.Compute.Image = "debian-12"
+	creds := credentials.Set{ServerProvider: "provider-token", Tailscale: "tailscale-token"}
+	provider := cliFakeProvider{catalog: func(context.Context, compute.CatalogQuery) (compute.Catalog, compute.Diagnostics) {
+		return compute.Catalog{Images: []compute.Image{{Name: "debian-12", Architecture: "x86", OSFlavor: "debian", OSVersion: "12"}}}, nil
+	}}
+	a := &app{provider: "hetzner", providers: testRegistryWithProvider(t, provider)}
+	if err := a.preflight(context.Background(), cfg, creds); err == nil || !strings.Contains(err.Error(), "unsupported managed image") {
+		t.Fatalf("unsupported managed image error = %v", err)
+	}
+}
+
+func TestPreflightRejectsMissingManagedImageBeforeNetworkChecks(t *testing.T) {
+	cfg := config.ExampleServer("demo", "web")
+	cfg.Compute.Image = "missing-image"
+	creds := credentials.Set{ServerProvider: "provider-token", Tailscale: "tailscale-token"}
+	a := &app{provider: "hetzner", providers: testProviderRegistry(t)}
+	if err := a.preflight(context.Background(), cfg, creds); err == nil || !strings.Contains(err.Error(), "not present in provider catalog") {
+		t.Fatalf("missing managed image error = %v", err)
+	}
+}
+
 func TestPreflightRejectsComputeAuthorityBeforeNetworkChecks(t *testing.T) {
 	cfg := config.ExampleServer("demo", "web")
 	creds := credentials.Set{ServerProvider: "provider-token", Tailscale: "tailscale-token"}

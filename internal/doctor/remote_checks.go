@@ -20,7 +20,20 @@ func remoteChecksWithOptions(ctx context.Context, cfg config.Config, r remote.Ru
 func remoteChecksSequential(ctx context.Context, cfg config.Config, r remote.Runner, host string, opt Options) []Result {
 	var results []Result
 	for _, specification := range remoteCheckSpecifications(cfg) {
-		results = append(results, specification.run(ctx, r, cfg.Admin.Username, host, opt)...)
+		current := specification.run(ctx, r, cfg.Admin.Username, host, opt)
+		results = append(results, current...)
+		if specification.blocksFixesOnFailure && resultsContainFailure(current) {
+			opt.Fix = false
+		}
 	}
 	return results
+}
+
+func resultsContainFailure(results []Result) bool {
+	for _, result := range results {
+		if result.Status == Fail {
+			return true
+		}
+	}
+	return false
 }

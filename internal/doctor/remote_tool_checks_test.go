@@ -20,13 +20,13 @@ func TestRemoteToolChecksPassWhenInstalled(t *testing.T) {
 		out  string
 	}{
 		{name: "git", out: "git version 2.43.0\nOpenSSH_9.6p1"},
-		{name: "docker engine", out: "Docker version 29.0.0\nactive"},
-		{name: "docker compose", out: "Docker Compose version v5.1.2"},
-		{name: "htop", out: "htop 3.4.1"},
+		{name: "docker engine", out: "Docker version 29.7.2\nactive"},
+		{name: "docker compose", out: "Docker Compose version v5.5.0"},
+		{name: "htop", out: "htop 3.3.0"},
 		{name: "managed package updates", out: "current"},
 		{name: "mise", out: bootstraptools.MinimumMiseVersion},
 		{name: "node " + bootstraptools.NodeVersion, out: "v" + bootstraptools.NodeVersion},
-		{name: "npm", out: "11.0.0"},
+		{name: "npm " + bootstraptools.NPMVersion, out: bootstraptools.NPMVersion},
 		{name: "pi " + bootstraptools.PiVersion, out: bootstraptools.PiVersion},
 		{name: "uv " + bootstraptools.UVVersion, out: "uv " + bootstraptools.UVVersion},
 		{name: "rust " + bootstraptools.RustVersion, out: "rustc " + bootstraptools.RustVersion + "\ncargo " + bootstraptools.RustVersion + "\nrustfmt " + bootstraptools.RustVersion + "\nclippy 0.1.97\nrust-docs-x86_64-unknown-linux-gnu"},
@@ -232,7 +232,7 @@ func TestRemoteToolChecksKeepWarningOutputRaw(t *testing.T) {
 	cfg := config.Example("prod")
 	check := remoteToolCheckByName(t, bootstraptools.Checks(cfg.Admin.Username), "mise")
 	r := &scriptedRemote{responses: map[string][]remoteCall{
-		check.Command: {{out: "2026.7.12\n[WARN] config: error parsing config file: <admin-home>/.config/mise/config.toml"}},
+		check.Command: {{out: bootstraptools.MinimumMiseVersion + "\n[WARN] config: error parsing config file: <admin-home>/.config/mise/config.toml"}},
 	}}
 	results := remoteToolChecks(context.Background(), r, cfg.Admin.Username, "prod-01", Options{})
 	if !hasResult(Report{Results: results}, "mise", Pass, "error parsing config file") {

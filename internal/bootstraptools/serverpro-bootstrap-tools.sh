@@ -4,6 +4,7 @@ if [ -z "${BASH_VERSION:-}" ] || [ -n "${POSIXLY_CORRECT:-}" ]; then
   exec bash "$0" "$@"
 fi
 set -euo pipefail
+export LC_ALL=C
 # Deterministic modes for privileged writes; explicit `install -m` still overrides.
 umask 022
 
@@ -180,6 +181,36 @@ validate_package_token() {
   esac
 }
 
+validate_package_version_token() {
+  local name="$1" value="$2"
+  case "${value}" in
+    ''|*[!A-Za-z0-9.+:~_-]*)
+      printf '%s contains an invalid package version: %s\n' "${name}" "${value}" >&2
+      exit 1
+      ;;
+  esac
+}
+
+validate_supported_host_values() {
+  local actual_os="$1" actual_version="$2" actual_codename="$3" actual_arch="$4"
+  local expected_os expected_version expected_codename allowed_architectures
+  expected_os=$(required_env SERVERPRO_BOOTSTRAP_HOST_OS)
+  expected_version=$(required_env SERVERPRO_BOOTSTRAP_HOST_VERSION)
+  expected_codename=$(required_env SERVERPRO_BOOTSTRAP_HOST_CODENAME)
+  allowed_architectures=$(required_env SERVERPRO_BOOTSTRAP_HOST_ARCHITECTURES)
+  if [[ ${actual_os} != "${expected_os}" || ${actual_version} != "${expected_version}" || ${actual_codename} != "${expected_codename}" ]]; then
+    printf 'unsupported host OS: %s %s (%s). Expected %s %s (%s).\n' "${actual_os:-unknown}" "${actual_version:-unknown}" "${actual_codename:-unknown}" "${expected_os}" "${expected_version}" "${expected_codename}" >&2
+    exit 1
+  fi
+  case " ${allowed_architectures} " in
+    *" ${actual_arch} "*) ;;
+    *)
+      printf 'unsupported host architecture: %s. Expected one of: %s.\n' "${actual_arch}" "${allowed_architectures}" >&2
+      exit 1
+      ;;
+  esac
+}
+
 bootstrap_version_env() {
   local name="$1"
   local value
@@ -249,6 +280,10 @@ bootstrap_node_version() {
   managed_mise_tool_version node
 }
 
+bootstrap_npm_version() {
+  bootstrap_version_env SERVERPRO_BOOTSTRAP_NPM_VERSION
+}
+
 bootstrap_pi_version() {
   bootstrap_version_env SERVERPRO_BOOTSTRAP_PI_VERSION
 }
@@ -286,6 +321,91 @@ bootstrap_pi_tool() {
   printf '%s' "${tool}"
 }
 
+package_baseline_rows() {
+  required_env SERVERPRO_BOOTSTRAP_PACKAGE_BASELINES
+}
+
+validate_package_baseline_manifest() {
+  local row name version extra seen=' ' count=0
+  while IFS= read -r row; do
+    IFS='|' read -r name version extra <<<"${row}"
+    if [[ -n ${extra:-} ]]; then
+      printf 'package baseline row has too many fields: %s\n' "${row}" >&2
+      exit 1
+    fi
+    validate_package_token "apt:${name}"
+    validate_package_version_token package_baseline_version "${version}"
+    if [[ ${seen} == *" ${name} "* ]]; then
+      printf 'duplicate package baseline: %s\n' "${name}" >&2
+      exit 1
+    fi
+    seen+="${name} "
+    ((count += 1))
+  done <<<"$(package_baseline_rows)"
+  if [[ ${count} -eq 0 ]]; then
+    printf 'package baseline manifest must not be empty.\n' >&2
+    exit 1
+  fi
+}
+
+package_minimum_version() {
+  local wanted=$1 row name version
+  while IFS= read -r row; do
+    IFS='|' read -r name version _ <<<"${row}"
+    if [[ ${name} == "${wanted}" ]]; then
+      printf '%s' "${version}"
+      return 0
+    fi
+  done <<<"$(package_baseline_rows)"
+  printf 'package baseline missing: %s\n' "${wanted}" >&2
+  return 1
+}
+
+installed_package_version() {
+  local name=$1 record
+  record=$(dpkg-query -W -f='${db:Status-Status}|${Version}' "${name}" 2>/dev/null) || return 1
+  case "${record}" in
+    installed'|'*) printf '%s' "${record#installed|}" ;;
+    *) return 1 ;;
+  esac
+}
+
+verify_package_minimums() {
+  local token name minimum installed
+  for token in "$@"; do
+    name=${token#apt:}
+    minimum=$(package_minimum_version "${name}")
+    if ! installed=$(installed_package_version "${name}"); then
+      printf 'managed package missing after install: %s\n' "${name}" >&2
+      return 1
+    fi
+    if ! dpkg --compare-versions "${installed}" ge "${minimum}"; then
+      printf 'managed package below baseline: %s %s < %s\n' "${name}" "${installed}" "${minimum}" >&2
+      return 1
+    fi
+  done
+}
+
+verify_package_candidates() {
+  local token name minimum installed candidate
+  for token in "$@"; do
+    name=${token#apt:}
+    minimum=$(package_minimum_version "${name}")
+    if installed=$(installed_package_version "${name}") && dpkg --compare-versions "${installed}" ge "${minimum}"; then
+      continue
+    fi
+    candidate=$(apt-cache policy "${name}" | awk '$1 == "Candidate:" { print $2; exit }')
+    if [[ -z ${candidate} || ${candidate} == '(none)' ]]; then
+      printf 'managed package has no install candidate: %s\n' "${name}" >&2
+      return 1
+    fi
+    if ! dpkg --compare-versions "${candidate}" ge "${minimum}"; then
+      printf 'managed package candidate below baseline: %s %s < %s\n' "${name}" "${candidate}" "${minimum}" >&2
+      return 1
+    fi
+  done
+}
+
 read_package_env() {
   local name="$1"
   # A plain nameref name such as `out` triggers a bash "circular name reference"
@@ -302,11 +422,11 @@ read_package_env() {
   local package
   for package in "${_rpe_out[@]}"; do
     validate_package_token "${package}"
+    package_minimum_version "${package#apt:}" >/dev/null
   done
 }
 
 APT_UPDATED=0
-MISE_PACKAGE_UPDATED=0
 DOCKER_CONFIG_CHANGED=0
 ROOT_MISE=/usr/local/bin/mise
 # Docker release-signing key fingerprint (pubkey 0EBFCD88), published at
@@ -329,7 +449,9 @@ apt_update_once() {
 
 apt_install() {
   apt_update_once
+  verify_package_candidates "$@"
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"
+  verify_package_minimums "$@"
 }
 
 atomic_install_file() {
@@ -378,13 +500,7 @@ require_supported_os() {
 
   # shellcheck source=/dev/null
   . /etc/os-release
-  case "${ID:-}" in
-    ubuntu|debian) ;;
-    *)
-      printf 'unsupported OS: %s. Expected Ubuntu or Debian.\n' "${ID:-unknown}" >&2
-      exit 1
-      ;;
-  esac
+  validate_supported_host_values "${ID:-}" "${VERSION_ID:-}" "${VERSION_CODENAME:-${UBUNTU_CODENAME:-}}" "$(uname -m)"
 }
 
 validate_bootstrap_target() {
@@ -488,11 +604,19 @@ validate_managed_mise_manifest() {
 }
 
 validate_bootstrap_env() {
+  validate_user_token SERVERPRO_BOOTSTRAP_HOST_OS "$(required_env SERVERPRO_BOOTSTRAP_HOST_OS)"
+  validate_version_token SERVERPRO_BOOTSTRAP_HOST_VERSION "$(required_env SERVERPRO_BOOTSTRAP_HOST_VERSION)"
+  validate_user_token SERVERPRO_BOOTSTRAP_HOST_CODENAME "$(required_env SERVERPRO_BOOTSTRAP_HOST_CODENAME)"
+  local host_arch
+  for host_arch in $(required_env SERVERPRO_BOOTSTRAP_HOST_ARCHITECTURES); do
+    validate_user_token SERVERPRO_BOOTSTRAP_HOST_ARCHITECTURES "${host_arch}"
+  done
+  validate_package_baseline_manifest
   bootstrap_min_mise_version >/dev/null
   bootstrap_sha256_env SERVERPRO_BOOTSTRAP_MISE_SHA256_LINUX_X64 >/dev/null
   bootstrap_sha256_env SERVERPRO_BOOTSTRAP_MISE_SHA256_LINUX_ARM64 >/dev/null
-  bootstrap_sha256_env SERVERPRO_BOOTSTRAP_MISE_SHA256_LINUX_ARMV7 >/dev/null
   validate_managed_mise_manifest
+  bootstrap_npm_version >/dev/null
   bootstrap_pi_version >/dev/null
   bootstrap_herdr_version >/dev/null
   bootstrap_herdr_backend >/dev/null
@@ -512,6 +636,7 @@ validate_bootstrap_env() {
     bootstrap_herdr_sha256_for_arch "$(uname -m)" >/dev/null
   fi
   local -a packages
+  read_package_env SERVERPRO_BOOTSTRAP_BASE_PACKAGES packages
   read_package_env SERVERPRO_BOOTSTRAP_GIT_PACKAGES packages
   read_package_env SERVERPRO_BOOTSTRAP_DOCKER_PACKAGES packages
   read_package_env SERVERPRO_BOOTSTRAP_HTOP_PACKAGES packages
@@ -588,7 +713,6 @@ mise_release_arch() {
   case "$(uname -m)" in
     x86_64) printf 'x64' ;;
     aarch64|arm64) printf 'arm64' ;;
-    armv7l) printf 'armv7' ;;
     *)
       printf 'unsupported architecture for mise release: %s\n' "$(uname -m)" >&2
       exit 1
@@ -609,7 +733,6 @@ fetch_verified_mise_binary() {
   case "${arch}" in
     x64) checksum=$(bootstrap_sha256_env SERVERPRO_BOOTSTRAP_MISE_SHA256_LINUX_X64) ;;
     arm64) checksum=$(bootstrap_sha256_env SERVERPRO_BOOTSTRAP_MISE_SHA256_LINUX_ARM64) ;;
-    armv7) checksum=$(bootstrap_sha256_env SERVERPRO_BOOTSTRAP_MISE_SHA256_LINUX_ARMV7) ;;
   esac
   base_url="https://github.com/jdx/mise/releases/download/v${version}"
   filename="mise-v${version}-linux-${arch}.tar.gz"
@@ -677,11 +800,8 @@ install_docker_repo() {
   verify_gpg_fingerprint "${key_tmp}" "${DOCKER_GPG_FINGERPRINT}" "docker"
   install -m 0644 -o root -g root "${key_tmp}" /etc/apt/keyrings/docker.asc
 
-  local codename=${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}
-  if [[ -z ${codename} ]]; then
-    printf 'could not determine Ubuntu/Debian codename for Docker apt source.\n' >&2
-    exit 1
-  fi
+  local codename
+  codename=$(required_env SERVERPRO_BOOTSTRAP_HOST_CODENAME)
 
   cat >/etc/apt/sources.list.d/docker.sources <<EOF
 Types: deb
@@ -693,7 +813,6 @@ Signed-By: /etc/apt/keyrings/docker.asc
 EOF
   chmod 0644 /etc/apt/sources.list.d/docker.sources
   APT_UPDATED=0
-  MISE_PACKAGE_UPDATED=0
 }
 
 ensure_docker_daemon_config() {
@@ -777,16 +896,24 @@ bootstrap_package_set() {
   local -a packages
   read_package_env "${env_name}" packages
 
+  apt_update_once
+  verify_package_candidates "${packages[@]}"
   ensure_root_mise
   local mise_bin=${ROOT_MISE}
-  local -a update_args=()
-  if [[ ${MISE_PACKAGE_UPDATED} -eq 0 ]]; then
-    update_args=(--update)
-    MISE_PACKAGE_UPDATED=1
-  fi
   log "converging ${label} packages with mise bootstrap"
-  MISE_EXPERIMENTAL=1 MISE_YES=1 "${mise_bin}" --no-config bootstrap packages apply --yes "${update_args[@]}" "${packages[@]}"
+  MISE_EXPERIMENTAL=1 MISE_YES=1 "${mise_bin}" --no-config bootstrap packages apply --yes "${packages[@]}"
   MISE_EXPERIMENTAL=1 MISE_YES=1 "${mise_bin}" --no-config bootstrap packages upgrade --yes "${packages[@]}"
+  verify_package_minimums "${packages[@]}"
+}
+
+install_base_packages() {
+  local -a package_tokens package_names=()
+  local token
+  read_package_env SERVERPRO_BOOTSTRAP_BASE_PACKAGES package_tokens
+  for token in "${package_tokens[@]}"; do
+    package_names+=("${token#apt:}")
+  done
+  apt_install "${package_names[@]}"
 }
 
 install_git() {
@@ -806,8 +933,12 @@ remove_docker_conflicts() {
 
 install_docker() {
   log 'converging Docker Engine from Docker apt repository'
-  remove_docker_conflicts
   install_docker_repo
+  local -a packages
+  read_package_env SERVERPRO_BOOTSTRAP_DOCKER_PACKAGES packages
+  apt_update_once
+  verify_package_candidates "${packages[@]}"
+  remove_docker_conflicts
   bootstrap_package_set docker SERVERPRO_BOOTSTRAP_DOCKER_PACKAGES
   ensure_docker_daemon_config
   if [[ ${DOCKER_CONFIG_CHANGED} -eq 1 ]]; then
@@ -1002,7 +1133,7 @@ configure_user_tools_for_target() {
 managed_mise_probe_script() {
   case "$1" in
     node) cat <<'PROBE'
-node_version=$("$mise_bin" exec -- node --version); test "$node_version" = "v$expected_version" || { printf 'expected node %s, got %s\n' "$expected_version" "$node_version" >&2; exit 1; }; npm_version=$("$mise_bin" exec -- npm --version); printf '%s\n%s\n' "$node_version" "$npm_version"
+node_version=$("$mise_bin" exec -- node --version); test "$node_version" = "v$expected_version" || { printf 'expected node %s, got %s\n' "$expected_version" "$node_version" >&2; exit 1; }; npm_version=$("$mise_bin" exec -- npm --version); test "$npm_version" = "$expected_npm_version" || { printf 'expected npm %s, got %s\n' "$expected_npm_version" "$npm_version" >&2; exit 1; }; printf '%s\n%s\n' "$node_version" "$npm_version"
 PROBE
       ;;
     uv) cat <<'PROBE'
@@ -1049,14 +1180,15 @@ PROBE
 }
 
 target_managed_mise_tool_ready() {
-  local row=$1 version_env checksum_key probe version expected_sha= script
+  local row=$1 version_env checksum_key probe version expected_npm_version expected_sha= script
   IFS='|' read -r _ version_env _ _ _ _ _ checksum_key _ _ _ probe _ <<<"${row}"
   version=$(bootstrap_version_env "${version_env}")
+  expected_npm_version=$(bootstrap_npm_version)
   if [[ ${checksum_key} != - ]]; then
     expected_sha=$(managed_mise_tool_sha256_for_arch "${row}" "$(uname -m)")
   fi
   script=$(managed_mise_probe_script "${probe}")
-  run_as_target "set -euo pipefail; expected_version=\"${version}\"; expected_sha=\"${expected_sha}\"; mise_bin=\"\$HOME/.local/bin/mise\"; ${script}"
+  run_as_target "set -euo pipefail; expected_version=\"${version}\"; expected_npm_version=\"${expected_npm_version}\"; expected_sha=\"${expected_sha}\"; mise_bin=\"\$HOME/.local/bin/mise\"; ${script}"
 }
 
 target_node_ready() {
@@ -1066,7 +1198,9 @@ target_node_ready() {
 target_pi_ready() {
   local node_version="$1"
   local expected_pi_version="$2"
-  run_as_target "set -euo pipefail; test \"\$(\"\$HOME/.local/bin/mise\" exec -- node --version)\" = \"v${node_version}\"; \"\$HOME/.local/bin/mise\" exec -- npm --version >/dev/null; expected_pi=\"\$HOME/.local/share/mise/installs/node/${node_version}/bin/pi\"; actual_pi=\$(\"\$HOME/.local/bin/mise\" exec -- sh -c 'command -v pi'); test \"\${actual_pi}\" = \"\${expected_pi}\" || { printf 'expected pi at %s, got %s\\n' \"\${expected_pi}\" \"\${actual_pi}\" >&2; exit 1; }; pi_version=\$(\"\$HOME/.local/bin/mise\" exec -- pi --version 2>&1) || { status=\$?; printf 'pi --version failed (%s): %s\\n' \"\${status}\" \"\${pi_version}\" >&2; exit \"\${status}\"; }; test \"\${pi_version}\" = \"${expected_pi_version}\" || { printf 'expected pi %s, got %s\\n' \"${expected_pi_version}\" \"\${pi_version}\" >&2; exit 1; }"
+  local expected_npm_version
+  expected_npm_version=$(bootstrap_npm_version)
+  run_as_target "set -euo pipefail; test \"\$(\"\$HOME/.local/bin/mise\" exec -- node --version)\" = \"v${node_version}\"; test \"\$(\"\$HOME/.local/bin/mise\" exec -- npm --version)\" = \"${expected_npm_version}\"; expected_pi=\"\$HOME/.local/share/mise/installs/node/${node_version}/bin/pi\"; actual_pi=\$(\"\$HOME/.local/bin/mise\" exec -- sh -c 'command -v pi'); test \"\${actual_pi}\" = \"\${expected_pi}\" || { printf 'expected pi at %s, got %s\\n' \"\${expected_pi}\" \"\${actual_pi}\" >&2; exit 1; }; pi_version=\$(\"\$HOME/.local/bin/mise\" exec -- pi --version 2>&1) || { status=\$?; printf 'pi --version failed (%s): %s\\n' \"\${status}\" \"\${pi_version}\" >&2; exit \"\${status}\"; }; test \"\${pi_version}\" = \"${expected_pi_version}\" || { printf 'expected pi %s, got %s\\n' \"${expected_pi_version}\" \"\${pi_version}\" >&2; exit 1; }"
 }
 
 # herdr_integrity_script builds the target-user probe that resolves the herdr
@@ -1261,6 +1395,7 @@ verify_all_user_tools() {
 run_bootstrap_target() {
   case "${BOOTSTRAP_TARGET}" in
     all)
+      install_base_packages
       install_mise
       install_git
       install_docker

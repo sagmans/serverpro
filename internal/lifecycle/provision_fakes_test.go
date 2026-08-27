@@ -9,7 +9,11 @@ import (
 	"github.com/sagmans/serverpro/internal/provider/tailscale"
 )
 
-const testAdminPasswordHash = "$6$rounds=100000$abcdefghijklmnop$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+const (
+	testAdminPasswordHash  = "$6$rounds=100000$abcdefghijklmnop$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	testCloudflareAPIToken = "test-secret-cloudflare-api-token"
+	testTailscaleAPIToken  = "test-secret-tailscale-api-token"
+)
 
 type fakeComputeProvider struct{}
 

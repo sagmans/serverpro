@@ -1,6 +1,6 @@
 # Web Sources for serverpro
 
-Date: 2026-08-11
+Date: 2026-08-27
 Scope: provider-agnostic serverpro references
 
 Prefer official provider/API docs. If guides conflict with API references, trust
@@ -149,16 +149,16 @@ https://tailscale.com/docs/reference/linux-dns
 https://tailscale.com/docs/reference/faq/dns-resolv-conf
 https://tailscale.com/kb/1337/acl-syntax
 https://pkgs.tailscale.com/stable/
-https://github.com/tailscale/tailscale/releases/tag/v1.102.2
+https://github.com/tailscale/tailscale/releases/tag/v1.102.3
 https://github.com/tailscale/tailscale/issues/20067
 ```
 
 Use: devices, keys, policy read, policy validate, policy update, and pinned
-first-boot/live-repair binaries. Reviewed 2026-08-10: stable release `1.102.2`;
+first-boot/live-repair binaries. Reviewed 2026-08-27: stable release `1.102.3`;
 amd64 tarball SHA-256
-`ad2cde12f8de95f7b93a1e0401e652291c603d42b9d60a33fb1741eb38ab04d8`;
+`36ddd9b51be57ffc2990cf76323cfa13643bfbb1b8a969f6183fa164741cdef5`;
 arm64 tarball SHA-256
-`2b64e9ade7e73034b5ec9e9bcd537f5ddd14ae3abb435e57e929e7486ae42660`.
+`a0fa1b154af8c61f862a2259f559f7396d96c0225f4a863eae2333e1546bbe25`.
 Serverpro supplies `GODEBUG=tlsmlkem=1` to the systemd service independently
 from the artifact build default. Recheck the stable release, checksums,
 advisory state, and binary build setting together when rotating this pin.
@@ -235,23 +235,48 @@ Use: ingress rule shape and service targets.
 https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
 https://pkg.cloudflare.com/index.html
 https://pkg.cloudflare.com/cloudflare-main.gpg
+https://pkg.cloudflare.com/cloudflared/dists/noble/main/binary-amd64/Packages
+https://pkg.cloudflare.com/cloudflared/dists/noble/main/binary-arm64/Packages
+https://github.com/cloudflare/cloudflared/releases/tag/2026.8.2
 ```
 
-Use: connector install source and apt trust root. Primary package-signing key
-fingerprint retrieved and verified 2026-07-23:
+Use: connector install source, Ubuntu 24.04 package floor `2026.8.2`, and apt
+trust root. Package indexes and release reviewed 2026-08-27. Primary
+package-signing key fingerprint retrieved and verified 2026-07-23:
 `CC94B39C77AE7342A68B89628A682D308D4E5E73`. Cloudflare announced a 2025 key
 rollover and removal of deprecated keys after 2026-04-30. On future rollover,
 verify the replacement primary fingerprint from the official endpoint before
 updating code; never trust a newly downloaded key merely because the package
 endpoint serves it.
 
-### Ubuntu security
+### Ubuntu 24.04 support and package floors
 
 ```text
 https://documentation.ubuntu.com/server/how-to/security/
+https://manpages.debian.org/bookworm/dpkg/dpkg-query.1.en.html
+https://packages.ubuntu.com/noble-updates/ca-certificates
+https://packages.ubuntu.com/noble-updates/curl
+https://packages.ubuntu.com/noble-updates/gnupg
+https://packages.ubuntu.com/noble/ufw
+https://packages.ubuntu.com/noble-updates/apparmor
+https://packages.ubuntu.com/noble/unattended-upgrades
+https://packages.ubuntu.com/noble-updates/jq
+https://packages.ubuntu.com/noble-updates/git
+https://packages.ubuntu.com/noble-updates/openssh-client
+https://packages.ubuntu.com/noble/htop
 ```
 
-Use: host hardening baseline.
+Use: Ubuntu 24.04 LTS (`noble`) managed-host support, host hardening, and direct
+package minimums. Reviewed 2026-08-27 for amd64 and arm64: `ca-certificates`
+`20260601~24.04.1`, `curl` `8.5.0-2ubuntu10.13`, `gnupg`
+`2.4.4-2ubuntu17.4`, `ufw` `0.36.2-6`, `apparmor`
+`4.0.1really4.0.1-0ubuntu0.24.04.7`, `unattended-upgrades`
+`2.9.1+nmu4ubuntu1`, `jq` `1.7.1-3ubuntu0.24.04.2`, `git`
+`1:2.43.0-1ubuntu7.3`, `openssh-client` `1:9.6p1-3ubuntu13.18`, and `htop`
+`3.3.0-4build1`. These are reviewed floors; signed newer candidates remain
+valid and must not be downgraded. `dpkg-query -W` can retain version data for a
+removed package in `config-files` state, so package-floor checks require
+`${db:Status-Status}` to be exactly `installed` before trusting `${Version}`.
 
 ### UFW
 
@@ -346,10 +371,17 @@ Use: provider DNS reference; DNS remains app/operator-owned.
 ```text
 https://docs.docker.com/engine/install/ubuntu/
 https://download.docker.com/linux/ubuntu/gpg
+https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/amd64/
+https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/arm64/
 ```
 
-Use: optional server tool bootstrap. Docker's apt signing key is pinned to
-fingerprint `9DC858229FC7DD38854AE2D88D81803C0EBFCD88`.
+Use: managed Docker bootstrap. Docker's apt signing key is pinned to fingerprint
+`9DC858229FC7DD38854AE2D88D81803C0EBFCD88`. Reviewed 2026-08-27 floors for
+Ubuntu 24.04 amd64/arm64: Docker Engine and CLI
+`5:29.7.2-1~ubuntu.24.04~noble`, containerd.io
+`2.3.3-1~ubuntu.24.04~noble`, Buildx
+`0.36.1-1~ubuntu.24.04~noble`, and Compose
+`5.5.0-1~ubuntu.24.04~noble`.
 
 ### Docker Linux postinstall
 
@@ -366,17 +398,16 @@ https://mise.jdx.dev/installing-mise.html
 https://mise.jdx.dev/cli/install.html
 https://mise.jdx.dev/cli/unuse.html
 https://mise.jdx.dev/dev-tools/backends/github.html
-https://github.com/jdx/mise/releases/tag/v2026.8.3
-https://api.github.com/repos/jdx/mise/releases/tags/v2026.8.3
+https://github.com/jdx/mise/releases/tag/v2026.8.14
+https://api.github.com/repos/jdx/mise/releases/tags/v2026.8.14
 ```
 
 Use: mise prerequisite, scoped managed-tool installation, legacy managed-tool
-removal, and pinned minimum version `2026.8.3`. Pinned release artifact
+removal, and reviewed minimum version `2026.8.14`. Pinned release artifact
 SHA-256 values:
 
-- Linux x64: `8aaf21cc4b36681e90a96e9cdf13e5d7511e9773733f741b1a5f7756ba53b5fc`
-- Linux arm64: `8d0c6142607d814279de0e06f53c9e896b5d267bbced9ee6e2d9e1547fccca8f`
-- Linux armv7: `0b9f93b634e01c37b982e687915749c01265b9a084ce115e6a2b1b9c95c4e9d3`
+- Linux x64: `64d5f34aeb7a4e0e327dc1c9be66cd8162e14899a47b11901154a100285a3d61`
+- Linux arm64: `940639580227bd838e3b3ea5b2084ea397399b0db162c2e4dd90b5730850e48e`
 
 ### mise bootstrap
 
@@ -391,34 +422,36 @@ scoped managed-tool installs through `mise install`.
 ### Node.js
 
 ```text
-https://nodejs.org/en/blog/release/v24.19.0
+https://nodejs.org/en/blog/release/v24.20.0
+https://nodejs.org/en/about/previous-releases
 https://nodejs.org/en/blog/vulnerability/july-2026-security-releases/
 ```
 
-Use: pinned Node `24.19.0` LTS runtime and bundled npm `11.17.0`; the release
-stays on the existing major line.
+Use: pinned Node `24.20.0` LTS runtime and bundled npm `11.19.0`; reviewed
+2026-08-27 on the supported Node 24 LTS line.
 
 ### uv
 
 ```text
-https://github.com/astral-sh/uv/releases/tag/0.12.3
+https://github.com/astral-sh/uv/releases/tag/0.12.6
 https://docs.astral.sh/uv/getting-started/installation/
 ```
 
-Use: pinned uv `0.12.3` through mise's explicit `aqua:astral-sh/uv` backend.
+Use: pinned uv `0.12.6` through mise's explicit `aqua:astral-sh/uv` backend;
+reviewed 2026-08-27.
 
 ### Rust and rustup
 
 ```text
-https://blog.rust-lang.org/2026/07/16/Rust-1.97.1/
+https://blog.rust-lang.org/2026/08/27/Rust-1.98.0/
 https://doc.rust-lang.org/stable/releases.html
 https://mise.jdx.dev/lang/rust.html
 https://rust-lang.github.io/rustup/security.html
 ```
 
-Use: pinned Rust `1.97.1` through mise's `core:rust` backend and rustup default
-profile. Reviewed 2026-07-31; Rust `1.97.1` fixes an LLVM miscompilation. rustup
-uses HTTPS for downloads but does not yet enforce download signatures.
+Use: pinned Rust `1.98.0` through mise's `core:rust` backend and rustup default
+profile. Reviewed 2026-08-27. rustup uses HTTPS for downloads but does not yet
+enforce download signatures.
 
 ### mise npm backend
 
@@ -427,51 +460,54 @@ https://mise.jdx.dev/dev-tools/backends/npm.html
 ```
 
 Use: reference for npm-backed mise tools. serverpro does NOT use the `npm:`
-backend; it installs Pi `0.84.1` via `npm install -g` under mise-managed Node
-`24.19.0` with lifecycle-script suppression
+backend; it installs Pi `0.84.3` via `npm install -g` under mise-managed Node
+`24.20.0` with lifecycle-script suppression
 (`npm_config_ignore_scripts=true`).
 
 ### Pi quickstart
 
 ```text
 https://pi.dev/docs/latest/quickstart
+https://www.npmjs.com/package/@earendil-works/pi-coding-agent/v/0.84.3
 ```
 
-Use: optional pinned Pi `0.84.1` bootstrap; authentication remains operator-owned.
+Use: optional pinned Pi `0.84.3` bootstrap; reviewed 2026-08-27.
+Authentication remains operator-owned.
 
 ### tmux
 
 ```text
-https://github.com/tmux/tmux/releases
+https://github.com/tmux/tmux/releases/tag/3.7c
 https://github.com/tmux/tmux/wiki/Installing
 ```
 
-Use: pinned tmux `3.7b` build/install reference.
+Use: pinned tmux `3.7c` build/install reference; reviewed 2026-08-27.
 
 ### Herdr
 
 ```text
 https://herdr.dev/docs/install/
 https://herdr.dev/docs/integrations/
-https://github.com/herdrdev/herdr/releases/tag/v0.8.0
-https://api.github.com/repos/herdrdev/herdr/releases/tags/v0.8.0
+https://github.com/herdrdev/herdr/releases/tag/v0.8.2
+https://api.github.com/repos/herdrdev/herdr/releases/tags/v0.8.2
 ```
 
-Use: managed Herdr `0.8.0` installation through mise's explicit GitHub backend,
-package-manager update ownership, and target-user Pi integration status. Pinned
-release SHA-256 values:
+Use: managed Herdr `0.8.2` installation through mise's explicit GitHub backend,
+package-manager update ownership, and target-user Pi integration status.
+Reviewed 2026-08-27. Pinned release SHA-256 values:
 
-- Linux x64: `b872ea7e40fa2cb17e857ac9b62b1bf26db7b403c622f5d2f3f5b35f6e9acd28`
-- Linux arm64: `f647ac66468d9efbc642fe534fb284468f0aea60641606fc008dfc0d82a3ca87`
+- Linux x64: `976150a14d490c94b243ea2e1a7eb2dfb67f12e36b182db90936f6728e6aecf4`
+- Linux arm64: `f55610658e1c2e0d2aaef730b4b2ab885f7f8ba00285ab372bfb14f2e3d5b40d`
 
 ### GitHub CLI
 
 ```text
 https://cli.github.com/manual/
-https://github.com/cli/cli/releases
+https://github.com/cli/cli/releases/tag/v2.98.0
 ```
 
-Use: pinned `gh` `2.97.0` install reference; authentication remains operator-owned.
+Use: pinned `gh` `2.98.0` install reference; reviewed 2026-08-27.
+Authentication remains operator-owned.
 
 ### ripgrep
 
@@ -484,38 +520,38 @@ Use: pinned `rg` `15.2.0` tool reference.
 ### fd
 
 ```text
-https://github.com/sharkdp/fd/releases
+https://github.com/sharkdp/fd/releases/tag/v10.5.0
 ```
 
-Use: pinned `fd` `10.4.2` tool reference.
+Use: pinned `fd` `10.5.0` tool reference; reviewed 2026-08-27.
 
 ### ast-grep
 
 ```text
 https://ast-grep.github.io/
-https://github.com/ast-grep/ast-grep/releases/tag/0.45.1
-https://api.github.com/repos/ast-grep/ast-grep/releases/tags/0.45.1
+https://github.com/ast-grep/ast-grep/releases/tag/0.45.2
+https://api.github.com/repos/ast-grep/ast-grep/releases/tags/0.45.2
 ```
 
-Use: pinned ast-grep `0.45.1` through mise's GitHub backend. Pinned release
-SHA-256 values:
+Use: pinned ast-grep `0.45.2` through mise's GitHub backend; reviewed
+2026-08-27. Pinned release SHA-256 values:
 
-- Linux x64: `76fb6555be6734fb5057dba8d2fb756430f374bb9e1af694cf1ce00e13238d63`
-- Linux arm64: `9ee7ec49aada3dc05135d21977af089a33fc3154ada25bab102daca90b5098f2`
+- Linux x64: `67aff72dd2994bf152fcc3a8a09cf93b13193abe59f39393095167c729af2015`
+- Linux arm64: `e67ee2f5928b4d77a472114edf6e227d90fefe22fa47e7a78db187c55d206564`
 
 ### sem
 
 ```text
 https://github.com/Ataraxy-Labs/sem
-https://github.com/Ataraxy-Labs/sem/releases/tag/v0.21.0
-https://api.github.com/repos/Ataraxy-Labs/sem/releases/tags/v0.21.0
+https://github.com/Ataraxy-Labs/sem/releases/tag/v0.23.1
+https://api.github.com/repos/Ataraxy-Labs/sem/releases/tags/v0.23.1
 ```
 
-Use: pinned Ataraxy Labs sem `0.21.0` through mise's GitHub backend. Pinned
-release SHA-256 values:
+Use: pinned Ataraxy Labs sem `0.23.1` through mise's GitHub backend; reviewed
+2026-08-27. Pinned release SHA-256 values:
 
-- Linux x64: `4a06f019552add37b4b0693309daaf529eae7f291217d20c291294c790b16b4b`
-- Linux arm64: `0480663055d3d7c386dabee6e57766205984ac151bd691540bde0b3be64af27b`
+- Linux x64: `c876a8a444415d20f3215136a1cfdf4495b835745dcefe80a6f9dd94ce5e3189`
+- Linux arm64: `23a7d508960583d10765423ffc053070b7cc216f25257e923ab7fa4b2625f480`
 
 ### inspect
 
@@ -536,11 +572,10 @@ Pinned binary SHA-256 values:
 
 ```text
 https://htop.dev/
-https://packages.ubuntu.com/search?keywords=htop
-https://packages.debian.org/search?keywords=htop
+https://packages.ubuntu.com/noble/htop
 ```
 
-Use: htop availability and apt package path reference.
+Use: htop `3.3.0-4build1` Ubuntu 24.04 package floor; reviewed 2026-08-27.
 
 ### Twelve-Factor config
 

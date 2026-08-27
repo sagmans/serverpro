@@ -5,6 +5,16 @@ resource-first and provider-neutral. A namespace is the top-level serverpro
 resource group; server credentials are scoped to one server inside that
 namespace.
 
+## Supported runtime
+
+The supported controller is macOS 27 arm64. Managed hosts must be Ubuntu 24.04
+LTS (`noble`) on amd64 or arm64. Live create refetches the selected location's
+catalog and rejects unsupported images before provider mutation. Bootstrap,
+Tailscale repair, and Cloudflare Tunnel installation validate the actual host
+before managed mutation; cloud-init repeats the check as defense in depth.
+Provider image IDs differ, and an arbitrary explicit `--image` value does not
+widen support. `INSTALLATION.md` owns the full tool and package version matrix.
+
 ## Global flags
 
 ```text
@@ -230,8 +240,9 @@ serverpro server create webapp \
 ```
 
 Create requires explicit provider, location, size, and image values. Use
-`serverpro catalog ...` first to select provider-supported values. During live
-create, every externally visible policy, tunnel, auth-key, compute, and device
+`serverpro catalog ...` first to select a supported Ubuntu 24.04 image. Live
+create verifies that exact image against the current selected-location catalog
+before the first provider mutation. During live create, every externally visible policy, tunnel, auth-key, compute, and device
 mutation is checkpointed. A failed create reports its lifecycle phase and known
 non-secret resource IDs; rerun create to resume from durable checkpoints or use
 `server delete` to clean tracked resources, including access policies recorded
@@ -301,9 +312,10 @@ SERVERPRO_SERVER_PROVIDER_TOKEN='provider-token' \
   serverpro provider doctor digitalocean --non-interactive
 ```
 
-The Vultr adapter uses numeric OS IDs for `--image` (for example, the value
-shown by `serverpro catalog images -p vultr`). The DigitalOcean adapter uses
-image slugs for `--image` (for example, `ubuntu-24-04-x64`). The token is used
+The Vultr adapter uses numeric OS IDs for `--image`; choose the current Ubuntu
+24.04 entry shown by `serverpro catalog images -p vultr`. The DigitalOcean
+adapter uses image slugs such as `ubuntu-24-04-x64` or its arm64 counterpart.
+The token is used
 for that command only and is never stored globally.
 
 ### Creating a Vultr server
@@ -448,16 +460,17 @@ them for doctor/bootstrap when needed.
 Status includes provider, catalog shape, power, public IP, Tailscale readiness,
 SSH readiness, and ingress summary. Doctor reuses one compute, Tailscale, and
 Cloudflare snapshot per run and sends read-only host checks in one remote batch.
-That baseline checks exact managed pins, the Tailscale client and running daemon,
-and updates visible in the existing apt cache; it does not refresh package
-metadata. If sudo authentication requires a prompt, only remote inventory/checks
+That baseline first checks the actual managed-host OS, codename, and architecture,
+then checks exact managed pins, the Tailscale client and running daemon, and
+updates visible in the existing apt cache; it does not refresh package metadata.
+A platform failure disables every requested `--fix` action. If sudo authentication requires a prompt, only remote inventory/checks
 rerun; provider and local results remain from the original report.
 `serverpro server doctor NAME --fix` refreshes package repositories, upgrades
 serverpro-managed apt packages, repairs exact pins, and checksum-verifies a
 stale Tailscale release. Tailscale daemon restart is delayed until the updating
-SSH command returns, then doctor waits and rechecks it. Cloudflared remains
-conditional ingress infrastructure and is not upgraded by generic host-tool
-repair. Bootstrap reruns managed host-tool setup through Tailscale SSH with
+SSH command returns, then doctor waits and rechecks it. When ingress is enabled, doctor verifies cloudflared is active and at or above
+its reviewed `2026.8.2` package floor. Cloudflared remains conditional ingress
+infrastructure and is not upgraded by generic host-tool repair. Bootstrap reruns managed host-tool setup through Tailscale SSH with
 password-required sudo. The default `all` target
 installs the full managed toolset; run `serverpro server bootstrap --help` for
 the canonical list and pinned versions. Focused targets stay `git`, `docker`,
@@ -472,21 +485,25 @@ boundary, so enable the `pi` or `all` target only where that is intended.
 Pi is installed via `npm install -g` under the mise-managed Node; npm
 dependencies resolve at install time and are not checksum-vendored, which is a
 residual supply-chain risk to weigh before enabling the `pi` target. The `all`
-target also installs uv `0.12.3` through mise's explicit `aqua:astral-sh/uv`
-backend and Rust `1.97.1` through `core:rust` with the default rustc, Cargo,
-rustfmt, Clippy, and docs profile. Doctor checks those exact versions and all
-Rust default-profile components. It also installs gh `2.97.0`, rg `15.2.0`, fd
-`10.4.2`, ast-grep `0.45.1`, sem `0.21.0`, and inspect `0.1.1`. ast-grep, sem,
-and inspect use checksum-pinned GitHub release assets; inspect's bare binary
+target also installs Node.js `24.20.0` LTS with bundled npm `11.19.0`, Pi
+`0.84.3`, uv `0.12.6` through mise's explicit `aqua:astral-sh/uv` backend, and
+Rust `1.98.0` through `core:rust` with the default rustc, Cargo, rustfmt, Clippy,
+and docs profile. Doctor checks those exact versions and all Rust
+default-profile components. It also installs tmux `3.7c`, gh `2.98.0`, rg
+`15.2.0`, fd `10.5.0`, ast-grep `0.45.2`, sem `0.23.1`, and inspect `0.1.1`.
+ast-grep, sem, and inspect use checksum-pinned GitHub release assets; inspect's bare binary
 digest is checked before execution. On existing hosts, `all` removes the active
 deprecated `sg` mise key before managing `ast-grep`; mise prunes the old install
 when unused.
-The same target installs exact-version Herdr through mise's explicit GitHub
-backend, verifies the installed Linux release
+The same target installs Herdr `0.8.2` through mise's explicit GitHub backend,
+verifies the installed Linux release
 binary against its architecture-specific SHA-256 digest, and runs
 `herdr integration install pi` as the admin user; the
-x86_64/arm64-only restriction from `INSTALLATION.md` is enforced before any host
-change. Doctor
+Ubuntu 24.04 and x86_64/arm64 restriction from `INSTALLATION.md` is enforced
+before any host change. Directly installed apt packages use reviewed minimums:
+bootstrap checks candidates before package scripts run, accepts newer signed
+security updates, never downgrades them, and doctor reports both below-floor
+packages and cached newer candidates. Doctor
 requires the exact Herdr version, digest, and current Pi integration. Serverpro
 does not use Herdr's self-updater and never starts, stops, or restarts running
 Herdr sessions; rerun managed bootstrap for package updates, then restart sessions

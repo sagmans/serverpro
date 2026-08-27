@@ -2,25 +2,32 @@ package doctor
 
 import (
 	"context"
+	"strings"
 
 	"github.com/sagmans/serverpro/internal/bootstraptools"
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/hostplatform"
 	"github.com/sagmans/serverpro/internal/remote"
 	"github.com/sagmans/serverpro/internal/shell"
 	"github.com/sagmans/serverpro/internal/tailscaletools"
+	"github.com/sagmans/serverpro/internal/tunnel"
 )
+
+const supportedPlatformCheckName = "supported platform"
 
 // remoteCheckSpecification keeps batch authority inseparable from the check
 // that consumes it, preventing new diagnostics from bypassing either path.
 type remoteCheckSpecification struct {
-	readCommands []string
-	liveCommands []string
-	run          func(context.Context, remote.Runner, string, string, Options) []Result
+	readCommands         []string
+	liveCommands         []string
+	blocksFixesOnFailure bool
+	run                  func(context.Context, remote.Runner, string, string, Options) []Result
 }
 
 func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
 	user := cfg.Admin.Username
 	specifications := []remoteCheckSpecification{
+		remoteSupportedPlatformSpecification(),
 		remoteSudoSpecification(user),
 		remoteCloudInitSpecification(cloudInitStatusLogPath(cfg)),
 		remoteFixableSpecification("admin user", "id "+shell.Quote(user), ""),
@@ -70,9 +77,27 @@ func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
 		specifications = append(specifications, remoteGitIdentitySpecifications(cfg)...)
 	}
 	if cfg.Network.Ingress != "none" {
-		specifications = append(specifications, remoteFixableSpecification("cloudflared", "systemctl is-active cloudflared", ""))
+		specifications = append(specifications, remoteFixableSpecification("cloudflared", tunnel.CheckCommand(), ""))
 	}
 	return specifications
+}
+
+func remoteSupportedPlatformCommand() string {
+	expectedArchitectures := shell.Quote(strings.Join(hostplatform.ManagedHostKernelArchitectures(), " "))
+	return "set -eu; test -r /etc/os-release; . /etc/os-release; actual_codename=${VERSION_CODENAME:-${UBUNTU_CODENAME:-}}; allowed_architectures=" + expectedArchitectures + "; " +
+		"test \"${ID:-}\" = " + shell.Quote(hostplatform.ManagedHostOS) + "; " +
+		"test \"${VERSION_ID:-}\" = " + shell.Quote(hostplatform.ManagedHostVersion) + "; " +
+		"test \"${actual_codename}\" = " + shell.Quote(hostplatform.ManagedHostCodename) + "; " +
+		"case \" ${allowed_architectures} \" in *\" $(uname -m) \"*) ;; *) exit 1 ;; esac; " +
+		"printf '%s %s (%s) %s\\n' \"${ID}\" \"${VERSION_ID}\" \"${actual_codename}\" \"$(uname -m)\""
+}
+
+func remoteSupportedPlatformSpecification() remoteCheckSpecification {
+	specification := remoteFixableSpecification(supportedPlatformCheckName, remoteSupportedPlatformCommand(), "")
+	// Repairs assume Ubuntu's package, service, and filesystem contracts; one
+	// failed authority check must therefore disable every later mutation.
+	specification.blocksFixesOnFailure = true
+	return specification
 }
 
 func remoteFixableSpecification(name, readCommand, liveCommand string) remoteCheckSpecification {

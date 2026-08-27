@@ -417,6 +417,137 @@ func TestShellValidatePackageToken(t *testing.T) {
 	})
 }
 
+func TestShellValidatePackageVersionToken(t *testing.T) {
+	assertShellValidator(t, `validate_package_version_token NAME "$TESTVAL"`, []validatorCase{
+		{"ubuntu", "8.5.0-2ubuntu10.13", false},
+		{"epoch", "1:2.43.0-1ubuntu7.3", false},
+		{"tilde", "5:29.7.2-1~ubuntu.24.04~noble", false},
+		{"plus", "2.9.1+nmu4ubuntu1", false},
+		{"empty", "", true},
+		{"space", "1.0 bad", true},
+		{"semicolon", "1.0;id", true},
+		{"dollar", "1.0$x", true},
+		{"pipe", "1.0|bad", true},
+	})
+}
+
+func TestShellValidateSupportedHostValues(t *testing.T) {
+	for _, tc := range []struct {
+		name, id, version, codename, arch string
+		wantOK                            bool
+	}{
+		{name: "ubuntu-amd64", id: "ubuntu", version: "24.04", codename: "noble", arch: "x86_64", wantOK: true},
+		{name: "ubuntu-arm64", id: "ubuntu", version: "24.04", codename: "noble", arch: "aarch64", wantOK: true},
+		{name: "old-ubuntu", id: "ubuntu", version: "22.04", codename: "jammy", arch: "x86_64"},
+		{name: "new-ubuntu", id: "ubuntu", version: "26.04", codename: "resolute", arch: "x86_64"},
+		{name: "wrong-codename", id: "ubuntu", version: "24.04", codename: "jammy", arch: "x86_64"},
+		{name: "missing-codename", id: "ubuntu", version: "24.04", arch: "x86_64"},
+		{name: "debian", id: "debian", version: "12", codename: "bookworm", arch: "x86_64"},
+		{name: "unsupported-arch", id: "ubuntu", version: "24.04", codename: "noble", arch: "armv7l"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := append(manifestEnv(), "TEST_ID="+tc.id, "TEST_VERSION="+tc.version, "TEST_CODENAME="+tc.codename, "TEST_ARCH="+tc.arch)
+			code, _, _ := runHelper(t, `validate_supported_host_values "$TEST_ID" "$TEST_VERSION" "$TEST_CODENAME" "$TEST_ARCH"`, env...)
+			if tc.wantOK && code != 0 {
+				t.Fatalf("supported host rejected with exit %d", code)
+			}
+			if !tc.wantOK && code == 0 {
+				t.Fatal("unsupported host accepted")
+			}
+		})
+	}
+}
+
+func TestShellVerifyPackageCandidatesBeforeInstall(t *testing.T) {
+	for _, tc := range []struct {
+		name, installed, installedState, installedStatus, candidate string
+		wantOK, wantInstall                                         bool
+	}{
+		{name: "installed-newer", installed: "3.0", installedState: "installed", installedStatus: "0", candidate: "1.0", wantOK: true, wantInstall: true},
+		{name: "config-files-newer-candidate-below-floor", installed: "3.0", installedState: "config-files", installedStatus: "0", candidate: "1.0"},
+		{name: "missing-candidate-at-floor", installedStatus: "1", candidate: "2.0", wantOK: true, wantInstall: true},
+		{name: "missing-candidate-below-floor", installedStatus: "1", candidate: "1.0"},
+		{name: "no-candidate", installedStatus: "1", candidate: "(none)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			binDir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(binDir, "dpkg-query"), []byte("#!/bin/sh\nif [ -f \"$INSTALL_MARKER\" ] && [ \"$INSTALLED_STATE\" = installed ]; then state=installed; version=$INSTALLED_VERSION; elif [ -f \"$INSTALL_MARKER\" ]; then state=installed; version=$CANDIDATE_VERSION; else [ \"$INSTALLED_STATUS\" = 0 ] || exit \"$INSTALLED_STATUS\"; state=$INSTALLED_STATE; version=$INSTALLED_VERSION; fi\ncase \"$*\" in *db:Status-Status*) printf '%s|%s' \"$state\" \"$version\" ;; *) printf '%s' \"$version\" ;; esac\n"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(binDir, "dpkg"), []byte("#!/bin/sh\ncase \"${2:-}\" in 2.0|3.0) exit 0 ;; *) exit 1 ;; esac\n"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(binDir, "apt-cache"), []byte("#!/bin/sh\nprintf '  Candidate: %s\\n' \"$CANDIDATE_VERSION\"\n"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			installMarker := filepath.Join(t.TempDir(), "installed")
+			if err := os.WriteFile(filepath.Join(binDir, "apt-get"), []byte("#!/bin/sh\nif [ \"${1:-}\" = update ]; then exit 0; fi\nprintf ran >\"$INSTALL_MARKER\"\n"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			code, _, _ := runHelper(t, `apt_install test-package`,
+				"SERVERPRO_BOOTSTRAP_PACKAGE_BASELINES=test-package|2.0",
+				"PATH="+binDir+":"+os.Getenv("PATH"),
+				"INSTALLED_VERSION="+tc.installed,
+				"INSTALLED_STATE="+tc.installedState,
+				"INSTALLED_STATUS="+tc.installedStatus,
+				"CANDIDATE_VERSION="+tc.candidate,
+				"INSTALL_MARKER="+installMarker)
+			if tc.wantOK && code != 0 {
+				t.Fatalf("safe candidate rejected with exit %d", code)
+			}
+			if !tc.wantOK && code == 0 {
+				t.Fatal("unsafe candidate accepted")
+			}
+			_, err := os.Stat(installMarker)
+			if (err == nil) != tc.wantInstall {
+				t.Fatalf("install ran = %v, want %v", err == nil, tc.wantInstall)
+			}
+		})
+	}
+}
+
+func TestShellVerifyPackageMinimums(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		installed     string
+		packageState  string
+		queryStatus   string
+		compareStatus string
+		wantOK        bool
+	}{
+		{name: "equal", installed: "1:2.43.0-1ubuntu7.3", packageState: "installed", queryStatus: "0", compareStatus: "0", wantOK: true},
+		{name: "newer", installed: "1:2.43.0-1ubuntu7.4", packageState: "installed", queryStatus: "0", compareStatus: "0", wantOK: true},
+		{name: "config-files-newer", installed: "1:2.43.0-1ubuntu7.4", packageState: "config-files", queryStatus: "0", compareStatus: "0"},
+		{name: "older", installed: "1:2.43.0-1ubuntu7.2", packageState: "installed", queryStatus: "0", compareStatus: "1"},
+		{name: "missing", queryStatus: "1", compareStatus: "1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			binDir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(binDir, "dpkg-query"), []byte("#!/bin/sh\n[ \"$QUERY_STATUS\" = 0 ] || exit \"$QUERY_STATUS\"\ncase \"$*\" in *db:Status-Status*) printf '%s|%s' \"$PACKAGE_STATE\" \"$INSTALLED_VERSION\" ;; *) printf '%s' \"$INSTALLED_VERSION\" ;; esac\n"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(binDir, "dpkg"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >\"$DPKG_LOG\"\nexit \"$COMPARE_STATUS\"\n"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			logPath := filepath.Join(t.TempDir(), "dpkg.log")
+			code, _, _ := runHelper(t, `verify_package_minimums apt:git`,
+				"SERVERPRO_BOOTSTRAP_PACKAGE_BASELINES=git|1:2.43.0-1ubuntu7.3",
+				"PATH="+binDir+":"+os.Getenv("PATH"),
+				"INSTALLED_VERSION="+tc.installed,
+				"PACKAGE_STATE="+tc.packageState,
+				"QUERY_STATUS="+tc.queryStatus,
+				"COMPARE_STATUS="+tc.compareStatus,
+				"DPKG_LOG="+logPath)
+			if tc.wantOK && code != 0 {
+				t.Fatalf("valid package floor rejected with exit %d", code)
+			}
+			if !tc.wantOK && code == 0 {
+				t.Fatal("invalid package floor accepted")
+			}
+		})
+	}
+}
+
 func TestShellHerdrSHA256ForArch(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -450,9 +581,10 @@ func TestShellHerdrSHA256ForArch(t *testing.T) {
 }
 
 func TestShellReadPackageEnvParsesTokens(t *testing.T) {
+	env := append(manifestEnv(), "SERVERPRO_BOOTSTRAP_GIT_PACKAGES=apt:git apt:openssh-client")
 	code, stdout, stderr := runHelper(t,
 		`declare -a pkgs; read_package_env SERVERPRO_BOOTSTRAP_GIT_PACKAGES pkgs; printf '%s\n' "${#pkgs[@]}" "${pkgs[0]}" "${pkgs[1]}"`,
-		"SERVERPRO_BOOTSTRAP_GIT_PACKAGES=apt:git apt:openssh-client")
+		env...)
 	if code != 0 {
 		t.Fatalf("read_package_env failed: exit %d, stderr: %s", code, stderr)
 	}
@@ -469,9 +601,10 @@ func TestShellReadPackageEnvParsesTokens(t *testing.T) {
 }
 
 func TestShellReadPackageEnvRejectsEmpty(t *testing.T) {
+	env := append(manifestEnv(), "SERVERPRO_BOOTSTRAP_GIT_PACKAGES=   ")
 	code, _, _ := runHelper(t,
 		`declare -a pkgs; read_package_env SERVERPRO_BOOTSTRAP_GIT_PACKAGES pkgs`,
-		"SERVERPRO_BOOTSTRAP_GIT_PACKAGES=   ")
+		env...)
 	if code == 0 {
 		t.Fatal("read_package_env accepted whitespace-only package list")
 	}
@@ -481,9 +614,10 @@ func TestShellReadPackageEnvRejectsEmpty(t *testing.T) {
 // array is named `out` must not trigger a bash circular name reference. Before
 // the fix the nameref parameter itself was `out`, so this aborted under set -u.
 func TestShellReadPackageEnvNamerefCollision(t *testing.T) {
+	env := append(manifestEnv(), "SERVERPRO_BOOTSTRAP_GIT_PACKAGES=apt:git apt:curl")
 	code, stdout, stderr := runHelper(t,
 		`declare -a out; read_package_env SERVERPRO_BOOTSTRAP_GIT_PACKAGES out; printf '%s\n' "${#out[@]}" "${out[0]}"`,
-		"SERVERPRO_BOOTSTRAP_GIT_PACKAGES=apt:git apt:curl")
+		env...)
 	if code != 0 {
 		t.Fatalf("nameref collision regression: exit %d, stderr: %s", code, stderr)
 	}
@@ -627,6 +761,53 @@ func fakeMiseHome(t *testing.T, version string) (home, binDir string) {
 	return home, binDir
 }
 
+func TestShellTargetNodeReadyRejectsWrongNPMVersion(t *testing.T) {
+	for _, tc := range []struct {
+		name, npmVersion string
+		wantOK           bool
+	}{
+		{name: "exact-npm", npmVersion: NPMVersion, wantOK: true},
+		{name: "wrong-npm", npmVersion: "0.0.0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			miseBin := filepath.Join(home, ".local", "bin")
+			toolBin := filepath.Join(home, "tools")
+			for _, dir := range []string{miseBin, toolBin} {
+				if err := os.MkdirAll(dir, 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(miseBin, "mise"), []byte("#!/bin/sh\nshift\n[ \"${1:-}\" != -- ] || shift\nexec \"$@\"\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(toolBin, "node"), []byte("#!/bin/sh\nprintf 'v%s\\n' \"$FAKE_NODE_VERSION\"\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(toolBin, "npm"), []byte("#!/bin/sh\nprintf '%s\\n' \"$FAKE_NPM_VERSION\"\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			code, stdout, stderr := runHelper(t, `
+TARGET_USER=deploy
+run_as_target() { HOME="$FAKE_HOME" PATH="$FAKE_TOOL_BIN:$PATH" bash -c "$1"; }
+ready=0; target_node_ready >/dev/null || ready=$?
+verified=0; verify_node >/dev/null || verified=$?
+printf '%s %s' "$ready" "$verified"
+`, append(manifestEnv(), "FAKE_HOME="+home, "FAKE_TOOL_BIN="+toolBin, "FAKE_NODE_VERSION="+NodeVersion, "FAKE_NPM_VERSION="+tc.npmVersion)...)
+			if code != 0 {
+				t.Fatalf("node/npm harness failed: %d (stderr: %s)", code, stderr)
+			}
+			want := "1 1"
+			if tc.wantOK {
+				want = "0 0"
+			}
+			if stdout != want {
+				t.Fatalf("npm %q readiness/verification = %q, want %q", tc.npmVersion, stdout, want)
+			}
+		})
+	}
+}
+
 func TestShellTargetUVReadyVersionMatrix(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -761,10 +942,10 @@ func TestManagedMiseDoctorProbeMatrix(t *testing.T) {
 	scripts := map[string]string{
 		"mise":      "#!/bin/sh\nshift\n[ \"${1:-}\" != -- ] || shift\nexec \"$@\"\n",
 		"node":      "#!/bin/sh\nprintf 'v%s\\n' \"$FAKE_NODE_VERSION\"\n",
-		"npm":       "#!/bin/sh\nprintf '11.0.0\\n'\n",
+		"npm":       "#!/bin/sh\nprintf '" + NPMVersion + "\\n'\n",
 		"uv":        "#!/bin/sh\nprintf 'uv %s (fixture metadata)\\n' \"$FAKE_UV_VERSION\"\n",
 		"rustc":     "#!/bin/sh\nprintf 'rustc %s (fixture)\\n' \"$FAKE_RUST_VERSION\"\n",
-		"cargo":     "#!/bin/sh\nif [ \"${1:-}\" = clippy ]; then printf 'clippy 0.1.97\\n'; else printf 'cargo 1.97.1\\n'; fi\n",
+		"cargo":     "#!/bin/sh\nif [ \"${1:-}\" = clippy ]; then printf 'clippy 0.1.98\\n'; else printf 'cargo 1.98.0\\n'; fi\n",
 		"rustfmt":   "#!/bin/sh\nprintf 'rustfmt 1.8.0\\n'\n",
 		"rustup":    "#!/bin/sh\nprintf 'rust-docs-x86_64-unknown-linux-gnu (installed)\\n'\n",
 		"tmux":      "#!/bin/sh\nprintf 'tmux %s\\n' \"$FAKE_TMUX_VERSION\"\n",
@@ -856,7 +1037,7 @@ func TestShellVersionAtLeast(t *testing.T) {
 	}{
 		{"equal-minimum", MinimumMiseVersion, true},
 		{"release-date-suffix", MinimumMiseVersion + " (2026-08-03)", true},
-		{"newer-patch", "2026.8.4", true},
+		{"newer-patch", "2026.8.15", true},
 		{"newer-minor", "2026.9.1", true},
 		{"newer-year", "2027.1.1", true},
 		{"older-patch", "2026.7.17", false},
@@ -952,7 +1133,7 @@ func TestShellMiseCheckCommandVersionMatrix(t *testing.T) {
 // fetch_verified_mise_binary runs hermetically; tests override one stage to
 // exercise a specific failure gate.
 const fetchFixtureStubs = `
-bootstrap_min_mise_version() { printf '2026.8.3'; }
+bootstrap_min_mise_version() { printf '2026.8.14'; }
 mise_release_arch() { printf 'x64'; }
 bootstrap_sha256_env() { printf '%064d' 0; }
 mktemp() {
@@ -972,7 +1153,7 @@ curl() {
   done
   printf 'archive' >"$out"
 }
-sha256sum() { printf 'mise-v2026.8.3-linux-x64.tar.gz: OK\n'; }
+sha256sum() { printf 'mise-v2026.8.14-linux-x64.tar.gz: OK\n'; }
 tar() {
   mkdir -p "$TEST_TMP/download/mise/bin"
   printf 'binary' >"$TEST_TMP/download/mise/bin/mise"
@@ -1070,21 +1251,34 @@ func TestShellValidateBootstrapEnvRejectsUnsupportedHerdrArch(t *testing.T) {
 }
 
 func TestManagedPackageUpdatesCommandReportsSimulationState(t *testing.T) {
+	if command := managedPackageUpdatesCommand(); !strings.Contains(command, "export LC_ALL=C") {
+		t.Fatalf("managed package simulation must force stable apt output: %s", command)
+	}
 	binDir := t.TempDir()
 	fakeApt := filepath.Join(binDir, "apt-get")
 	if err := os.WriteFile(fakeApt, []byte("#!/bin/sh\nprintf '%s\\n' \"$FAKE_APT_OUTPUT\"\nexit \"$FAKE_APT_STATUS\"\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(binDir, "dpkg-query"), []byte("#!/bin/sh\ncase \"$*\" in *db:Status-Status*) printf '%s|%s' \"$FAKE_DPKG_STATE\" \"$FAKE_DPKG_VERSION\" ;; *) printf '%s' \"$FAKE_DPKG_VERSION\" ;; esac\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "dpkg"), []byte("#!/bin/sh\nexit \"$FAKE_DPKG_STATUS\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	cases := []struct {
-		name       string
-		output     string
-		status     string
-		wantErr    bool
-		wantOutput string
+		name         string
+		output       string
+		status       string
+		dpkgStatus   string
+		packageState string
+		wantErr      bool
+		wantOutput   string
 	}{
-		{name: "current", output: "0 upgraded, 0 newly installed", status: "0", wantOutput: "current"},
-		{name: "update-available", output: "Inst git [1:2.43.0] (1:2.44.0 stable)", status: "0", wantErr: true, wantOutput: "managed package updates available"},
-		{name: "simulation-fails", output: "package metadata unavailable", status: "100", wantErr: true, wantOutput: "package metadata unavailable"},
+		{name: "current", output: "0 upgraded, 0 newly installed", status: "0", dpkgStatus: "0", packageState: "installed", wantOutput: "current"},
+		{name: "update-available", output: "Inst git [1:2.43.0] (1:2.44.0 stable)", status: "0", dpkgStatus: "0", packageState: "installed", wantErr: true, wantOutput: "managed package updates available"},
+		{name: "config-files-is-missing", status: "0", dpkgStatus: "0", packageState: "config-files", wantErr: true, wantOutput: "managed package missing"},
+		{name: "below-baseline", status: "0", dpkgStatus: "1", packageState: "installed", wantErr: true, wantOutput: "managed package below baseline"},
+		{name: "simulation-fails", output: "package metadata unavailable", status: "100", dpkgStatus: "0", packageState: "installed", wantErr: true, wantOutput: "package metadata unavailable"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1093,6 +1287,9 @@ func TestManagedPackageUpdatesCommandReportsSimulationState(t *testing.T) {
 				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 				"FAKE_APT_OUTPUT="+tc.output,
 				"FAKE_APT_STATUS="+tc.status,
+				"FAKE_DPKG_VERSION=fixture-version",
+				"FAKE_DPKG_STATE="+tc.packageState,
+				"FAKE_DPKG_STATUS="+tc.dpkgStatus,
 			)
 			out, err := cmd.CombinedOutput()
 			if tc.wantErr && err == nil {

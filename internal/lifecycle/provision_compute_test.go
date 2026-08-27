@@ -26,7 +26,7 @@ func TestRunCreatesServerThroughComputeProviderAndWritesGenericState(t *testing.
 	cfg.Cloudflare.AccountID = "acc"
 	path := provisionStatePath(t)
 	provider := &recordingCompute{}
-	st, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, ComputeAccount: compute.Account{Name: "prod", Provider: "hetzner", Token: "h"}, Creds: credentials.Set{Tailscale: "ts-api", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: provider, Tailscale: &fakeTailscale{}, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
+	st, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, ComputeAccount: compute.Account{Name: "prod", Provider: "hetzner", Token: "h"}, Creds: credentials.Set{Tailscale: testTailscaleAPIToken, Cloudflare: testCloudflareAPIToken}, StatePath: path, Clients: Clients{Compute: provider, Tailscale: &fakeTailscale{}, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestRunCreatesServerThroughComputeProviderAndWritesGenericState(t *testing.
 	if !strings.Contains(provider.request.BootstrapData, "tskey-auth-created") || !strings.Contains(provider.request.BootstrapData, testAdminPasswordHash) {
 		t.Fatalf("bootstrap data missing secure access setup")
 	}
-	if strings.Contains(provider.request.BootstrapData, "ts-api") || strings.Contains(provider.request.BootstrapData, "cf") {
+	if strings.Contains(provider.request.BootstrapData, testTailscaleAPIToken) || strings.Contains(provider.request.BootstrapData, testCloudflareAPIToken) {
 		t.Fatalf("bootstrap data leaked provider token")
 	}
 	if provider.request.Account.Name != "prod" || provider.request.Account.Token != "h" {

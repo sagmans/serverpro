@@ -1,5 +1,16 @@
 package cli
 
+import (
+	"fmt"
+
+	"github.com/sagmans/serverpro/internal/hostplatform"
+)
+
+const (
+	managedHostImageLabel              = "Ubuntu"
+	managedHostArchitectureDescription = "x86/arm"
+)
+
 func computeLocationChoices() []choice {
 	return []choice{
 		{"fsn1", "Falkenstein, DE · eu-central · Falkenstein DC Park"},
@@ -33,11 +44,13 @@ func computeSizeChoices() []choice {
 }
 
 func computeImageChoices() []choice {
-	return []choice{
-		{"ubuntu-24.04", "Ubuntu 24.04 LTS · current safe default · x86/arm"},
-		{"ubuntu-26.04", "Ubuntu 26.04 · validate availability live before create · x86/arm"},
-		{"ubuntu-22.04", "Ubuntu 22.04 LTS · stable · x86/arm"},
-		{"debian-12", "Debian 12 · stable · x86/arm"},
-		{"fedora-44", "Fedora 44 · validate availability live before create · x86/arm"},
-	}
+	return []choice{{
+		Value: hostplatform.ManagedHostOS + "-" + hostplatform.ManagedHostVersion,
+		Description: fmt.Sprintf(
+			"%s %s LTS · supported managed host · %s",
+			managedHostImageLabel,
+			hostplatform.ManagedHostVersion,
+			managedHostArchitectureDescription,
+		),
+	}}
 }

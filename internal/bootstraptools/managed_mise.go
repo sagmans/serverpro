@@ -121,7 +121,7 @@ func managedMiseProbeCommand(tool managedMiseTool) string {
 	var probe string
 	switch tool.probe {
 	case managedMiseProbeNode:
-		probe = `node_version=$("$mise_bin" exec -- node --version); test "$node_version" = "v$expected_version" || { printf 'expected node %s, got %s\n' "$expected_version" "$node_version" >&2; exit 1; }; npm_version=$("$mise_bin" exec -- npm --version); printf '%s\n%s\n' "$node_version" "$npm_version"`
+		probe = `node_version=$("$mise_bin" exec -- node --version); test "$node_version" = "v$expected_version" || { printf 'expected node %s, got %s\n' "$expected_version" "$node_version" >&2; exit 1; }; npm_version=$("$mise_bin" exec -- npm --version); test "$npm_version" = "` + NPMVersion + `" || { printf 'expected npm ` + NPMVersion + `, got %s\n' "$npm_version" >&2; exit 1; }; printf '%s\n%s\n' "$node_version" "$npm_version"`
 	case managedMiseProbeUV:
 		probe = `uv_version=$("$mise_bin" exec -- uv --version); case "$uv_version" in "uv $expected_version"|"uv $expected_version "*) ;; *) printf 'expected uv %s, got %s\n' "$expected_version" "$uv_version" >&2; exit 1 ;; esac; printf '%s\n' "$uv_version"`
 	case managedMiseProbeRust:

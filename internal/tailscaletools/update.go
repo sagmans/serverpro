@@ -5,13 +5,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sagmans/serverpro/internal/hostplatform"
 	"github.com/sagmans/serverpro/internal/shell"
 )
 
 const (
-	Version      = "1.102.2"
-	AMD64SHA256  = "ad2cde12f8de95f7b93a1e0401e652291c603d42b9d60a33fb1741eb38ab04d8"
-	ARM64SHA256  = "2b64e9ade7e73034b5ec9e9bcd537f5ddd14ae3abb435e57e929e7486ae42660"
+	Version      = "1.102.3"
+	AMD64SHA256  = "36ddd9b51be57ffc2990cf76323cfa13643bfbb1b8a969f6183fa164741cdef5"
+	ARM64SHA256  = "a0fa1b154af8c61f862a2259f559f7396d96c0225f4a863eae2333e1546bbe25"
 	CheckName    = "tailscale " + Version
 	RestartGrace = 5 * time.Second
 	restartDelay = "2s"
@@ -26,6 +27,12 @@ func CheckCommand() string {
 
 func UpdateScript() string {
 	values := [][2]string{
+		{"SERVERPRO_TAILSCALE_HOST_OS", hostplatform.ManagedHostOS},
+		{"SERVERPRO_TAILSCALE_HOST_VERSION", hostplatform.ManagedHostVersion},
+		{"SERVERPRO_TAILSCALE_HOST_CODENAME", hostplatform.ManagedHostCodename},
+		{"SERVERPRO_TAILSCALE_HOST_ARCHITECTURES", strings.Join(hostplatform.ManagedHostKernelArchitectures(), " ")},
+		{"SERVERPRO_TAILSCALE_PACKAGE_BASELINES", hostplatform.PackageBaselineManifest(hostplatform.TailscalePrerequisitePackageBaselines())},
+		{"SERVERPRO_TAILSCALE_PACKAGES", strings.Join(hostplatform.PackageNames(hostplatform.TailscalePrerequisitePackageBaselines()), " ")},
 		{"SERVERPRO_TAILSCALE_VERSION", Version},
 		{"SERVERPRO_TAILSCALE_SHA256_AMD64", AMD64SHA256},
 		{"SERVERPRO_TAILSCALE_SHA256_ARM64", ARM64SHA256},
@@ -38,7 +45,13 @@ func UpdateScript() string {
 		b.WriteString(shell.Quote(value[1]))
 		b.WriteByte('\n')
 	}
-	b.WriteString("export SERVERPRO_TAILSCALE_VERSION SERVERPRO_TAILSCALE_SHA256_AMD64 SERVERPRO_TAILSCALE_SHA256_ARM64 SERVERPRO_TAILSCALE_RESTART_DELAY\n")
+	exports := make([]string, len(values))
+	for i, value := range values {
+		exports[i] = value[0]
+	}
+	b.WriteString("export ")
+	b.WriteString(strings.Join(exports, " "))
+	b.WriteByte('\n')
 	b.WriteString(updateScript)
 	return b.String()
 }

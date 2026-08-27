@@ -5,6 +5,9 @@ DEVELOPMENT.md is contributor workflow. User docs live in `README.md`,
 
 ## Toolchain
 
+- macOS 27 arm64 is the supported local controller/development runtime.
+- Ubuntu 24.04 LTS (`noble`) amd64/arm64 is the only supported managed-host
+  dogfood target.
 - Go 1.26.6 is the supported development, CI, and release toolchain.
 - `mise.toml` owns the exact Go version pin.
 - `make check` is the primary local and CI gate;
