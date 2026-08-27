@@ -44,6 +44,7 @@ func TestWrapperScriptDefaultsAndDelegation(t *testing.T) {
 	}
 	for _, want := range []string{
 		"DO NOT EDIT",
+		"host/package baselines in internal/hostplatform/platform.go instead",
 		`canonical=${script_dir}/../internal/bootstraptools/serverpro-bootstrap-tools.sh`,
 		`if [ ! -f "${canonical}" ]; then`,
 		`exec sh "${canonical}" "$@"`,
@@ -218,7 +219,7 @@ var installScriptRequiredMarkers = []string{
 	"bootstrap_package_set docker",
 	"bootstrap_package_set htop",
 	"mise --yes install ${mise_installs[*]}",
-	`mise_installs+=("node@${node_version}")`,
+	`force_mise_installs+=("node@${node_version}")`,
 	`target_managed_mise_tool_ready "${row}"`,
 	`mise_installs+=("${key}@${version}")`,
 	`force_mise_installs+=("${key}@${version}")`,

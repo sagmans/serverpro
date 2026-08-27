@@ -1253,10 +1253,13 @@ install_user_tools_for_target() {
       target_managed_mise_tool_ready "${row}" || mise_installs+=("gh@${version}")
       ;;
     node)
-      target_node_ready || mise_installs+=("node@${node_version}")
+      target_node_ready || force_mise_installs+=("node@${node_version}")
       ;;
     pi)
-      target_node_ready || mise_installs+=("node@${node_version}")
+      if ! target_node_ready; then
+        force_mise_installs+=("node@${node_version}")
+        install_pi=1
+      fi
       target_pi_ready "${node_version}" "${pi_version}" || install_pi=1
       ;;
     all)
@@ -1268,6 +1271,9 @@ install_user_tools_for_target() {
         fi
         if [[ ${force} == true ]]; then
           force_mise_installs+=("${key}@${version}")
+          if [[ ${key} == node ]]; then
+            install_pi=1
+          fi
         else
           mise_installs+=("${key}@${version}")
         fi

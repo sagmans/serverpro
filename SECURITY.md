@@ -185,7 +185,9 @@ Managed host tools install through integrity-checked sources, not
   force the C locale while parsing apt output, require dpkg state `installed`
   rather than trusting stale `config-files` version metadata, verify installed
   floors, preserve newer versions, and never request a downgrade.
-- Node.js `24.20.0` LTS and bundled npm `11.19.0` are exact. Pi `0.84.3` is
+- Node.js `24.20.0` LTS and bundled npm `11.19.0` are exact. Node/npm drift
+  forces same-version Node replacement; `pi` and `all` reinstall Pi afterward
+  because replacing Node can remove its global npm package. Pi `0.84.3` is
   installed with lifecycle scripts disabled, but its npm dependency graph is
   resolved at install time rather than vendored; enabling Pi retains this
   residual package-registry trust boundary.

@@ -49,7 +49,7 @@ type managedMiseTool struct {
 // Herdr stay separate because npm lifecycle policy and binary digest checks
 // require purpose-built repair flows.
 var managedMiseTools = []managedMiseTool{
-	{key: "node", version: NodeVersion, versionEnv: "SERVERPRO_BOOTSTRAP_NODE_VERSION", versionKey: "tools.node", probe: managedMiseProbeNode},
+	{key: "node", version: NodeVersion, versionEnv: "SERVERPRO_BOOTSTRAP_NODE_VERSION", versionKey: "tools.node", forceRepair: true, probe: managedMiseProbeNode},
 	{key: "uv", version: UVVersion, versionEnv: "SERVERPRO_BOOTSTRAP_UV_VERSION", aliasKey: "tool_alias.uv", backend: UVMiseBackend, backendEnv: "SERVERPRO_BOOTSTRAP_UV_BACKEND", versionKey: "tools.uv", probe: managedMiseProbeUV},
 	{key: "rust", version: RustVersion, versionEnv: "SERVERPRO_BOOTSTRAP_RUST_VERSION", aliasKey: "tool_alias.rust", backend: RustMiseBackend, backendEnv: "SERVERPRO_BOOTSTRAP_RUST_BACKEND", versionKey: "tools.rust.version", profileKey: "tools.rust.profile", profile: RustProfile, profileEnv: "SERVERPRO_BOOTSTRAP_RUST_PROFILE", forceRepair: true, probe: managedMiseProbeRust},
 	{key: "tmux", version: TmuxVersion, versionEnv: "SERVERPRO_BOOTSTRAP_TMUX_VERSION", versionKey: "tools.tmux", probe: managedMiseProbeTmux},

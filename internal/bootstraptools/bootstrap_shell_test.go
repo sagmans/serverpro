@@ -1447,6 +1447,27 @@ func TestInstallUserToolsRepairsOnlyFailedComponents(t *testing.T) {
 			mustNotContain: []string{"mise --yes install", "npm install -g", "integration install"},
 		},
 		{
+			name:           "all-npm-drift",
+			target:         "all",
+			stubs:          `target_managed_mise_tool_ready() { [[ $1 != node\|* ]]; }`,
+			mustContain:    []string{"mise --yes install --force node@" + NodeVersion, "npm install -g " + PiToolName + "@" + PiVersion},
+			mustNotContain: []string{"mise --yes install node@", "--force rust@", "--force herdr@"},
+		},
+		{
+			name:           "node-npm-drift",
+			target:         "node",
+			stubs:          "target_node_ready() { return 1; }",
+			mustContain:    []string{"mise --yes install --force node@" + NodeVersion},
+			mustNotContain: []string{"mise --yes install node@", "npm install -g", "herdr@"},
+		},
+		{
+			name:           "pi-npm-drift",
+			target:         "pi",
+			stubs:          "target_node_ready() { return 1; }",
+			mustContain:    []string{"mise --yes install --force node@" + NodeVersion, "npm install -g " + PiToolName + "@" + PiVersion},
+			mustNotContain: []string{"mise --yes install node@", "herdr@"},
+		},
+		{
 			name:           "integration-stale-only",
 			target:         "all",
 			stubs:          "target_herdr_pi_integration_ready() { return 1; }",
@@ -1555,6 +1576,103 @@ install_user_tools_for_target ` + tc.target + `
 				if strings.Contains(captured, unwanted) {
 					t.Fatalf("captured commands contain %q:\n%s", unwanted, captured)
 				}
+			}
+		})
+	}
+}
+
+func TestInstallUserToolsRepairsWrongNPMAndRestoresPi(t *testing.T) {
+	for _, target := range []string{"node", "pi", "all"} {
+		t.Run(target, func(t *testing.T) {
+			dir := t.TempDir()
+			binDir := filepath.Join(dir, "bin")
+			miseBinDir := filepath.Join(dir, ".local", "bin")
+			for _, path := range []string{binDir, miseBinDir} {
+				if err := os.MkdirAll(path, 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			npmState := filepath.Join(dir, "npm-version")
+			piState := filepath.Join(dir, "pi-installed")
+			miseLog := filepath.Join(dir, "mise.log")
+			if err := os.WriteFile(npmState, []byte("0.0.0\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if target != "node" {
+				if err := os.WriteFile(piState, []byte("installed\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			fakeMise := `#!/bin/sh
+set -eu
+printf '%s\n' "$*" >>"$MISE_LOG"
+[ "${1:-}" != --yes ] || shift
+case "${1:-}" in
+  install)
+    shift
+    if [ "${1:-}" = --force ]; then
+      shift
+      case " ${*} " in
+        *" node@"*)
+          printf '%s\n' "$EXPECTED_NPM" >"$NPM_STATE"
+          rm -f "$PI_STATE"
+          ;;
+      esac
+    fi
+    ;;
+  exec)
+    shift
+    [ "${1:-}" != -- ] || shift
+    if [ "${1:-}" = npm ] && [ "${2:-}" = install ]; then
+      printf 'installed\n' >"$PI_STATE"
+    fi
+    ;;
+  reshim) ;;
+esac
+`
+			for _, path := range []string{filepath.Join(binDir, "mise"), filepath.Join(miseBinDir, "mise")} {
+				if err := os.WriteFile(path, []byte(fakeMise), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			snippet := `
+TARGET_USER=deploy
+TARGET_HOME="$FAKE_HOME"
+TARGET_GID=1000
+ensure_mise_shell_activation() { :; }
+repair_mise_config_for_user() { :; }
+configure_user_tools_for_target() { :; }
+run_as_target() { HOME="$FAKE_HOME" PATH="$FAKE_BIN:$PATH" NPM_STATE="$NPM_STATE" PI_STATE="$PI_STATE" MISE_LOG="$MISE_LOG" EXPECTED_NPM="$EXPECTED_NPM" bash -c "$1"; }
+target_node_ready() { [[ $(cat "$NPM_STATE") == "$EXPECTED_NPM" ]]; }
+target_managed_mise_tool_ready() { case "$1" in node\|*) target_node_ready ;; *) return 0 ;; esac; }
+target_pi_ready() { target_node_ready && [[ -f $PI_STATE ]]; }
+target_herdr_ready() { return 0; }
+target_herdr_pi_integration_ready() { return 0; }
+install_user_tools_for_target "$TEST_TARGET"
+target_node_ready
+if [[ $TEST_TARGET != node ]]; then target_pi_ready; fi
+`
+			code, _, stderr := runHelper(t, snippet, append(manifestEnv(),
+				"FAKE_HOME="+dir,
+				"FAKE_BIN="+binDir,
+				"NPM_STATE="+npmState,
+				"PI_STATE="+piState,
+				"MISE_LOG="+miseLog,
+				"EXPECTED_NPM="+NPMVersion,
+				"TEST_TARGET="+target,
+			)...)
+			if code != 0 {
+				t.Fatalf("%s failed to converge npm/Pi state: %s", target, stderr)
+			}
+			log, err := os.ReadFile(miseLog)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(log), "install --force node@"+NodeVersion) {
+				t.Fatalf("%s did not force Node replacement: %s", target, log)
+			}
+			if target != "node" && !strings.Contains(string(log), "exec -- npm install -g "+PiToolName+"@"+PiVersion) {
+				t.Fatalf("%s did not restore Pi after Node replacement: %s", target, log)
 			}
 		})
 	}

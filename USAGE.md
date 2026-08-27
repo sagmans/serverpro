@@ -489,7 +489,9 @@ target also installs Node.js `24.20.0` LTS with bundled npm `11.19.0`, Pi
 `0.84.3`, uv `0.12.6` through mise's explicit `aqua:astral-sh/uv` backend, and
 Rust `1.98.0` through `core:rust` with the default rustc, Cargo, rustfmt, Clippy,
 and docs profile. Doctor checks those exact versions and all Rust
-default-profile components. It also installs tmux `3.7c`, gh `2.98.0`, rg
+default-profile components. Wrong Node/npm state forces same-version Node
+replacement; `pi` and `all` reinstall Pi afterward because its global npm
+package belongs to that Node installation. It also installs tmux `3.7c`, gh `2.98.0`, rg
 `15.2.0`, fd `10.5.0`, ast-grep `0.45.2`, sem `0.23.1`, and inspect `0.1.1`.
 ast-grep, sem, and inspect use checksum-pinned GitHub release assets; inspect's bare binary
 digest is checked before execution. On existing hosts, `all` removes the active

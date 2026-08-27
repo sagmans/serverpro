@@ -256,6 +256,7 @@ func TestInstallScriptStagesOnlyFailedComponents(t *testing.T) {
 		`target_managed_mise_tool_ready "${row}"`,
 		`mise_installs+=("${key}@${version}")`,
 		`force_mise_installs+=("${key}@${version}")`,
+		`force_mise_installs+=("node@${node_version}")`,
 		`mise --yes install ${mise_installs[*]}`,
 		`mise --yes install --force ${force_mise_installs[*]}`,
 		`target_pi_ready "${node_version}" "${pi_version}" || install_pi=1`,
@@ -397,8 +398,8 @@ func TestInstallScriptInstallsPiWithPinnedNodeNpm(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		`mise_installs+=("node@${node_version}")`,
-		`mise --yes install ${mise_installs[*]}`,
+		`force_mise_installs+=("node@${node_version}")`,
+		`mise --yes install --force ${force_mise_installs[*]}`,
 		`export MISE_EXPERIMENTAL=1 MISE_YES=1 MISE_NPM_PACKAGE_MANAGER=npm npm_config_ignore_scripts=true NPM_CONFIG_IGNORE_SCRIPTS=true`,
 		`\"\$HOME/.local/bin/mise\" exec -- npm install -g ${pi_tool}@${pi_version}`,
 		`configure_managed_mise_tool "$(managed_mise_tool_row node)"`,

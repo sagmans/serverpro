@@ -110,6 +110,8 @@ access paths for app-owned deployment flows.
     Go-owned mise-tool specification renders version, backend, profile, and
     release-checksum settings, shell configuration/install rows, and doctor
     checks; readiness and final verification reuse one shell probe builder.
+    Node/npm drift forces same-version Node replacement; `pi` and `all` then
+    reinstall Pi because replacing Node can remove its global npm package.
     Existing active `sg` config migrates through mise's config-aware removal
     before the canonical `ast-grep` identity is configured. Inspect's bare
     release binary is hashed before execution because upstream
