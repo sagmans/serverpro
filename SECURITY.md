@@ -107,6 +107,15 @@ explicit plan; unplanned reads never fall through to live execution, and
 per-command overflow, frame, or transport failures fail closed before any
 requested remediation runs.
 
+Provider API calls never follow redirects that leave the credential's trust
+boundary. The shared provider HTTP client refuses redirect chains after five
+hops, rejects plaintext and cross-host targets outright (subdomains and other
+ports count as cross-host), and refuses 307/308 responses on endpoints that
+carried a request body, so bearer tokens and bootstrap payloads containing
+Tailscale auth keys or password hashes cannot be laundered to a second origin.
+A caller-supplied HTTP client keeps its own redirect policy; only clients
+without one get this secure default.
+
 ## Supply-chain verification
 
 Managed host tools install through integrity-checked sources, not
