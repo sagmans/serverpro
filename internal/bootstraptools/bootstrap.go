@@ -6,40 +6,41 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/sagmans/serverpro/internal/hostplatform"
 	"github.com/sagmans/serverpro/internal/shell"
 )
 
 const (
-	MinimumMiseVersion        = "2026.8.3"
-	MiseLinuxX64TarGzSHA256   = "8aaf21cc4b36681e90a96e9cdf13e5d7511e9773733f741b1a5f7756ba53b5fc"
-	MiseLinuxArm64TarGzSHA256 = "8d0c6142607d814279de0e06f53c9e896b5d267bbced9ee6e2d9e1547fccca8f"
-	MiseLinuxArmv7TarGzSHA256 = "0b9f93b634e01c37b982e687915749c01265b9a084ce115e6a2b1b9c95c4e9d3"
-	NodeVersion               = "24.19.0"
-	PiVersion                 = "0.84.1"
-	UVVersion                 = "0.12.3"
+	MinimumMiseVersion        = "2026.8.14"
+	MiseLinuxX64TarGzSHA256   = "64d5f34aeb7a4e0e327dc1c9be66cd8162e14899a47b11901154a100285a3d61"
+	MiseLinuxArm64TarGzSHA256 = "940639580227bd838e3b3ea5b2084ea397399b0db162c2e4dd90b5730850e48e"
+	NodeVersion               = "24.20.0"
+	NPMVersion                = "11.19.0"
+	PiVersion                 = "0.84.3"
+	UVVersion                 = "0.12.6"
 	UVMiseBackend             = "aqua:astral-sh/uv"
-	RustVersion               = "1.97.1"
+	RustVersion               = "1.98.0"
 	RustMiseBackend           = "core:rust"
 	RustProfile               = "default"
-	TmuxVersion               = "3.7b"
-	GitHubCLIVersion          = "2.97.0"
+	TmuxVersion               = "3.7c"
+	GitHubCLIVersion          = "2.98.0"
 	RipgrepVersion            = "15.2.0"
-	FdVersion                 = "10.4.2"
-	AstGrepVersion            = "0.45.1"
+	FdVersion                 = "10.5.0"
+	AstGrepVersion            = "0.45.2"
 	AstGrepMiseBackend        = "github:ast-grep/ast-grep"
-	AstGrepLinuxX64SHA256     = "76fb6555be6734fb5057dba8d2fb756430f374bb9e1af694cf1ce00e13238d63"
-	AstGrepLinuxArm64SHA256   = "9ee7ec49aada3dc05135d21977af089a33fc3154ada25bab102daca90b5098f2"
-	SemVersion                = "0.21.0"
+	AstGrepLinuxX64SHA256     = "67aff72dd2994bf152fcc3a8a09cf93b13193abe59f39393095167c729af2015"
+	AstGrepLinuxArm64SHA256   = "e67ee2f5928b4d77a472114edf6e227d90fefe22fa47e7a78db187c55d206564"
+	SemVersion                = "0.23.1"
 	SemMiseBackend            = "github:Ataraxy-Labs/sem"
-	SemLinuxX64SHA256         = "4a06f019552add37b4b0693309daaf529eae7f291217d20c291294c790b16b4b"
-	SemLinuxArm64SHA256       = "0480663055d3d7c386dabee6e57766205984ac151bd691540bde0b3be64af27b"
+	SemLinuxX64SHA256         = "c876a8a444415d20f3215136a1cfdf4495b835745dcefe80a6f9dd94ce5e3189"
+	SemLinuxArm64SHA256       = "23a7d508960583d10765423ffc053070b7cc216f25257e923ab7fa4b2625f480"
 	InspectVersion            = "0.1.1"
 	InspectMiseBackend        = "github:Ataraxy-Labs/inspect"
 	InspectLinuxX64SHA256     = "99cf4ea2a2a1048d8e9369a6a5a11e5f84ee3f3c706e0bde072f9b2bd44e96ba"
 	InspectLinuxArm64SHA256   = "2327c1de10ecf40e5199c15fdc4c4b3c173735640294e779c635f4c15771e4f6"
-	HerdrVersion              = "0.8.0"
-	HerdrLinuxX64SHA256       = "b872ea7e40fa2cb17e857ac9b62b1bf26db7b403c622f5d2f3f5b35f6e9acd28"
-	HerdrLinuxArm64SHA256     = "f647ac66468d9efbc642fe534fb284468f0aea60641606fc008dfc0d82a3ca87"
+	HerdrVersion              = "0.8.2"
+	HerdrLinuxX64SHA256       = "976150a14d490c94b243ea2e1a7eb2dfb67f12e36b182db90936f6728e6aecf4"
+	HerdrLinuxArm64SHA256     = "f55610658e1c2e0d2aaef730b4b2ab885f7f8ba00285ab372bfb14f2e3d5b40d"
 	PiToolName                = "@earendil-works/pi-coding-agent"
 	HerdrMiseBackend          = "github:herdrdev/herdr"
 	ManagedPackageCheckName   = "managed package updates"
@@ -58,9 +59,10 @@ const (
 )
 
 var (
-	gitSystemPackages    = []string{"apt:git", "apt:openssh-client"}
-	dockerSystemPackages = []string{"apt:docker-ce", "apt:docker-ce-cli", "apt:containerd.io", "apt:docker-buildx-plugin", "apt:docker-compose-plugin"}
-	htopSystemPackages   = []string{"apt:htop"}
+	baseSystemPackages   = hostplatform.APTTokens(hostplatform.BasePackageBaselines())
+	gitSystemPackages    = hostplatform.APTTokens(hostplatform.GitPackageBaselines())
+	dockerSystemPackages = hostplatform.APTTokens(hostplatform.DockerPackageBaselines())
+	htopSystemPackages   = hostplatform.APTTokens(hostplatform.HtopPackageBaselines())
 )
 
 //go:embed serverpro-bootstrap-tools.sh
@@ -94,7 +96,7 @@ func (t Target) IncludesGit() bool {
 func SystemPackagesForTarget(target Target) []string {
 	switch target {
 	case TargetAll:
-		return slices.Concat(gitSystemPackages, dockerSystemPackages, htopSystemPackages)
+		return slices.Concat(baseSystemPackages, gitSystemPackages, dockerSystemPackages, htopSystemPackages)
 	case TargetGit:
 		return slices.Clone(gitSystemPackages)
 	case TargetDocker:
@@ -105,7 +107,10 @@ func SystemPackagesForTarget(target Target) []string {
 }
 
 func DefaultToolsetDescription() string {
-	return "Git/OpenSSH, Docker/Compose, mise, Node " + NodeVersion + ", npm, Pi " + PiVersion + ", uv " + UVVersion + ", Rust " + RustVersion + ", tmux " + TmuxVersion + ", Herdr " + HerdrVersion + ", gh " + GitHubCLIVersion + ", rg " + RipgrepVersion + ", fd " + FdVersion + ", ast-grep " + AstGrepVersion + ", sem " + SemVersion + ", inspect " + InspectVersion + ", and htop"
+	gitPackages := hostplatform.GitPackageBaselines()
+	dockerPackages := hostplatform.DockerPackageBaselines()
+	htopPackage := hostplatform.HtopPackageBaselines()[0]
+	return "Git " + gitPackages[0].MinimumVersion + ", OpenSSH " + gitPackages[1].MinimumVersion + ", Docker " + dockerPackages[0].MinimumVersion + ", Docker CLI " + dockerPackages[1].MinimumVersion + ", containerd " + dockerPackages[2].MinimumVersion + ", Buildx " + dockerPackages[3].MinimumVersion + ", Compose " + dockerPackages[4].MinimumVersion + ", mise " + MinimumMiseVersion + "+, Node " + NodeVersion + ", npm " + NPMVersion + ", Pi " + PiVersion + ", uv " + UVVersion + ", Rust " + RustVersion + ", tmux " + TmuxVersion + ", Herdr " + HerdrVersion + ", gh " + GitHubCLIVersion + ", rg " + RipgrepVersion + ", fd " + FdVersion + ", ast-grep " + AstGrepVersion + ", sem " + SemVersion + ", inspect " + InspectVersion + ", and htop " + htopPackage.MinimumVersion
 }
 
 func InstallScriptForUser(user string) string {
@@ -122,19 +127,25 @@ func InstallScriptForUser(user string) string {
 // (WrapperScript), so a pin bump cannot drift between the two paths.
 func manifestEnvPairs() [][2]string {
 	pairs := [][2]string{
+		{"SERVERPRO_BOOTSTRAP_HOST_OS", hostplatform.ManagedHostOS},
+		{"SERVERPRO_BOOTSTRAP_HOST_VERSION", hostplatform.ManagedHostVersion},
+		{"SERVERPRO_BOOTSTRAP_HOST_CODENAME", hostplatform.ManagedHostCodename},
+		{"SERVERPRO_BOOTSTRAP_HOST_ARCHITECTURES", strings.Join(hostplatform.ManagedHostKernelArchitectures(), " ")},
+		{"SERVERPRO_BOOTSTRAP_PACKAGE_BASELINES", hostplatform.PackageBaselineManifest(hostplatform.BootstrapPackageBaselines())},
 		{"SERVERPRO_BOOTSTRAP_MIN_MISE_VERSION", MinimumMiseVersion},
 		{"SERVERPRO_BOOTSTRAP_MISE_SHA256_LINUX_X64", MiseLinuxX64TarGzSHA256},
 		{"SERVERPRO_BOOTSTRAP_MISE_SHA256_LINUX_ARM64", MiseLinuxArm64TarGzSHA256},
-		{"SERVERPRO_BOOTSTRAP_MISE_SHA256_LINUX_ARMV7", MiseLinuxArmv7TarGzSHA256},
 	}
 	pairs = append(pairs, managedMiseEnvPairs()...)
 	return append(pairs,
+		[2]string{"SERVERPRO_BOOTSTRAP_NPM_VERSION", NPMVersion},
 		[2]string{"SERVERPRO_BOOTSTRAP_PI_VERSION", PiVersion},
 		[2]string{"SERVERPRO_BOOTSTRAP_HERDR_VERSION", HerdrVersion},
 		[2]string{"SERVERPRO_BOOTSTRAP_HERDR_BACKEND", HerdrMiseBackend},
 		[2]string{"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64", HerdrLinuxX64SHA256},
 		[2]string{"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_ARM64", HerdrLinuxArm64SHA256},
 		[2]string{"SERVERPRO_BOOTSTRAP_PI_TOOL", PiToolName},
+		[2]string{"SERVERPRO_BOOTSTRAP_BASE_PACKAGES", strings.Join(baseSystemPackages, " ")},
 		[2]string{"SERVERPRO_BOOTSTRAP_GIT_PACKAGES", strings.Join(gitSystemPackages, " ")},
 		[2]string{"SERVERPRO_BOOTSTRAP_DOCKER_PACKAGES", strings.Join(dockerSystemPackages, " ")},
 		[2]string{"SERVERPRO_BOOTSTRAP_HTOP_PACKAGES", strings.Join(htopSystemPackages, " ")},
@@ -170,7 +181,7 @@ func InstallScriptForUserTarget(user string, target Target) (string, error) {
 func WrapperScript() string {
 	pairs := manifestEnvPairs()
 	var b strings.Builder
-	b.WriteString("#!/bin/sh\n# Code generated by go run ./cmd/genbootstrapwrapper from the internal/bootstraptools\n# manifest. DO NOT EDIT: bump pins in internal/bootstraptools/bootstrap.go instead.\nset -eu\n\n")
+	b.WriteString("#!/bin/sh\n# Code generated by go run ./cmd/genbootstrapwrapper from the internal/bootstraptools\n# manifest. DO NOT EDIT: bump tool pins in internal/bootstraptools/bootstrap.go and\n# host/package baselines in internal/hostplatform/platform.go instead.\nset -eu\n\n")
 	names := make([]string, 0, len(pairs))
 	for _, kv := range pairs {
 		fmt.Fprintf(&b, "%s=\"${%s:-%s}\"\n", kv[0], kv[0], kv[1])
@@ -208,7 +219,7 @@ func Checks(user string) []Check {
 		checks = append(checks, Check{Name: tool.checkName(), Command: userHomeCommand(user, managedMiseProbeCommand(tool))})
 		if tool.key == "node" {
 			checks = append(checks,
-				Check{Name: "npm", Command: userHomeCommand(user, `"$HOME/.local/bin/mise" exec -- npm --version`)},
+				Check{Name: "npm " + NPMVersion, Command: userHomeCommand(user, `actual_npm=$("$HOME/.local/bin/mise" exec -- npm --version); test "$actual_npm" = "`+NPMVersion+`" || { printf 'expected npm `+NPMVersion+`, got %s\n' "$actual_npm" >&2; exit 1; }; printf '%s\n' "$actual_npm"`)},
 				Check{Name: "pi " + PiVersion, Command: userHomeCommand(user, `expected_pi="$HOME/.local/share/mise/installs/node/`+NodeVersion+`/bin/pi"; actual_pi=$("$HOME/.local/bin/mise" exec -- sh -c 'command -v pi'); test "$actual_pi" = "$expected_pi" || { printf 'expected pi at %s, got %s\n' "$expected_pi" "$actual_pi" >&2; exit 1; }; pi_version=$("$HOME/.local/bin/mise" exec -- pi --version 2>&1) || { status=$?; printf 'pi --version failed (%s): %s\n' "$status" "$pi_version" >&2; exit "$status"; }; test "$pi_version" = "`+PiVersion+`" || { printf 'expected pi `+PiVersion+`, got %s\n' "$pi_version" >&2; exit 1; }; printf '%s\n' "$pi_version"`)},
 			)
 		}
@@ -225,12 +236,17 @@ func ManagedPackageRefreshCommand() string {
 }
 
 func managedPackageUpdatesCommand() string {
-	packages := slices.Concat(gitSystemPackages, dockerSystemPackages, htopSystemPackages)
+	packages := hostplatform.BootstrapPackageBaselines()
 	quoted := make([]string, len(packages))
+	var baselineChecks strings.Builder
+	baselineChecks.WriteString(`export LC_ALL=C; installed_package_version() { package_record=$(dpkg-query -W -f='${db:Status-Status}|${Version}' "$1" 2>/dev/null) || return 1; case "$package_record" in installed'|'*) printf '%s' "${package_record#installed|}" ;; *) return 1 ;; esac; }; `)
 	for i, pkg := range packages {
-		quoted[i] = shell.Quote(strings.TrimPrefix(pkg, "apt:"))
+		name := shell.Quote(pkg.Name)
+		minimum := shell.Quote(pkg.MinimumVersion)
+		quoted[i] = name
+		fmt.Fprintf(&baselineChecks, `installed=$(installed_package_version %s) || { printf 'managed package missing: %s\n' >&2; exit 1; }; dpkg --compare-versions "$installed" ge %s || { printf 'managed package below baseline: %s %%s < %s\n' "$installed" >&2; exit 1; }; `, name, pkg.Name, minimum, pkg.Name, pkg.MinimumVersion)
 	}
-	return "set -- " + strings.Join(quoted, " ") + `; out=$(apt-get -s -o Debug::NoLocking=1 --no-install-recommends install "$@" 2>&1) || { printf '%s\n' "$out" >&2; exit 1; }; if printf '%s\n' "$out" | grep -q '^Inst '; then printf 'managed package updates available\n' >&2; exit 1; fi; printf 'current\n'`
+	return baselineChecks.String() + "set -- " + strings.Join(quoted, " ") + `; out=$(apt-get -s -o Debug::NoLocking=1 --no-install-recommends install "$@" 2>&1) || { printf '%s\n' "$out" >&2; exit 1; }; if printf '%s\n' "$out" | grep -q '^Inst '; then printf 'managed package updates available\n' >&2; exit 1; fi; printf 'current\n'`
 }
 
 func herdrVerifiedCommand() string {

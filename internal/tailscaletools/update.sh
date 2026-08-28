@@ -5,6 +5,7 @@ if [ -z "${BASH_VERSION:-}" ] || [ -n "${POSIXLY_CORRECT:-}" ]; then
   exec bash "$0" "$@"
 fi
 set -euo pipefail
+export LC_ALL=C
 umask 022
 
 TAILSCALE_TMP_DIR=
@@ -36,9 +37,101 @@ required_env() {
   printf '%s' "${value}"
 }
 
+validate_supported_host_values() {
+  local actual_os=$1 actual_version=$2 actual_codename=$3 actual_arch=$4
+  local expected_os expected_version expected_codename allowed_architectures
+  expected_os=$(required_env SERVERPRO_TAILSCALE_HOST_OS)
+  expected_version=$(required_env SERVERPRO_TAILSCALE_HOST_VERSION)
+  expected_codename=$(required_env SERVERPRO_TAILSCALE_HOST_CODENAME)
+  allowed_architectures=$(required_env SERVERPRO_TAILSCALE_HOST_ARCHITECTURES)
+  if [[ ${actual_os} != "${expected_os}" || ${actual_version} != "${expected_version}" || ${actual_codename} != "${expected_codename}" ]]; then
+    printf 'unsupported host OS: %s %s (%s). Expected %s %s (%s).\n' "${actual_os:-unknown}" "${actual_version:-unknown}" "${actual_codename:-unknown}" "${expected_os}" "${expected_version}" "${expected_codename}" >&2
+    return 1
+  fi
+  case " ${allowed_architectures} " in
+    *" ${actual_arch} "*) ;;
+    *)
+      printf 'unsupported host architecture: %s. Expected one of: %s.\n' "${actual_arch}" "${allowed_architectures}" >&2
+      return 1
+      ;;
+  esac
+}
+
+require_supported_host() {
+  if [[ ! -r /etc/os-release ]]; then
+    printf 'missing /etc/os-release; unsupported OS.\n' >&2
+    return 1
+  fi
+  # shellcheck source=/dev/null
+  . /etc/os-release
+  validate_supported_host_values "${ID:-}" "${VERSION_ID:-}" "${VERSION_CODENAME:-${UBUNTU_CODENAME:-}}" "$(uname -m)"
+}
+
+package_minimum_version() {
+  local wanted=$1 row name version
+  while IFS= read -r row; do
+    IFS='|' read -r name version _ <<<"${row}"
+    if [[ ${name} == "${wanted}" ]]; then
+      printf '%s' "${version}"
+      return 0
+    fi
+  done <<<"$(required_env SERVERPRO_TAILSCALE_PACKAGE_BASELINES)"
+  printf 'package baseline missing: %s\n' "${wanted}" >&2
+  return 1
+}
+
+installed_package_version() {
+  local name=$1 record
+  record=$(dpkg-query -W -f='${db:Status-Status}|${Version}' "${name}" 2>/dev/null) || return 1
+  case "${record}" in
+    installed'|'*) printf '%s' "${record#installed|}" ;;
+    *) return 1 ;;
+  esac
+}
+
+verify_package_minimums() {
+  local name minimum installed
+  for name in "$@"; do
+    minimum=$(package_minimum_version "${name}")
+    if ! installed=$(installed_package_version "${name}"); then
+      printf 'managed package missing after install: %s\n' "${name}" >&2
+      return 1
+    fi
+    if ! dpkg --compare-versions "${installed}" ge "${minimum}"; then
+      printf 'managed package below baseline: %s %s < %s\n' "${name}" "${installed}" "${minimum}" >&2
+      return 1
+    fi
+  done
+}
+
+verify_package_candidates() {
+  local name minimum installed candidate
+  for name in "$@"; do
+    minimum=$(package_minimum_version "${name}")
+    if installed=$(installed_package_version "${name}") && dpkg --compare-versions "${installed}" ge "${minimum}"; then
+      continue
+    fi
+    candidate=$(apt-cache policy "${name}" | awk '$1 == "Candidate:" { print $2; exit }')
+    if [[ -z ${candidate} || ${candidate} == '(none)' ]]; then
+      printf 'managed package has no install candidate: %s\n' "${name}" >&2
+      return 1
+    fi
+    if ! dpkg --compare-versions "${candidate}" ge "${minimum}"; then
+      printf 'managed package candidate below baseline: %s %s < %s\n' "${name}" "${candidate}" "${minimum}" >&2
+      return 1
+    fi
+  done
+}
+
 install_prerequisites() {
+  local package_list
+  local -a packages
+  package_list=$(required_env SERVERPRO_TAILSCALE_PACKAGES)
+  read -r -a packages <<<"${package_list}"
   apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl jq
+  verify_package_candidates "${packages[@]}"
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${packages[@]}"
+  verify_package_minimums "${packages[@]}"
 }
 
 tailscale_arch() {
@@ -128,6 +221,7 @@ main() {
   trap cleanup EXIT
   require_root
   # Reject unsupported hosts before apt changes machine state.
+  require_supported_host
   tailscale_arch >/dev/null
   install_prerequisites
   install_tailscale_update

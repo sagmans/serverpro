@@ -1,6 +1,6 @@
 # Architecture
 
-Date: 2026-07-31
+Date: 2026-08-27
 Status: provider-agnostic implementation overview
 
 ## System overview
@@ -34,11 +34,17 @@ access paths for app-owned deployment flows.
   provider adapters satisfy both without exposing unrelated operations.
 - Ingress: optional public exposure layer. Default is `none`.
 - Adapter: provider-specific implementation behind a generic facade.
+- Supported runtime: macOS 27 arm64 for the controller and Ubuntu 24.04 LTS
+  (`noble`) amd64/arm64 for managed hosts. Live create validates the selected
+  provider catalog image before provider mutation; remote installers validate
+  the actual host before managed mutation.
 - Managed host tools: the host toolset serverpro converges on a target host
   (Tailscale, Git/OpenSSH, Docker/Compose, htop, per-user mise, Node/npm, Pi,
-  uv, Rust, tmux, Herdr, gh, rg, fd, ast-grep, sem, and inspect), installed
-  through checksum- or repository-verified update paths. Rust uses the default
-  profile; Herdr includes its target-user Pi lifecycle integration.
+  uv, Rust, tmux, Herdr, gh, rg, fd, ast-grep, sem, inspect, and optional
+  cloudflared), installed through checksum- or repository-verified update paths.
+  Artifact tools use exact versions or reviewed minimums; directly installed apt
+  packages use reviewed floors that accept newer security updates. Rust uses the
+  default profile; Herdr includes its target-user Pi lifecycle integration.
 - Bootstrap target: named subset of managed host tools (`all`, `git`,
   `docker`, `mise`, `node`, `pi`) selected for a bootstrap run. The `git`
   target includes Git/OpenSSH plus target-user mise and gh because interactive
@@ -71,24 +77,41 @@ access paths for app-owned deployment flows.
 - Ingress facade: `internal/ingress`
   - Generic route model, adapter interface, and Cloudflare Tunnel route adapter.
 - Tunnel installer: `internal/tunnel`
-  - Cloudflared apt install script emitted for the Cloudflare Tunnel adapter;
-    the downloaded repository key is fingerprint-verified before trust.
+  - Ubuntu 24.04-gated cloudflared apt install script emitted for the Cloudflare
+    Tunnel adapter. The downloaded repository key is fingerprint-verified before
+    trust, the noble repository is explicit, and the installed package must meet
+    the reviewed minimum.
 - State: `internal/state`
   - Provider-neutral registry, per-server JSON state, and context-cancellable
     workflow lock ordering.
 - Lifecycle: `internal/lifecycle`
   - Provision flow using generic compute and optional ingress.
+- Host platform baseline: `internal/hostplatform`
+  - Single authority for controller support, managed-host support, direct apt
+    package floors, architecture sets, and shell manifests shared by cloud-init,
+    bootstrap, Tailscale repair, ingress installation, doctor, and CLI choices.
 - Cloud-init: `internal/cloudinit`
-  - First-boot hardening user data with architecture-scoped,
-    checksum-verified Tailscale static binaries.
+  - First-boot hardening user data with a defense-in-depth Ubuntu
+    24.04/codename/architecture check, pre-install base-package candidate floors,
+    post-install verification, and architecture-scoped checksum-verified
+    Tailscale static binaries. Live provider image validation remains the
+    authoritative pre-mutation host gate because cloud-init module failures do
+    not globally cancel later modules.
 - Tailscale tools: `internal/tailscaletools`
   - Shared Tailscale release manifest, exact client/daemon check, and
     checksum-verified live updater with delayed daemon restart.
 - Bootstrap tools: `internal/bootstraptools`
-  - Embedded per-target convergence script for the managed host tools. One
+  - Embedded per-target convergence script for the managed host tools. The
+    shared host-platform manifest rejects unsupported hosts and renders every
+    directly installed apt package with a reviewed minimum; apply preflights signed
+    current candidates before package scripts can run, preserves newer packages,
+    and verifies floors. The `all` target converges the complete base package set
+    as well as the named tools. One
     Go-owned mise-tool specification renders version, backend, profile, and
     release-checksum settings, shell configuration/install rows, and doctor
     checks; readiness and final verification reuse one shell probe builder.
+    Node/npm drift forces same-version Node replacement; `pi` and `all` then
+    reinstall Pi because replacing Node can remove its global npm package.
     Existing active `sg` config migrates through mise's config-aware removal
     before the canonical `ast-grep` identity is configured. Inspect's bare
     release binary is hashed before execution because upstream
@@ -111,10 +134,13 @@ access paths for app-owned deployment flows.
     repeating providers.
     Batched diagnostics declare conditional reads before evaluation, replay
     baseline evidence strictly, and delegate only planned fixes and rechecks.
-    Managed-package diagnostics use cached apt candidates without mutating;
-    `--fix` refreshes repositories, upgrades managed packages, repairs exact
-    tool pins, and stages Tailscale before restarting its daemon after the SSH
-    update command returns.
+    Managed-package diagnostics verify package floors and use cached apt
+    candidates without mutating; ingress-enabled diagnostics also verify the
+    cloudflared floor and service. A first, blocking platform check disables
+    every requested fix when the actual OS, codename, or architecture is outside
+    support. `--fix` refreshes repositories, upgrades the
+    general managed package set, repairs exact tool pins, and stages Tailscale
+    before restarting its daemon after the SSH update command returns.
 - Polling: `internal/poll`
   - Shared context-aware wait policy used by provider and lifecycle polling.
 - Mesh facade: `internal/mesh`
@@ -145,6 +171,24 @@ access paths for app-owned deployment flows.
   its read-only discovery contract.
 - Ingress adapters are independent from compute providers.
 
+## Runtime support contract
+
+`internal/hostplatform` owns the runtime matrix and package floors used by code.
+Documentation mirrors that source; it does not independently define executable
+values. The controller support target is macOS 27 arm64. Managed-host support is
+Ubuntu 24.04 LTS (`noble`) on amd64 or arm64. Provider image IDs remain explicit
+operator input because catalogs use incompatible identifiers. Live create
+refetches the selected location's catalog and rejects a missing or unsupported
+image before any provider mutation; explicit input does not widen support.
+
+Artifact releases are exact except mise, which is a minimum compatible release.
+Direct apt packages are minimums rather than exact locks: installs use the
+current signed candidate, reject candidates below the reviewed floor, retain
+newer installed versions, and permit future security upgrades. Doctor reports
+both below-floor state and cached newer candidates. Tailscale remains an exact
+client/daemon release; cloudflared is a minimum ingress package and is diagnosed
+separately from generic bootstrap repair.
+
 ## Runtime flow
 
 ```mermaid
@@ -167,8 +211,9 @@ flowchart LR
 1. Resolve namespace, server, and provider.
 2. Require explicit provider catalog choices: location, size, and image.
 3. Prompt for ingress; default `none`.
-4. Validate server-scoped compute provider token and Tailscale access. Long
-   create stages emit fixed-vocabulary phase, elapsed-time, and attempt events
+4. Validate the compute provider token, refetch the selected location's catalog,
+   reject a missing or unsupported image before provider mutation, and validate
+   Tailscale access. Long create stages emit fixed-vocabulary phase, elapsed-time, and attempt events
    to stderr while stdout remains the final JSON report.
 5. Ensure the shared Tailscale policy and checkpoint its tracked changes.
 6. Before creating a Cloudflare tunnel, adopt the one exact account-wide name

@@ -14,7 +14,8 @@ import (
 )
 
 type cliFakeProvider struct {
-	doctor func(context.Context, compute.Account) compute.Diagnostics
+	doctor  func(context.Context, compute.Account) compute.Diagnostics
+	catalog func(context.Context, compute.CatalogQuery) (compute.Catalog, compute.Diagnostics)
 }
 
 func (cliFakeProvider) Name() compute.ProviderName { return "hetzner" }
@@ -27,7 +28,10 @@ func (p cliFakeProvider) Doctor(ctx context.Context, account compute.Account) co
 	}
 	return compute.Diagnostics{{Status: compute.Pass, Message: "credential valid"}}
 }
-func (cliFakeProvider) Catalog(context.Context, compute.CatalogQuery) (compute.Catalog, compute.Diagnostics) {
+func (p cliFakeProvider) Catalog(ctx context.Context, query compute.CatalogQuery) (compute.Catalog, compute.Diagnostics) {
+	if p.catalog != nil {
+		return p.catalog(ctx, query)
+	}
 	return compute.Catalog{
 		Locations: []compute.Location{{Name: "fsn1", City: "Falkenstein", Country: "DE"}},
 		Sizes:     []compute.Size{{Name: "cpx22", Cores: 2, MemoryGB: 4, DiskGB: 80}},

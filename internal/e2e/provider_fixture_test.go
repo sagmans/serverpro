@@ -107,6 +107,10 @@ func serveHetzner(w http.ResponseWriter, r *http.Request, path string, state *fi
 	switch {
 	case r.Method == http.MethodGet && path == "/locations":
 		writeJSONResponse(w, map[string]any{"locations": []map[string]any{{"name": "fsn1"}}})
+	case r.Method == http.MethodGet && path == "/server_types":
+		writeJSONResponse(w, map[string]any{"server_types": []map[string]any{{"name": "cx23", "architecture": "x86", "locations": []map[string]any{{"name": "fsn1"}}}}})
+	case r.Method == http.MethodGet && path == "/images":
+		writeJSONResponse(w, map[string]any{"images": []map[string]any{{"name": "ubuntu-24.04", "description": "Ubuntu 24.04 LTS", "architecture": "x86", "os_flavor": "ubuntu", "os_version": "24.04", "status": "available", "type": "system"}}})
 	case r.Method == http.MethodPost && path == "/firewalls":
 		body := decodeBody(r)
 		state.firewallName = stringValue(body["name"])
@@ -154,6 +158,10 @@ func serveVultr(w http.ResponseWriter, r *http.Request, path string, state *fixt
 	switch {
 	case r.Method == http.MethodGet && path == "/regions":
 		writeJSONResponse(w, map[string]any{"regions": []map[string]any{{"id": "ewr"}}, "meta": map[string]any{}})
+	case r.Method == http.MethodGet && path == "/plans":
+		writeJSONResponse(w, map[string]any{"plans": []map[string]any{{"id": "vc2-1c-1gb", "locations": []string{"ewr"}}}, "meta": map[string]any{}})
+	case r.Method == http.MethodGet && path == "/os":
+		writeJSONResponse(w, map[string]any{"os": []map[string]any{{"id": 1743, "name": "Ubuntu 24.04 LTS x64", "arch": "x64", "family": "ubuntu"}}, "meta": map[string]any{}})
 	case r.Method == http.MethodPost && path == "/firewalls":
 		body := decodeBody(r)
 		state.firewallName = stringValue(body["description"])
@@ -204,6 +212,10 @@ func serveDigitalOcean(w http.ResponseWriter, r *http.Request, path string, stat
 	switch {
 	case r.Method == http.MethodGet && path == "/regions":
 		writeJSONResponse(w, map[string]any{"regions": []map[string]any{{"slug": "nyc3", "available": true}}})
+	case r.Method == http.MethodGet && path == "/sizes":
+		writeJSONResponse(w, map[string]any{"sizes": []map[string]any{{"slug": "s-1vcpu-1gb", "regions": []string{"nyc3"}, "available": true}}})
+	case r.Method == http.MethodGet && path == "/images":
+		writeJSONResponse(w, map[string]any{"images": []map[string]any{{"slug": "ubuntu-24-04-x64", "name": "24.04 (LTS) x64", "distribution": "Ubuntu", "regions": []string{"nyc3"}, "status": "available", "public": true}}})
 	case r.Method == http.MethodPost && path == "/tags":
 		w.WriteHeader(http.StatusCreated)
 	case r.Method == http.MethodPost && path == "/firewalls":

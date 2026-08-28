@@ -4,9 +4,9 @@
 
 Small, security-focused server provisioner.
 
-serverpro creates hardened Ubuntu servers on Hetzner, Vultr, or DigitalOcean;
-keeps provider-neutral local state; uses Tailscale SSH for administration; and
-keeps public app ingress off by default. Cloudflare tunnel lifecycle can create
+serverpro creates hardened Ubuntu 24.04 LTS servers on Hetzner, Vultr, or
+DigitalOcean; keeps provider-neutral local state; uses Tailscale SSH for
+administration; and keeps public app ingress off by default. Cloudflare tunnel lifecycle can create
 or adopt an account tunnel and records pending local route metadata; it does
 not publish publicly routable routes yet.
 
@@ -17,6 +17,14 @@ integration is installed for authoritative agent lifecycle reporting.
 
 serverpro prepares hosts and safe access paths. It does not deploy apps, manage
 DNS records, run databases, or store application secrets.
+
+## Supported runtime
+
+The supported controller is macOS 27 on arm64. Managed hosts are Ubuntu 24.04
+LTS (`noble`) on amd64 or arm64. Live create rejects unsupported provider
+catalog images before provider mutation; remote installers reject unsupported
+actual hosts before managed mutation. Go 1.26.6+ is required for source builds. See
+[Installation](INSTALLATION.md) for the full tool and package baseline.
 
 ## Status
 

@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/sagmans/serverpro/internal/hostplatform"
 )
 
 func TestInstallScriptTargetSelectsSingleFamily(t *testing.T) {
@@ -81,7 +83,7 @@ func TestTargetIncludesGitOnlyForGitFamily(t *testing.T) {
 
 func TestDefaultToolsetDescriptionNamesPinnedTools(t *testing.T) {
 	description := DefaultToolsetDescription()
-	for _, want := range []string{"Git/OpenSSH", "Docker/Compose", "mise", "Node " + NodeVersion, "npm", "Pi " + PiVersion, "uv " + UVVersion, "Rust " + RustVersion, "tmux " + TmuxVersion, "Herdr " + HerdrVersion, "gh " + GitHubCLIVersion, "rg " + RipgrepVersion, "fd " + FdVersion, "ast-grep " + AstGrepVersion, "sem " + SemVersion, "inspect " + InspectVersion, "htop"} {
+	for _, want := range []string{"Git " + hostplatform.GitPackageBaselines()[0].MinimumVersion, "OpenSSH " + hostplatform.GitPackageBaselines()[1].MinimumVersion, "Docker " + hostplatform.DockerPackageBaselines()[0].MinimumVersion, "Compose " + hostplatform.DockerPackageBaselines()[4].MinimumVersion, "mise", "Node " + NodeVersion, "npm " + NPMVersion, "Pi " + PiVersion, "uv " + UVVersion, "Rust " + RustVersion, "tmux " + TmuxVersion, "Herdr " + HerdrVersion, "gh " + GitHubCLIVersion, "rg " + RipgrepVersion, "fd " + FdVersion, "ast-grep " + AstGrepVersion, "sem " + SemVersion, "inspect " + InspectVersion, "htop " + hostplatform.HtopPackageBaselines()[0].MinimumVersion} {
 		if !contains(description, want) {
 			t.Fatalf("description missing %q: %s", want, description)
 		}
@@ -99,20 +101,22 @@ func TestManagedAstGrepContractOmitsDeprecatedSGIdentity(t *testing.T) {
 
 func TestManagedVersionManifestPinsApprovedReleases(t *testing.T) {
 	want := map[string]string{
-		"node":     "24.19.0",
-		"pi":       "0.84.1",
-		"uv":       "0.12.3",
-		"rust":     "1.97.1",
-		"tmux":     "3.7b",
-		"gh":       "2.97.0",
+		"node":     "24.20.0",
+		"npm":      "11.19.0",
+		"pi":       "0.84.3",
+		"uv":       "0.12.6",
+		"rust":     "1.98.0",
+		"tmux":     "3.7c",
+		"gh":       "2.98.0",
 		"rg":       "15.2.0",
-		"fd":       "10.4.2",
-		"ast-grep": "0.45.1",
-		"sem":      "0.21.0",
+		"fd":       "10.5.0",
+		"ast-grep": "0.45.2",
+		"sem":      "0.23.1",
 		"inspect":  "0.1.1",
 	}
 	got := map[string]string{
 		"node":     NodeVersion,
+		"npm":      NPMVersion,
 		"pi":       PiVersion,
 		"uv":       UVVersion,
 		"rust":     RustVersion,
@@ -129,7 +133,7 @@ func TestManagedVersionManifestPinsApprovedReleases(t *testing.T) {
 			t.Fatalf("%s version = %q, want %q", tool, got[tool], version)
 		}
 	}
-	for _, pin := range []string{"SERVERPRO_BOOTSTRAP_UV_VERSION='0.12.3'", "SERVERPRO_BOOTSTRAP_RUST_VERSION='1.97.1'", "SERVERPRO_BOOTSTRAP_AST_GREP_VERSION='0.45.1'", "SERVERPRO_BOOTSTRAP_SEM_VERSION='0.21.0'", "SERVERPRO_BOOTSTRAP_INSPECT_VERSION='0.1.1'"} {
+	for _, pin := range []string{"SERVERPRO_BOOTSTRAP_NPM_VERSION='11.19.0'", "SERVERPRO_BOOTSTRAP_UV_VERSION='0.12.6'", "SERVERPRO_BOOTSTRAP_RUST_VERSION='1.98.0'", "SERVERPRO_BOOTSTRAP_AST_GREP_VERSION='0.45.2'", "SERVERPRO_BOOTSTRAP_SEM_VERSION='0.23.1'", "SERVERPRO_BOOTSTRAP_INSPECT_VERSION='0.1.1'"} {
 		if !contains(InstallScriptForUser("deploy"), pin) {
 			t.Fatalf("managed version manifest missing %q", pin)
 		}
@@ -138,8 +142,8 @@ func TestManagedVersionManifestPinsApprovedReleases(t *testing.T) {
 
 func TestManagedReleaseChecksumsPinApprovedAssets(t *testing.T) {
 	want := map[string][2]string{
-		"ast-grep": {"76fb6555be6734fb5057dba8d2fb756430f374bb9e1af694cf1ce00e13238d63", "9ee7ec49aada3dc05135d21977af089a33fc3154ada25bab102daca90b5098f2"},
-		"sem":      {"4a06f019552add37b4b0693309daaf529eae7f291217d20c291294c790b16b4b", "0480663055d3d7c386dabee6e57766205984ac151bd691540bde0b3be64af27b"},
+		"ast-grep": {"67aff72dd2994bf152fcc3a8a09cf93b13193abe59f39393095167c729af2015", "e67ee2f5928b4d77a472114edf6e227d90fefe22fa47e7a78db187c55d206564"},
+		"sem":      {"c876a8a444415d20f3215136a1cfdf4495b835745dcefe80a6f9dd94ce5e3189", "23a7d508960583d10765423ffc053070b7cc216f25257e923ab7fa4b2625f480"},
 		"inspect":  {"99cf4ea2a2a1048d8e9369a6a5a11e5f84ee3f3c706e0bde072f9b2bd44e96ba", "2327c1de10ecf40e5199c15fdc4c4b3c173735640294e779c635f4c15771e4f6"},
 	}
 	got := map[string][2]string{
@@ -192,10 +196,20 @@ func TestManagedMiseSpecificationDrivesManifestAndDoctorChecks(t *testing.T) {
 	}
 }
 
+func TestSystemPackageBaselinesReachRemoteManifest(t *testing.T) {
+	script := InstallScriptForUser("deploy")
+	for _, pkg := range hostplatform.BootstrapPackageBaselines() {
+		want := pkg.Name + "|" + pkg.MinimumVersion
+		if !contains(script, want) {
+			t.Fatalf("bootstrap manifest missing package baseline %q", want)
+		}
+	}
+}
+
 func TestSystemPackagesForTarget(t *testing.T) {
 	assertStrings(t, SystemPackagesForTarget(TargetGit), []string{"apt:git", "apt:openssh-client"})
 	assertStrings(t, SystemPackagesForTarget(TargetDocker), []string{"apt:docker-ce", "apt:docker-ce-cli", "apt:containerd.io", "apt:docker-buildx-plugin", "apt:docker-compose-plugin"})
-	assertStrings(t, SystemPackagesForTarget(TargetAll), []string{"apt:git", "apt:openssh-client", "apt:docker-ce", "apt:docker-ce-cli", "apt:containerd.io", "apt:docker-buildx-plugin", "apt:docker-compose-plugin", "apt:htop"})
+	assertStrings(t, SystemPackagesForTarget(TargetAll), []string{"apt:ca-certificates", "apt:curl", "apt:gnupg", "apt:ufw", "apt:apparmor", "apt:unattended-upgrades", "apt:jq", "apt:git", "apt:openssh-client", "apt:docker-ce", "apt:docker-ce-cli", "apt:containerd.io", "apt:docker-buildx-plugin", "apt:docker-compose-plugin", "apt:htop"})
 	assertStrings(t, SystemPackagesForTarget(TargetNode), nil)
 	assertStrings(t, SystemPackagesForTarget(TargetMise), nil)
 	assertStrings(t, SystemPackagesForTarget(TargetPi), nil)
@@ -204,6 +218,37 @@ func TestSystemPackagesForTarget(t *testing.T) {
 // TestInstallScriptStagesOnlyFailedComponents pins the component-idempotent
 // repair contract: every managed tool is probed and only failures are staged,
 // so doctor repair never reinstalls healthy tools.
+func TestInstallScriptPreflightsDockerBeforeConflictRemoval(t *testing.T) {
+	script := InstallScriptForUser("deploy")
+	start := strings.Index(script, "install_docker() {")
+	end := strings.Index(script, "target_mise_ready() {")
+	if start < 0 || end <= start {
+		t.Fatal("missing Docker install boundary")
+	}
+	body := script[start:end]
+	repository := strings.Index(body, "install_docker_repo")
+	candidate := strings.Index(body, `verify_package_candidates "${packages[@]}"`)
+	removeConflicts := strings.Index(body, "remove_docker_conflicts")
+	if repository < 0 || candidate < repository || removeConflicts < candidate {
+		t.Fatalf("Docker candidate proof must precede conflict removal: %s", body)
+	}
+}
+
+func TestInstallScriptAllConvergesBasePackagesFirst(t *testing.T) {
+	script := InstallScriptForUser("deploy")
+	start := strings.Index(script, "run_bootstrap_target() {")
+	end := strings.Index(script, "verify_installation() {")
+	if start < 0 || end <= start {
+		t.Fatal("missing bootstrap run boundary")
+	}
+	body := script[start:end]
+	basePackages := strings.Index(body, "install_base_packages")
+	mise := strings.Index(body, "install_mise")
+	if basePackages < 0 || mise < basePackages {
+		t.Fatalf("all target must converge base packages before tools: %s", body)
+	}
+}
+
 func TestInstallScriptStagesOnlyFailedComponents(t *testing.T) {
 	script := InstallScriptForUser("deploy")
 	for _, want := range []string{
@@ -211,6 +256,7 @@ func TestInstallScriptStagesOnlyFailedComponents(t *testing.T) {
 		`target_managed_mise_tool_ready "${row}"`,
 		`mise_installs+=("${key}@${version}")`,
 		`force_mise_installs+=("${key}@${version}")`,
+		`force_mise_installs+=("node@${node_version}")`,
 		`mise --yes install ${mise_installs[*]}`,
 		`mise --yes install --force ${force_mise_installs[*]}`,
 		`target_pi_ready "${node_version}" "${pi_version}" || install_pi=1`,
@@ -283,24 +329,22 @@ func TestInstallScriptConfiguresCuratedManagedTools(t *testing.T) {
 }
 
 func TestPiManifestPinsRequiredVersion(t *testing.T) {
-	if PiVersion != "0.84.1" {
-		t.Fatalf("pi version = %q, want 0.84.1", PiVersion)
+	if PiVersion != "0.84.3" {
+		t.Fatalf("pi version = %q, want 0.84.3", PiVersion)
 	}
 }
 
 func TestMiseReleaseManifestPinsRequiredVersion(t *testing.T) {
-	if MinimumMiseVersion != "2026.8.3" {
-		t.Fatalf("mise version = %q, want 2026.8.3", MinimumMiseVersion)
+	if MinimumMiseVersion != "2026.8.14" {
+		t.Fatalf("mise version = %q, want 2026.8.14", MinimumMiseVersion)
 	}
 	want := map[string]string{
-		"linux-x64":   "8aaf21cc4b36681e90a96e9cdf13e5d7511e9773733f741b1a5f7756ba53b5fc",
-		"linux-arm64": "8d0c6142607d814279de0e06f53c9e896b5d267bbced9ee6e2d9e1547fccca8f",
-		"linux-armv7": "0b9f93b634e01c37b982e687915749c01265b9a084ce115e6a2b1b9c95c4e9d3",
+		"linux-x64":   "64d5f34aeb7a4e0e327dc1c9be66cd8162e14899a47b11901154a100285a3d61",
+		"linux-arm64": "940639580227bd838e3b3ea5b2084ea397399b0db162c2e4dd90b5730850e48e",
 	}
 	got := map[string]string{
 		"linux-x64":   MiseLinuxX64TarGzSHA256,
 		"linux-arm64": MiseLinuxArm64TarGzSHA256,
-		"linux-armv7": MiseLinuxArmv7TarGzSHA256,
 	}
 	for platform, digest := range want {
 		if got[platform] != digest {
@@ -312,10 +356,10 @@ func TestMiseReleaseManifestPinsRequiredVersion(t *testing.T) {
 func TestInstallScriptExportsPinnedHerdrManifest(t *testing.T) {
 	script := InstallScriptForUser("deploy")
 	for _, want := range []string{
-		"SERVERPRO_BOOTSTRAP_HERDR_VERSION='0.8.0'",
+		"SERVERPRO_BOOTSTRAP_HERDR_VERSION='0.8.2'",
 		"SERVERPRO_BOOTSTRAP_HERDR_BACKEND='github:herdrdev/herdr'",
-		"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64='b872ea7e40fa2cb17e857ac9b62b1bf26db7b403c622f5d2f3f5b35f6e9acd28'",
-		"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_ARM64='f647ac66468d9efbc642fe534fb284468f0aea60641606fc008dfc0d82a3ca87'",
+		"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64='976150a14d490c94b243ea2e1a7eb2dfb67f12e36b182db90936f6728e6aecf4'",
+		"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_ARM64='f55610658e1c2e0d2aaef730b4b2ab885f7f8ba00285ab372bfb14f2e3d5b40d'",
 	} {
 		if !contains(script, want) {
 			t.Fatalf("install script missing pinned Herdr manifest %q", want)
@@ -354,8 +398,8 @@ func TestInstallScriptInstallsPiWithPinnedNodeNpm(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		`mise_installs+=("node@${node_version}")`,
-		`mise --yes install ${mise_installs[*]}`,
+		`force_mise_installs+=("node@${node_version}")`,
+		`mise --yes install --force ${force_mise_installs[*]}`,
 		`export MISE_EXPERIMENTAL=1 MISE_YES=1 MISE_NPM_PACKAGE_MANAGER=npm npm_config_ignore_scripts=true NPM_CONFIG_IGNORE_SCRIPTS=true`,
 		`\"\$HOME/.local/bin/mise\" exec -- npm install -g ${pi_tool}@${pi_version}`,
 		`configure_managed_mise_tool "$(managed_mise_tool_row node)"`,
@@ -394,6 +438,7 @@ func TestChecksUsePinnedToolsAndTargetUser(t *testing.T) {
 	assertCheck(t, checks, "node "+NodeVersion, `expected_version="`+NodeVersion+`"`)
 	assertCheck(t, checks, "node "+NodeVersion, "runuser -u \"$target_user\"")
 	assertCheck(t, checks, "node "+NodeVersion, `cd "$HOME"`)
+	assertCheck(t, checks, "npm "+NPMVersion, "expected npm "+NPMVersion)
 	assertCheck(t, checks, "pi "+PiVersion, "expected pi at")
 	assertCheck(t, checks, "pi "+PiVersion, "expected pi "+PiVersion)
 	assertCheck(t, checks, "uv "+UVVersion, "uv --version")

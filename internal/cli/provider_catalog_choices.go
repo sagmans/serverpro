@@ -3,9 +3,11 @@ package cli
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/hostplatform"
 )
 
 type catalogChoiceSet struct {
@@ -62,9 +64,47 @@ func sizeChoicesFromCatalog(items []compute.Size) []choice {
 func imageChoicesFromCatalog(items []compute.Image) []choice {
 	choices := make([]choice, 0, len(items))
 	for _, item := range items {
+		if !isSupportedManagedImage(item) {
+			continue
+		}
 		choices = append(choices, choice{Value: item.Name, Description: compactDescription(item.Description, item.OSFlavor, item.OSVersion, item.Architecture)})
 	}
 	return choices
+}
+
+func validateManagedImageCatalog(catalog compute.Catalog, selected string) error {
+	found := false
+	for _, image := range catalog.Images {
+		if image.Name != selected {
+			continue
+		}
+		found = true
+		if isSupportedManagedImage(image) {
+			return nil
+		}
+	}
+	if !found {
+		return fmt.Errorf("managed image %q is not present in provider catalog", selected)
+	}
+	return fmt.Errorf("unsupported managed image %q; require %s %s on %s", selected, hostplatform.ManagedHostOS, hostplatform.ManagedHostVersion, strings.Join(hostplatform.ManagedHostArchitectures(), " or "))
+}
+
+func isSupportedManagedImage(image compute.Image) bool {
+	flavor := strings.ToLower(strings.TrimSpace(image.OSFlavor))
+	if flavor != hostplatform.ManagedHostOS {
+		return false
+	}
+	architecture := strings.ToLower(strings.TrimSpace(image.Architecture))
+	if !slices.Contains(hostplatform.ManagedHostImageArchitectures(), architecture) {
+		return false
+	}
+	if image.OSVersion != "" {
+		return strings.TrimSpace(image.OSVersion) == hostplatform.ManagedHostVersion
+	}
+	identity := strings.ToLower(image.Name + " " + image.Description)
+	slugVersion := strings.ReplaceAll(hostplatform.ManagedHostVersion, ".", "-")
+	return strings.Contains(identity, hostplatform.ManagedHostOS+"-"+slugVersion) ||
+		strings.Contains(identity, hostplatform.ManagedHostOS+" "+hostplatform.ManagedHostVersion)
 }
 
 func compactDescription(parts ...string) string {

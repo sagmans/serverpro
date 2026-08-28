@@ -8,6 +8,7 @@ import (
 
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/tailscaletools"
+	"github.com/sagmans/serverpro/internal/tunnel"
 )
 
 func TestBatchReplayRunWithInputDelegatesOnlyPlannedFix(t *testing.T) {
@@ -53,13 +54,13 @@ func TestRemoteReadPlanDeclaresConditionalAndConfiguredReads(t *testing.T) {
 	if !plan.hasRead(cloudInitWaitCommand) || !plan.hasRead(cloudInitLongCommand) {
 		t.Fatalf("cloud-init reads missing from plan: %+v", plan.commands)
 	}
-	if plan.hasRead("systemctl is-active cloudflared") {
+	if plan.hasRead(tunnel.CheckCommand()) {
 		t.Fatalf("cloudflared read planned without ingress: %+v", plan.commands)
 	}
 
 	cfg.Network.Ingress = "cloudflare-tunnel"
 	plan = buildRemoteReadPlan(cfg)
-	if !plan.hasRead("systemctl is-active cloudflared") {
+	if !plan.hasRead(tunnel.CheckCommand()) {
 		t.Fatalf("cloudflared read missing with ingress: %+v", plan.commands)
 	}
 	if !plan.hasRead(tailscaletools.CheckCommand()) {

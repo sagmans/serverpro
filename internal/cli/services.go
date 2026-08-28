@@ -116,6 +116,13 @@ func (a *app) preflight(ctx context.Context, cfg config.Config, creds credential
 		if diagnostics := provider.Doctor(ctx, accountRef); !diagnostics.Passed() {
 			return diagnostics.Err()
 		}
+		catalog, diagnostics := provider.Catalog(ctx, compute.CatalogQuery{Account: accountRef, Location: cfg.Compute.Location})
+		if !diagnostics.Passed() {
+			return diagnostics.Err()
+		}
+		if err := validateManagedImageCatalog(catalog, cfg.Compute.Image); err != nil {
+			return err
+		}
 	}
 	var tailscaleClient preflightTailscaleClient = tailscale.New(creds.Tailscale, cfg.Access.Tailscale.Tailnet)
 	if a.services.preflightTailscaleClient != nil {
