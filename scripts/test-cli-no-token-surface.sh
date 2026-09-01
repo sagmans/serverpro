@@ -280,7 +280,7 @@ run_ok "root no args shows help" "$bin"
 run_ok "version flag" "$bin" --version
 run_fail_grep "invalid global timeout" 'time: invalid duration' "$bin" --timeout nope doctor
 run_ok "global timeout parses" "$bin" --timeout 1s doctor
-run_fail_grep "tailnet reconcile token guard" 'SERVERPRO_TAILSCALE_TOKEN required' "$bin" --non-interactive --dry-run tailnet reconcile --tailnet example.ts.net
+run_fail_grep "tailnet reconcile token guard" 'SERVERPRO_TAILSCALE_TOKEN required' "$bin" --non-interactive --dry-run tailnet reconcile example.ts.net
 
 run_ok_grep "namespace list empty" '^\[\]$' "$bin" namespace list
 run_ok_grep "namespace create mynamespace" '"status": "created"' "$bin" namespace create mynamespace

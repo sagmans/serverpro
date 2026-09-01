@@ -260,7 +260,7 @@ func TestScopedGlobalHelpMatchesExecutionContract(t *testing.T) {
 		{name: "server import", args: []string{"server", "import", "--help"}, want: []string{"--namespace", "--provider", "--all", "--non-interactive", "--dry-run", "--yes"}, absent: []string{"--config", "--state"}},
 		{name: "location list", args: []string{"location", "list", "--help"}, want: []string{"--provider", "--non-interactive"}, absent: []string{"--dry-run", "--namespace"}},
 		{name: "server ingress list", args: []string{"server", "ingress", "list", "--help"}, want: []string{"--state", "--namespace", "--non-interactive"}, absent: []string{"--dry-run", "--provider"}},
-		{name: "tailnet reconcile", args: []string{"tailnet", "reconcile", "--help"}, want: []string{"--non-interactive", "--dry-run", "--yes", "--tailnet"}, absent: []string{"--state", "--namespace", "--provider"}},
+		{name: "tailnet reconcile", args: []string{"tailnet", "reconcile", "--help"}, want: []string{"--non-interactive", "--dry-run", "--yes", "TAILNET"}, absent: []string{"--tailnet", "--state", "--namespace", "--provider"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer

@@ -73,7 +73,7 @@ func TestTailnetReconcileDryRunProtectsOnlyMatchingTailnetState(t *testing.T) {
 	cmd := a.tailnetReconcileCmd()
 	cmd.SetOut(&out)
 	cmd.SetErr(io.Discard)
-	cmd.SetArgs([]string{"--tailnet", "example.ts.net"})
+	cmd.SetArgs([]string{"example.ts.net"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -131,6 +131,7 @@ func TestTailnetReconcileRequiresExplicitTailnet(t *testing.T) {
 	}}
 	t.Setenv("SERVERPRO_TAILSCALE_TOKEN", "secret")
 	cmd := a.tailnetReconcileCmd()
+	cmd.SetArgs([]string{"-"})
 	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "explicit") || client.plannedProtected != nil {
 		t.Fatalf("token-relative tailnet accepted: err=%v protected=%v", err, client.plannedProtected)
 	}
@@ -147,7 +148,7 @@ func TestTailnetReconcileCompletesWithoutApplyWhenPlanIsEmpty(t *testing.T) {
 	cmd := a.tailnetReconcileCmd()
 	cmd.SetOut(&out)
 	cmd.SetErr(io.Discard)
-	cmd.SetArgs([]string{"--tailnet", "example.ts.net"})
+	cmd.SetArgs([]string{"example.ts.net"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +172,7 @@ func TestTailnetReconcileAppliesWithExplicitApproval(t *testing.T) {
 	cmd := a.tailnetReconcileCmd()
 	cmd.SetOut(&out)
 	cmd.SetErr(io.Discard)
-	cmd.SetArgs([]string{"--tailnet", "example.ts.net"})
+	cmd.SetArgs([]string{"example.ts.net"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +197,7 @@ func TestTailnetReconcileInteractiveApplyWritesOneStdoutDocument(t *testing.T) {
 	cmd := a.tailnetReconcileCmd()
 	cmd.SetOut(&out)
 	cmd.SetErr(&stderr)
-	cmd.SetArgs([]string{"--tailnet", "example.ts.net"})
+	cmd.SetArgs([]string{"example.ts.net"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +230,7 @@ func TestTailnetReconcileFailsClosedOnUnknownTailnetIdentity(t *testing.T) {
 	}}
 	t.Setenv("SERVERPRO_TAILSCALE_TOKEN", "secret")
 	cmd := a.tailnetReconcileCmd()
-	cmd.SetArgs([]string{"--tailnet", "example.ts.net"})
+	cmd.SetArgs([]string{"example.ts.net"})
 	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "tailnet identity") || client.plannedProtected != nil {
 		t.Fatalf("unknown tailnet identity did not fail closed: err=%v protected=%v", err, client.plannedProtected)
 	}
@@ -248,7 +249,7 @@ func TestTailnetReconcileWaitsForMatchingTailnetPolicyOperation(t *testing.T) {
 	}}
 	t.Setenv("SERVERPRO_TAILSCALE_TOKEN", "secret")
 	cmd := a.tailnetReconcileCmd()
-	cmd.SetArgs([]string{"--tailnet", tailnet})
+	cmd.SetArgs([]string{tailnet})
 	done := make(chan error, 1)
 	go func() { done <- cmd.Execute() }()
 	select {
@@ -285,7 +286,7 @@ func TestTailnetReconcileFailsClosedOnUnreadableRegisteredState(t *testing.T) {
 	cmd := a.tailnetReconcileCmd()
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
-	cmd.SetArgs([]string{"--tailnet", "example.ts.net"})
+	cmd.SetArgs([]string{"example.ts.net"})
 	if err := cmd.Execute(); err == nil || client.plannedProtected != nil {
 		t.Fatalf("expected fail-closed state error, err=%v protected=%v", err, client.plannedProtected)
 	}
