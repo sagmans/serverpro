@@ -13,6 +13,7 @@ import (
 
 type importFlags struct {
 	providerID          string
+	discoverServer      string
 	adminUser           string
 	tailscaleTailnet    string
 	cloudflareAccountID string
@@ -33,6 +34,7 @@ func (a *app) serverDiscoverCmd() *cobra.Command {
 		},
 	}, "namespace", "provider", "non-interactive")
 	cmd.Flags().StringVar(&flags.providerID, "provider-id", "", "filter by provider resource id")
+	cmd.Flags().StringVar(&flags.discoverServer, "server", "", "filter by server name")
 	cmd.Flags().BoolVar(&flags.includeUnmanaged, "include-unmanaged", false, "include servers without serverpro ownership labels")
 	return cmd
 }
@@ -68,7 +70,7 @@ func (a *app) runServerDiscover(ctx context.Context, flags *importFlags) error {
 	}
 	candidates, err := importsync.Discover(ctx, provider, account, importsync.DiscoverFilter{
 		Namespace:        a.project,
-		Server:           a.server,
+		Server:           flags.discoverServer,
 		ProviderID:       flags.providerID,
 		IncludeUnmanaged: flags.includeUnmanaged,
 	})

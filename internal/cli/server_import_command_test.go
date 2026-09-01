@@ -50,6 +50,32 @@ func TestServerDiscoverListsManagedCandidates(t *testing.T) {
 	}
 }
 
+func TestServerDiscoverFiltersByServerName(t *testing.T) {
+	createTestHome(t)
+	provider := listImportProvider{records: []compute.ServerRecord{
+		{ID: "abc", Name: "example-dev", Labels: ownership.ProviderLabels("example", "dev", nil)},
+		{ID: "def", Name: "example-api", Labels: ownership.ProviderLabels("example", "api", nil)},
+	}}
+	var out bytes.Buffer
+	a := &app{
+		stdout:    &out,
+		stderr:    io.Discard,
+		provider:  "vultr",
+		providers: providerRegistryForPower(t, provider),
+	}
+	t.Setenv("SERVERPRO_SERVER_PROVIDER_TOKEN", "secret")
+	cmd := a.serverDiscoverCmd()
+	cmd.SetOut(&out)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"--server", "dev"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"server": "dev"`) || strings.Contains(out.String(), `"server": "api"`) {
+		t.Fatalf("--server filter not applied: %s", out.String())
+	}
+}
+
 func TestServerImportAllWritesLocalState(t *testing.T) {
 	createTestHome(t)
 	provider := listImportProvider{records: []compute.ServerRecord{{
