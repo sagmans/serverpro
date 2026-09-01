@@ -51,7 +51,7 @@ test-harness:
 test-smoke: bin
 	"./${BINARY}" --version >/dev/null
 	"./${BINARY}" --help >/dev/null
-	"./${BINARY}" doctor >/dev/null
+	"./${BINARY}" provider list >/dev/null
 
 test-integration:
 	"${GO}" test ./internal/cli ./internal/lifecycle ./internal/provider/... ./internal/doctor ./internal/importsync ./internal/state ./internal/credentials
