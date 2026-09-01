@@ -245,9 +245,9 @@ same ownership checks immediately before each DELETE.
 
 Independent providers do not supply one atomic transaction. If the compute
 provider reports successful deletion but external cleanup fails, the CLI returns
-a typed partial failure. It writes structured recovery evidence, exits nonzero,
-and retains local state and
-registry authority. A retry rechecks current resources and treats absent compute
+a typed partial failure. It writes structured recovery evidence and exits
+nonzero. It retains local state and registry authority. A retry rechecks current
+resources and treats absent compute
 resources as completed cleanup.
 
 Server deletion owns only server-scoped compute, Tailscale device/auth-key, and
