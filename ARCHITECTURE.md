@@ -1,6 +1,6 @@
 # Architecture
 
-Date: 2026-08-27
+Date: 2026-09-01
 Status: provider-agnostic implementation overview
 
 ## System overview
@@ -237,6 +237,18 @@ flowchart LR
     and signing checks for account-key access.
 
 ### Delete and tailnet policy
+
+After approval and locked authority revalidation, server deletion reads and
+checks each tracked external resource before compute mutation. An API or
+ownership error stops before compute deletion. External cleanup repeats the
+same ownership checks immediately before each DELETE.
+
+Independent providers do not supply one atomic transaction. If the compute
+provider reports successful deletion but external cleanup fails, the CLI returns
+a typed partial failure. It writes structured recovery evidence, exits nonzero,
+and retains local state and
+registry authority. A retry rechecks current resources and treats absent compute
+resources as completed cleanup.
 
 Server deletion owns only server-scoped compute, Tailscale device/auth-key, and
 Cloudflare tunnels proven `created` by serverpro. Adopted, imported, and legacy
