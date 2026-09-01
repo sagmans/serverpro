@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -17,6 +18,7 @@ import (
 const (
 	defaultServerOperationTimeout       = 10 * time.Minute
 	deleteExternalCleanupPreflightError = "tracked external cleanup preflight failed before compute deletion"
+	deleteOperationAction               = "delete"
 )
 
 const (
@@ -26,17 +28,24 @@ const (
 )
 
 type serverOperationRow struct {
-	Status           string                         `json:"status"`
-	Action           string                         `json:"action"`
-	DryRun           bool                           `json:"dry_run,omitempty"`
-	Namespace        string                         `json:"namespace"`
-	Server           string                         `json:"server"`
-	Provider         string                         `json:"provider"`
-	Power            string                         `json:"power,omitempty"`
-	StatePath        string                         `json:"state_path,omitempty"`
-	ComputeServer    string                         `json:"compute_server,omitempty"`
-	ManagedResources []compute.ManagedResourceRef   `json:"managed_resources,omitempty"`
-	ExternalCleanup  []serverDeleteExternalResource `json:"external_cleanup,omitempty"`
+	Status                   string                         `json:"status"`
+	Action                   string                         `json:"action"`
+	DryRun                   bool                           `json:"dry_run,omitempty"`
+	Namespace                string                         `json:"namespace"`
+	Server                   string                         `json:"server"`
+	Provider                 string                         `json:"provider"`
+	Power                    string                         `json:"power,omitempty"`
+	StatePath                string                         `json:"state_path,omitempty"`
+	ComputeServer            string                         `json:"compute_server,omitempty"`
+	ManagedResources         []compute.ManagedResourceRef   `json:"managed_resources,omitempty"`
+	ExternalCleanup          []serverDeleteExternalResource `json:"external_cleanup,omitempty"`
+	FailureStage             string                         `json:"failure_stage,omitempty"`
+	ComputeDeleted           bool                           `json:"compute_deleted,omitempty"`
+	LocalStateRetained       bool                           `json:"local_state_retained,omitempty"`
+	Retryable                bool                           `json:"retryable,omitempty"`
+	Error                    string                         `json:"error,omitempty"`
+	NextAction               string                         `json:"next_action,omitempty"`
+	RemainingExternalCleanup []serverDeleteExternalResource `json:"remaining_external_cleanup,omitempty"`
 }
 
 type serverDeleteExternalResource struct {
@@ -108,7 +117,7 @@ func (a *app) runServerDelete(ctx context.Context, name string) error {
 		if err != nil {
 			return err
 		}
-		plan := serverOperationRow{Status: "planned", Action: "delete", DryRun: true, Namespace: st.Namespace, Server: st.Server, Provider: st.Compute.Provider, StatePath: config.Expand(stPath), ComputeServer: st.Compute.ID, ManagedResources: append([]compute.ManagedResourceRef(nil), st.Compute.ManagedResources...), ExternalCleanup: externalCleanup}
+		plan := serverOperationRow{Status: "planned", Action: deleteOperationAction, DryRun: true, Namespace: st.Namespace, Server: st.Server, Provider: st.Compute.Provider, StatePath: config.Expand(stPath), ComputeServer: st.Compute.ID, ManagedResources: append([]compute.ManagedResourceRef(nil), st.Compute.ManagedResources...), ExternalCleanup: externalCleanup}
 		if a.dryRun {
 			return writeJSON(a.stdout, plan)
 		}
@@ -125,9 +134,15 @@ func (a *app) runServerDelete(ctx context.Context, name string) error {
 		}
 	}
 	if err := a.deleteServerDestructive(ctx, name, stPath, st); err != nil {
+		var partialFailure *serverDeletePartialFailure
+		if errors.As(err, &partialFailure) {
+			if outputErr := writeJSON(a.stdout, partialFailure.Row); outputErr != nil {
+				return errors.Join(err, fmt.Errorf("%s: %w", deletePartialOutputError, outputErr))
+			}
+		}
 		return err
 	}
-	row := serverOperationRow{Status: "complete", Action: "delete", Namespace: st.Namespace, Server: st.Server, Provider: st.Compute.Provider}
+	row := serverOperationRow{Status: "complete", Action: deleteOperationAction, Namespace: st.Namespace, Server: st.Server, Provider: st.Compute.Provider}
 	return writeJSON(a.stdout, row)
 }
 
@@ -235,8 +250,19 @@ func (a *app) executeServerDelete(ctx context.Context, authority serverDeleteAut
 		return diagnostics.Err()
 	}
 	if execution.Cleanup.Required {
-		if _, err := a.deleteTrackedExternalResources(ctx, execution.Cleanup); err != nil {
-			return err
+		updated, err := a.deleteTrackedExternalResources(ctx, execution.Cleanup)
+		if err != nil {
+			safeErr := redact.New(a.redactionSecrets(execution.Cleanup.Creds)...).Error(err)
+			retained := updated
+			if current, loadErr := state.Load(config.Expand(execution.Cleanup.StatePath)); loadErr == nil {
+				retained = current
+			} else {
+				safeErr = errors.Join(safeErr, fmt.Errorf("%s: %w", deletePartialStateReloadError, loadErr))
+				if retained.Namespace == "" {
+					retained = execution.Cleanup.State
+				}
+			}
+			return newServerDeletePartialFailure(execution.Cleanup, retained, safeErr)
 		}
 	}
 	if err := state.RemoveDurably(config.Expand(execution.Cleanup.StatePath)); err != nil && !os.IsNotExist(err) {

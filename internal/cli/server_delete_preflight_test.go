@@ -3,13 +3,16 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/ingress"
 	"github.com/sagmans/serverpro/internal/mesh"
 	"github.com/sagmans/serverpro/internal/provider/httpjson"
@@ -27,6 +30,12 @@ const (
 	deletePreflightDeviceReadError    = "device read failed"
 	deletePreflightTunnelReadError    = "tunnel read failed"
 	deletePreflightAuthKeyReadError   = "auth key read failed"
+	deletePartialExpectedStatus       = "partial"
+	deletePartialExpectedAction       = "delete"
+	deletePartialExpectedStage        = "external_cleanup"
+	deletePartialNextActionFragment   = "rerun the same delete command"
+	deletePartialSecret               = "delete-partial-secret-token"
+	deletePartialSecretErrorFormat    = "cleanup failed with credential %s: %w"
 )
 
 func TestServerDeleteRejectsExternalPreflightBeforeProviderMutation(t *testing.T) {
@@ -76,6 +85,101 @@ func TestServerDeleteRejectsExternalPreflightBeforeProviderMutation(t *testing.T
 	}
 	if _, exists := registry.Find("demoapp", "webapp"); !exists {
 		t.Fatal("registry authority removed after cleanup preflight failure")
+	}
+}
+
+func TestServerDeleteReportsPartialResultAfterComputeDeletion(t *testing.T) {
+	createServerReadFixture(t)
+	stPath := config.ServerStatePath("demoapp", "webapp")
+	st, err := state.Load(stPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.ExampleServer("demoapp", "webapp")
+	creds, err := credentials.LoadPartial(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	creds.Tailscale = deletePartialSecret
+	if err := credentials.Save(cfg, creds); err != nil {
+		t.Fatal(err)
+	}
+	st.Tailscale.NodeID = deletePreflightNodeID
+	st.Tailscale.Name = deletePreflightDeviceName
+	st.Tailscale.Tags = append([]string(nil), cfg.Access.Tailscale.Tags...)
+	if err := state.Save(stPath, st); err != nil {
+		t.Fatal(err)
+	}
+
+	client := &sequencedDeleteTailscale{
+		devices: []mesh.Device{{
+			ID:       deletePreflightNodeID,
+			NodeID:   deletePreflightNodeID,
+			Name:     deletePreflightDeviceName + ".tail.ts.net",
+			Hostname: deletePreflightDeviceName,
+			Tags:     append([]string(nil), st.Tailscale.Tags...),
+		}},
+		deviceErrors: []error{nil, fmt.Errorf(deletePartialSecretErrorFormat, deletePartialSecret, deletePreflightUnauthorizedError())},
+	}
+	provider := &powerDeleteFakeProvider{}
+	var out bytes.Buffer
+	a := &app{
+		stdout:    &out,
+		stderr:    io.Discard,
+		project:   "demoapp",
+		provider:  "hetzner",
+		yes:       true,
+		providers: providerRegistryForPower(t, provider),
+		services: serviceHooks{cleanupClients: func(serverDeleteCleanup) serverCleanupClients {
+			return serverCleanupClients{Tailscale: client}
+		}},
+	}
+
+	err = a.runServerDelete(context.Background(), "webapp")
+	if err == nil {
+		t.Fatal("partial delete returned success")
+	}
+	if !provider.deleted || provider.deletedCount != 1 {
+		t.Fatalf("provider delete count = %d", provider.deletedCount)
+	}
+	var row struct {
+		Status                   string                         `json:"status"`
+		Action                   string                         `json:"action"`
+		FailureStage             string                         `json:"failure_stage"`
+		ComputeDeleted           bool                           `json:"compute_deleted"`
+		LocalStateRetained       bool                           `json:"local_state_retained"`
+		Retryable                bool                           `json:"retryable"`
+		Error                    string                         `json:"error"`
+		NextAction               string                         `json:"next_action"`
+		RemainingExternalCleanup []serverDeleteExternalResource `json:"remaining_external_cleanup"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &row); err != nil {
+		t.Fatalf("partial output is not JSON: %v\n%s", err, out.String())
+	}
+	if row.Status != deletePartialExpectedStatus || row.Action != deletePartialExpectedAction || row.FailureStage != deletePartialExpectedStage {
+		t.Fatalf("partial identity = %+v", row)
+	}
+	if !row.ComputeDeleted || !row.LocalStateRetained || !row.Retryable {
+		t.Fatalf("partial recovery flags = %+v", row)
+	}
+	if !strings.Contains(row.Error, deletePreflightUnauthorizedStatus) || !strings.Contains(row.NextAction, deletePartialNextActionFragment) {
+		t.Fatalf("partial guidance = %+v", row)
+	}
+	if strings.Contains(row.Error, deletePartialSecret) || strings.Contains(err.Error(), deletePartialSecret) {
+		t.Fatalf("partial failure exposed credential: row=%q error=%q", row.Error, err)
+	}
+	if len(row.RemainingExternalCleanup) != 1 || row.RemainingExternalCleanup[0].ID != deletePreflightNodeID {
+		t.Fatalf("remaining cleanup = %+v", row.RemainingExternalCleanup)
+	}
+	if exists, existsErr := state.Exists(config.Expand(stPath)); existsErr != nil || !exists {
+		t.Fatalf("state retained = %t, error = %v", exists, existsErr)
+	}
+	registry, err := state.LoadRegistry(config.RegistryPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := registry.Find("demoapp", "webapp"); !exists {
+		t.Fatal("registry authority removed after partial delete")
 	}
 }
 
