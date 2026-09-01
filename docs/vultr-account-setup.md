@@ -9,9 +9,9 @@ console behavior.
 2. Create a Vultr API token.
 3. Keep the token private; serverpro stores it only in the selected server's
    credential file.
-4. Use `serverpro location list`, `serverpro size list`, and `serverpro image
-   list -p vultr` to choose supported regions, plans, and OS IDs before creating
-   a server.
+4. Use `serverpro location list -p vultr`, `serverpro size list -p vultr`, and
+   `serverpro image list -p vultr` to choose supported regions, plans, and OS
+   IDs before creating a server.
 
 serverpro creates IPv4-backed instances, attaches a deny-by-default firewall
 group with explicit IPv4 and IPv6 UDP rules for Tailscale WireGuard (`41641`)

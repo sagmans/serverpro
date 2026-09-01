@@ -99,11 +99,11 @@ case " $* " in
 		[[ "${FAKE_INVALID_SEMANTIC:-}" == diagnostics-status ]] && status=fail
 		printf '[{"status":"%s","message":"selftest"}]\n' "$status"
 		;;
-	*" catalog locations "*|*" catalog sizes "*|*" catalog images "*)
+	*" location list "*|*" size list "*|*" image list "*)
 		invalid_catalog=catalog-locations
 		case " $* " in
-			*" catalog sizes "*) invalid_catalog=catalog-sizes ;;
-			*" catalog images "*) invalid_catalog=catalog-images ;;
+			*" size list "*) invalid_catalog=catalog-sizes ;;
+			*" image list "*) invalid_catalog=catalog-images ;;
 		esac
 		if [[ "${FAKE_INVALID_SEMANTIC:-}" == "$invalid_catalog" ]]; then
 			printf '[{"name":""}]\n'
@@ -320,9 +320,9 @@ for provider in hetzner vultr digitalocean; do
 	check "A $provider images passed" grep -Fq "PASS | live catalog images $provider" "$scenario_tmp/harness.log"
 	check "A $provider discover passed" grep -Fq "PASS | live discover $provider" "$scenario_tmp/harness.log"
 	check_command "A $provider doctor argv" "CMD <--non-interactive> <provider> <doctor> <$provider>"
-	check_command "A $provider locations argv" "CMD <--non-interactive> <-p> <$provider> <catalog> <locations>"
-	check_command "A $provider sizes argv" "CMD <--non-interactive> <-p> <$provider> <catalog> <sizes> <--location> <$location>"
-	check_command "A $provider images argv" "CMD <--non-interactive> <-p> <$provider> <catalog> <images> <--location> <$location>"
+	check_command "A $provider locations argv" "CMD <--non-interactive> <-p> <$provider> <location> <list>"
+	check_command "A $provider sizes argv" "CMD <--non-interactive> <-p> <$provider> <size> <list> <--location> <$location>"
+	check_command "A $provider images argv" "CMD <--non-interactive> <-p> <$provider> <image> <list> <--location> <$location>"
 	check_command "A $provider discover argv" "CMD <--non-interactive> <-p> <$provider> <server> <discover>"
 done
 check_command "A live server doctor argv" "CMD <--non-interactive> <-n> <spdogfooda> <-p> <hetzner> <server> <doctor> <web>"

@@ -9,9 +9,9 @@ behavior.
 2. Create a Hetzner Cloud API token for that project.
 3. Keep the token private; serverpro stores it only in the selected server's
    credential file.
-4. Use `serverpro location list`, `serverpro size list`, and `serverpro image
-   list -p hetzner` to choose supported locations, server types, and images
-   before creating a server.
+4. Use `serverpro location list -p hetzner`, `serverpro size list -p hetzner`,
+   and `serverpro image list -p hetzner` to choose supported locations, server
+   types, and images before creating a server.
 
 serverpro creates a provider firewall for managed servers and keeps public SSH
 closed. DNS records are not managed by serverpro.

@@ -83,7 +83,7 @@ serverpro server list
 serverpro server status NAME
 serverpro server doctor NAME
 serverpro server ssh NAME
-serverpro server discover [-p PROVIDER] [--server NAME] [--provider-id ID] [--include-unmanaged]
+serverpro server discover -p PROVIDER [--server NAME] [--provider-id ID] [--include-unmanaged]
 serverpro server import [NAME]
 serverpro server start|stop|restart NAME
 serverpro server delete NAME
@@ -255,8 +255,9 @@ serverpro server create webapp \
 ```
 
 Create requires explicit provider, location, size, and image values. Use
-`serverpro location list`, `serverpro size list`, and `serverpro image list`
-first to select a supported Ubuntu 24.04 image. Live
+`serverpro location list -p PROVIDER`, `serverpro size list -p PROVIDER`, and
+`serverpro image list -p PROVIDER` first. Select a supported Ubuntu 24.04 image.
+Live
 create verifies that exact image against the current selected-location catalog
 before the first provider mutation. During live create, every externally visible policy, tunnel, auth-key, compute, and device
 mutation is checkpointed. A failed create reports its lifecycle phase and known

@@ -89,8 +89,8 @@ func TestWriteJSONNormalizesNilSlicesInsideArrays(t *testing.T) {
 }
 
 func TestWriteJSONNormalizesNilSlicesBehindPointerFields(t *testing.T) {
-	// WHY: exercises normalizeJSONPointer — scoped rows carry *bool fields, and
-	// a nil-slice struct behind such a pointer must render [] rather than null.
+	// WHY: writeJSON accepts arbitrary payload shapes; pointer fields must keep
+	// the same nil-slice normalization contract as direct struct fields.
 	type inner struct {
 		Items []string `json:"items"`
 	}

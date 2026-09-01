@@ -148,8 +148,8 @@ After the workflow succeeds:
    running its binary.
 
 4. In an isolated temporary directory, run the verified archive's
-   `serverpro --version`, `serverpro --help`, and `serverpro doctor` without
-   provider tokens. This is the required non-live release dogfood check.
+   `serverpro --version`, `serverpro --help`, and `serverpro provider list`
+   without provider tokens. This is the required non-live release dogfood check.
 
 5. Exercise the documented Go install path without installing globally:
 
@@ -158,7 +158,7 @@ After the workflow succeeds:
    GOBIN="${RELEASE_BIN_DIR}" go install "github.com/sagmans/serverpro/cmd/serverpro@${TAG}"
    "${RELEASE_BIN_DIR}/serverpro" --version
    "${RELEASE_BIN_DIR}/serverpro" --help
-   "${RELEASE_BIN_DIR}/serverpro" doctor
+   "${RELEASE_BIN_DIR}/serverpro" provider list
    ```
 
 Record the tag commit, workflow URL, GitHub release URL, checks run, and

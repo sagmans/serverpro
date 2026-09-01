@@ -15,7 +15,7 @@ why a layer is not applicable.
 | --- | --- | --- | --- |
 | Unit | `make test-unit` | Standalone fast run of every Go package test. | No |
 | Consolidated Go gate | `make test-go-check` | Run every Go test once with the race detector and one aggregate coverage profile; enforce 81.8% minimum coverage and reject 0%-covered functions. | No |
-| Smoke | `make test-smoke` | Prove binary starts and help renders (output discarded; JSON shape is covered by the consolidated Go gate and e2e layers). | No |
+| Smoke | `make test-smoke` | Prove the binary starts, help renders, and the token-free `provider list` leaf is registered. Output is discarded. Other gates cover JSON shape. | No |
 | Integration | `make test-integration` | Standalone focused rerun of CLI orchestration, provider HTTP adapters, lifecycle, import, doctor, state, and credentials with fakes or `httptest`; omitted from `make check` because the consolidated Go gate already includes it. | No |
 | E2E | `make test-e2e` | Run the compiled CLI through isolated-home workflows, strict JSON parsing, inventory-derived help and parent coverage, disposition evidence, dry-runs, fixture state, and no-token safety checks. | No |
 | Full-chain E2E | `make test-full-chain-e2e` | Build the test-only composition binary and run concurrent create→status→doctor→delete journeys against stateful local Hetzner, Vultr, and DigitalOcean APIs. Production doctor and cleanup orchestration consume injected local clients; fixed time, checkpoint recovery, strict JSON, cleanup evidence, and sanitized failure artifacts remain hermetic. | No |
