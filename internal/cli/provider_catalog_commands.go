@@ -52,9 +52,9 @@ func (a *app) runProviderDoctor(ctx context.Context, name string) error {
 	return diagnostics.Err()
 }
 
-func (a *app) runCatalog(ctx context.Context, kind, location string) error {
+func (a *app) runCatalog(ctx context.Context, kind, location, commandPath string) error {
 	if a.provider == "" {
-		return fmt.Errorf("--provider required for catalog %s", kind)
+		return requiredFlagError(commandPath, "provider", "p")
 	}
 	provider, err := a.resolveProvider(a.provider)
 	if err != nil {

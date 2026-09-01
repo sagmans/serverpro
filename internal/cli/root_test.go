@@ -20,7 +20,7 @@ func TestRootHelpShowsResourceFirstSurface(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"namespace", "server", "provider", "catalog", "ingress", "tailnet", "doctor"} {
+	for _, want := range []string{"namespace", "server", "provider", "location", "size", "image", "tailnet"} {
 		listing := "\n  " + want
 		if !strings.Contains(out.String(), listing) {
 			t.Fatalf("missing %q in help:\n%s", want, out.String())
@@ -139,6 +139,10 @@ func TestRemovedRootSurfaceIsRejected(t *testing.T) {
 		{name: "provision", args: []string{"provision"}, want: "unknown command"},
 		{name: "registry", args: []string{"registry"}, want: "unknown command"},
 		{name: "completion", args: []string{"completion"}, want: "unknown command"},
+		{name: "catalog", args: []string{"catalog"}, want: "unknown command"},
+		{name: "ingress", args: []string{"ingress"}, want: "unknown command"},
+		{name: "doctor", args: []string{"doctor"}, want: "unknown command"},
+		{name: "ingress add", args: []string{"ingress", "add", "webapp"}, want: "unknown command"},
 		{name: "verbose", args: []string{"--" + "verbose"}, want: "unknown flag"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -192,7 +196,7 @@ func TestServerCreateRequiresProviderOnly(t *testing.T) {
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs([]string{"server", "create", "webapp", "-n", "demoapp", "--dry-run", "--non-interactive"})
 	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "--provider required") {
+	if err == nil || !strings.Contains(err.Error(), `--provider/-p is required for "serverpro server create"`) {
 		t.Fatalf("expected provider requirement, got %v", err)
 	}
 }
@@ -224,7 +228,7 @@ func TestServerCreateRejectsProjectFlag(t *testing.T) {
 }
 
 func TestPublicHelpUsesNamespaceNotProject(t *testing.T) {
-	for _, args := range [][]string{{"server", "create", "--help"}, {"doctor", "--help"}} {
+	for _, args := range [][]string{{"server", "create", "--help"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			var out bytes.Buffer
 			cmd := New()
@@ -255,9 +259,9 @@ func TestScopedGlobalHelpMatchesExecutionContract(t *testing.T) {
 		{name: "server create", args: []string{"server", "create", "--help"}, want: []string{"--config", "--state", "--namespace", "--provider", "--non-interactive", "--dry-run", "--yes"}, absent: []string{"--all"}},
 		{name: "server discover", args: []string{"server", "discover", "--help"}, want: []string{"--namespace", "--provider", "--non-interactive"}, absent: []string{"--dry-run", "--yes", "--all"}},
 		{name: "server import", args: []string{"server", "import", "--help"}, want: []string{"--namespace", "--provider", "--all", "--non-interactive", "--dry-run", "--yes"}, absent: []string{"--config", "--state"}},
-		{name: "catalog locations", args: []string{"catalog", "locations", "--help"}, want: []string{"--provider", "--non-interactive"}, absent: []string{"--dry-run", "--namespace"}},
-		{name: "ingress list", args: []string{"ingress", "list", "--help"}, want: []string{"--state", "--namespace", "--non-interactive"}, absent: []string{"--dry-run", "--provider"}},
-		{name: "tailnet reconcile", args: []string{"tailnet", "reconcile", "--help"}, want: []string{"--non-interactive", "--dry-run", "--yes", "--tailnet"}, absent: []string{"--state", "--namespace", "--provider"}},
+		{name: "location list", args: []string{"location", "list", "--help"}, want: []string{"--provider", "--non-interactive"}, absent: []string{"--dry-run", "--namespace"}},
+		{name: "server ingress list", args: []string{"server", "ingress", "list", "--help"}, want: []string{"--state", "--namespace", "--non-interactive"}, absent: []string{"--dry-run", "--provider"}},
+		{name: "tailnet reconcile", args: []string{"tailnet", "reconcile", "--help"}, want: []string{"--non-interactive", "--dry-run", "--yes", "TAILNET"}, absent: []string{"--tailnet", "--state", "--namespace", "--provider"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer
@@ -320,7 +324,7 @@ func TestRootVersionFlag(t *testing.T) {
 }
 
 func TestParentCommandsRejectUnknownSubcommands(t *testing.T) {
-	for _, parent := range []string{"namespace", "server", "provider", "catalog", "ingress", "tailnet"} {
+	for _, parent := range []string{"namespace", "server", "provider", "location", "size", "image", "tailnet"} {
 		t.Run(parent, func(t *testing.T) {
 			cmd := New()
 			cmd.SetOut(io.Discard)
@@ -346,11 +350,11 @@ func TestUnsupportedScopedFlagsAreRejected(t *testing.T) {
 		{name: "config flag with provider list", args: []string{"--config", "missing.yaml", "provider", "list"}, want: `--config is not supported by "serverpro provider list"`},
 		{name: "state flag with provider list", args: []string{"--state", "missing.json", "provider", "list"}, want: `--state is not supported by "serverpro provider list"`},
 		{name: "all flag with namespace list", args: []string{"-A", "namespace", "list"}, want: `--all is not supported by "serverpro namespace list"`},
-		{name: "yes flag with catalog locations", args: []string{"-y", "catalog", "locations"}, want: `--yes is not supported by "serverpro catalog locations"`},
+		{name: "yes flag with location list", args: []string{"-y", "location", "list"}, want: `--yes is not supported by "serverpro location list"`},
 		{name: "dry-run flag with provider list", args: []string{"--dry-run", "provider", "list"}, want: `--dry-run is not supported by "serverpro provider list"`},
 		{name: "non-interactive flag with provider list", args: []string{"--non-interactive", "provider", "list"}, want: `--non-interactive is not supported by "serverpro provider list"`},
 		{name: "dry-run flag with server status", args: []string{"--dry-run", "server", "status", "webapp"}, want: `--dry-run is not supported by "serverpro server status"`},
-		{name: "dry-run flag with ingress list", args: []string{"--dry-run", "ingress", "list", "webapp"}, want: `--dry-run is not supported by "serverpro ingress list"`},
+		{name: "dry-run flag with server ingress list", args: []string{"--dry-run", "server", "ingress", "list", "webapp"}, want: `--dry-run is not supported by "serverpro server ingress list"`},
 		{name: "config flag with server delete", args: []string{"--config", "server.yaml", "server", "delete", "webapp"}, want: `--config is not supported by "serverpro server delete"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

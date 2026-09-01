@@ -10,8 +10,9 @@ and recovery behavior.
    and images.
 3. Keep the token private; serverpro stores it only in the selected server's
    credential file.
-4. Use `serverpro catalog ... -p digitalocean` to choose supported regions,
-   sizes, and image slugs before creating a server.
+4. Use `serverpro location list -p digitalocean`, `serverpro size list -p
+   digitalocean`, and `serverpro image list -p digitalocean` to choose supported
+   regions, sizes, and image slugs before creating a server.
 
 serverpro creates IPv4-backed droplets, ensures ownership tags, creates a
 tag-bound firewall, and submits bootstrap data as droplet user data. DNS records

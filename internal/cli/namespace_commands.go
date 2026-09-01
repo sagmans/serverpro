@@ -27,9 +27,9 @@ func (a *app) namespaceCmd() *cobra.Command {
 }
 
 func (a *app) namespaceCreateCmd() *cobra.Command {
-	return &cobra.Command{Use: "create NAME", Short: "create a namespace", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	return withScopedFlags(&cobra.Command{Use: "create NAME", Short: "create a namespace", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		return a.runNamespaceCreate(cmd.Context(), args[0])
-	}}
+	}}, "dry-run")
 }
 
 func (a *app) namespaceListCmd() *cobra.Command {

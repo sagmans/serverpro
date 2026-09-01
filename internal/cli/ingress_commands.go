@@ -32,10 +32,10 @@ func (a *app) runIngressAdd(ctx context.Context, name, ingressType, hostname str
 		return err
 	}
 	if ingressType == "" {
-		return fmt.Errorf("--type required for ingress add")
+		return requiredFlagError("serverpro server ingress add", "type", "")
 	}
 	if hostname == "" {
-		return fmt.Errorf("--hostname required for ingress add")
+		return requiredFlagError("serverpro server ingress add", "hostname", "")
 	}
 	adapter, ok := a.resolveIngressAdapter(ingress.Type(ingressType))
 	if !ok {
@@ -87,7 +87,7 @@ func (a *app) runIngressRemove(ctx context.Context, name, hostname string) error
 		return err
 	}
 	if hostname == "" {
-		return fmt.Errorf("--hostname required for ingress remove")
+		return requiredFlagError("serverpro server ingress remove", "hostname", "")
 	}
 	removed := false
 	for _, item := range st.Ingress {

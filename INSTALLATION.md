@@ -246,7 +246,7 @@ Catalog and provider checks can use an ephemeral provider token:
 
 ```sh
 SERVERPRO_SERVER_PROVIDER_TOKEN='provider-token' \
-  serverpro catalog locations -p hetzner --non-interactive
+  serverpro location list -p hetzner --non-interactive
 ```
 
 ## Upgrade

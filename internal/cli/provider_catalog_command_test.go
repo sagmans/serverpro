@@ -11,6 +11,7 @@ import (
 	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
+	"github.com/spf13/cobra"
 )
 
 type cliFakeProvider struct {
@@ -216,17 +217,18 @@ func TestCatalogCommandsUseEphemeralProviderToken(t *testing.T) {
 	createTestHome(t)
 	t.Setenv("SERVERPRO_SERVER_PROVIDER_TOKEN", "secret")
 	for _, tc := range []struct {
-		args []string
-		want string
+		group func(*app) *cobra.Command
+		args  []string
+		want  string
 	}{
-		{[]string{"locations"}, "fsn1"},
-		{[]string{"sizes", "--location", "fsn1"}, "cpx22"},
-		{[]string{"images", "--location", "fsn1"}, "ubuntu-24.04"},
+		{func(a *app) *cobra.Command { return a.locationCmd() }, []string{"list"}, "fsn1"},
+		{func(a *app) *cobra.Command { return a.sizeCmd() }, []string{"list", "--location", "fsn1"}, "cpx22"},
+		{func(a *app) *cobra.Command { return a.imageCmd() }, []string{"list", "--location", "fsn1"}, "ubuntu-24.04"},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			var out bytes.Buffer
 			a := &app{stdout: &out, stderr: io.Discard, provider: "hetzner", providers: testProviderRegistry(t)}
-			cmd := a.catalogCmd()
+			cmd := tc.group(a)
 			cmd.SetOut(&out)
 			cmd.SetErr(io.Discard)
 			cmd.SetArgs(tc.args)

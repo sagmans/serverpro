@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/sagmans/serverpro/internal/compute"
@@ -80,7 +81,7 @@ func newRoot(a *app) *cobra.Command {
 	cmd.PersistentFlags().BoolVarP(&a.yes, "yes", "y", false, "assume yes for confirmations")
 	cmd.PersistentFlags().StringVar(&a.timeout, "timeout", "", "operation timeout")
 	installScopedFlagHelp(cmd)
-	cmd.AddCommand(a.namespaceCmd(), a.serverCmd(), a.providerCmd(), a.catalogCmd(), a.ingressCmd(), a.tailnetCmd(), a.globalDoctorCmd())
+	cmd.AddCommand(a.namespaceCmd(), a.serverCmd(), a.providerCmd(), a.locationCmd(), a.sizeCmd(), a.imageCmd(), a.tailnetCmd())
 	return cmd
 }
 
@@ -123,13 +124,38 @@ func (a *app) prepareRootCommand(cmd *cobra.Command) error {
 
 func validateScopedPersistentFlags(cmd *cobra.Command) error {
 	path := cmd.CommandPath()
-	allowed := scopedPersistentFlags[path]
+	allowed := commandScopedFlags(cmd)
 	for _, flag := range scopedPersistentFlagNames {
 		if commandFlagChanged(cmd, flag) && !allowed[flag] {
 			return fmt.Errorf("--%s is not supported by %q", flag, path)
 		}
 	}
 	return nil
+}
+
+// scopedFlagsAnnotation marks the leaf command with the persistent flags it
+// accepts so validation and help rendering share one declaration made where
+// the command is constructed.
+const scopedFlagsAnnotation = "serverpro:scoped-flags"
+
+func withScopedFlags(cmd *cobra.Command, names ...string) *cobra.Command {
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+	cmd.Annotations[scopedFlagsAnnotation] = strings.Join(names, ",")
+	return cmd
+}
+
+func commandScopedFlags(cmd *cobra.Command) map[string]bool {
+	raw := cmd.Annotations[scopedFlagsAnnotation]
+	if raw == "" {
+		return nil
+	}
+	allowed := make(map[string]bool)
+	for _, name := range strings.Split(raw, ",") {
+		allowed[name] = true
+	}
+	return allowed
 }
 
 func commandFlagChanged(cmd *cobra.Command, name string) bool {
@@ -147,7 +173,7 @@ func installScopedFlagHelp(root *cobra.Command) {
 }
 
 func hideUnsupportedScopedFlags(cmd *cobra.Command) func() {
-	allowed := scopedPersistentFlags[cmd.CommandPath()]
+	allowed := commandScopedFlags(cmd)
 	flags := cmd.Root().PersistentFlags()
 	previous := make(map[string]bool, len(scopedPersistentFlagNames))
 	for _, name := range scopedPersistentFlagNames {
@@ -166,31 +192,6 @@ func hideUnsupportedScopedFlags(cmd *cobra.Command) func() {
 }
 
 var scopedPersistentFlagNames = []string{"config", "state", "namespace", "provider", "all", "non-interactive", "dry-run", "yes"}
-
-var scopedPersistentFlags = map[string]map[string]bool{
-	"serverpro namespace create":  {"dry-run": true},
-	"serverpro namespace delete":  {"dry-run": true, "non-interactive": true, "yes": true},
-	"serverpro server create":     {"config": true, "state": true, "namespace": true, "provider": true, "non-interactive": true, "dry-run": true, "yes": true},
-	"serverpro server list":       {"namespace": true, "provider": true},
-	"serverpro server status":     {"state": true, "namespace": true, "provider": true, "all": true, "non-interactive": true},
-	"serverpro server doctor":     {"config": true, "state": true, "namespace": true, "provider": true, "non-interactive": true, "dry-run": true},
-	"serverpro server ssh":        {"state": true, "namespace": true, "provider": true, "non-interactive": true, "dry-run": true},
-	"serverpro server delete":     {"state": true, "namespace": true, "provider": true, "non-interactive": true, "dry-run": true, "yes": true},
-	"serverpro server start":      {"state": true, "namespace": true, "provider": true, "non-interactive": true, "dry-run": true, "yes": true},
-	"serverpro server stop":       {"state": true, "namespace": true, "provider": true, "non-interactive": true, "dry-run": true, "yes": true},
-	"serverpro server restart":    {"state": true, "namespace": true, "provider": true, "non-interactive": true, "dry-run": true, "yes": true},
-	"serverpro server bootstrap":  {"config": true, "state": true, "namespace": true, "provider": true, "non-interactive": true, "dry-run": true},
-	"serverpro server discover":   {"namespace": true, "provider": true, "non-interactive": true},
-	"serverpro server import":     {"namespace": true, "provider": true, "all": true, "non-interactive": true, "dry-run": true, "yes": true},
-	"serverpro provider doctor":   {"non-interactive": true},
-	"serverpro catalog locations": {"provider": true, "non-interactive": true},
-	"serverpro catalog sizes":     {"provider": true, "non-interactive": true},
-	"serverpro catalog images":    {"provider": true, "non-interactive": true},
-	"serverpro ingress add":       {"state": true, "namespace": true, "non-interactive": true, "dry-run": true},
-	"serverpro ingress list":      {"state": true, "namespace": true, "non-interactive": true},
-	"serverpro ingress remove":    {"state": true, "namespace": true, "non-interactive": true, "dry-run": true},
-	"serverpro tailnet reconcile": {"non-interactive": true, "dry-run": true, "yes": true},
-}
 
 func (a *app) cleanupRootCommand() {
 	if a.timeoutCancel != nil {

@@ -13,6 +13,7 @@ import (
 
 type importFlags struct {
 	providerID          string
+	discoverServer      string
 	adminUser           string
 	tailscaleTailnet    string
 	cloudflareAccountID string
@@ -24,22 +25,23 @@ type importFlags struct {
 
 func (a *app) serverDiscoverCmd() *cobra.Command {
 	flags := &importFlags{}
-	cmd := &cobra.Command{
+	cmd := withScopedFlags(&cobra.Command{
 		Use:   "discover",
 		Short: "list provider servers labeled for serverpro",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return a.runServerDiscover(cmd.Context(), flags)
 		},
-	}
+	}, "namespace", "provider", "non-interactive")
 	cmd.Flags().StringVar(&flags.providerID, "provider-id", "", "filter by provider resource id")
+	cmd.Flags().StringVar(&flags.discoverServer, "server", "", "filter by server name")
 	cmd.Flags().BoolVar(&flags.includeUnmanaged, "include-unmanaged", false, "include servers without serverpro ownership labels")
 	return cmd
 }
 
 func (a *app) serverImportCmd() *cobra.Command {
 	flags := &importFlags{}
-	cmd := &cobra.Command{
+	cmd := withScopedFlags(&cobra.Command{
 		Use:   "import [NAME]",
 		Short: "rebuild local config and state from labeled provider servers",
 		Args:  cobra.MaximumNArgs(1),
@@ -50,7 +52,7 @@ func (a *app) serverImportCmd() *cobra.Command {
 			}
 			return a.runServerImport(cmd.Context(), name, flags)
 		},
-	}
+	}, "namespace", "provider", "all", "non-interactive", "dry-run", "yes")
 	cmd.Flags().StringVar(&flags.providerID, "provider-id", "", "import by provider resource id")
 	cmd.Flags().StringVar(&flags.adminUser, "admin-user", "", "remote admin username (prompted if omitted)")
 	cmd.Flags().StringVar(&flags.tailscaleTailnet, "tailscale-tailnet", "", "Tailscale tailnet for enrichment")
@@ -62,13 +64,13 @@ func (a *app) serverImportCmd() *cobra.Command {
 }
 
 func (a *app) runServerDiscover(ctx context.Context, flags *importFlags) error {
-	provider, account, err := a.importProviderAccount()
+	provider, account, err := a.importProviderAccount("serverpro server discover")
 	if err != nil {
 		return err
 	}
 	candidates, err := importsync.Discover(ctx, provider, account, importsync.DiscoverFilter{
 		Namespace:        a.project,
-		Server:           a.server,
+		Server:           flags.discoverServer,
 		ProviderID:       flags.providerID,
 		IncludeUnmanaged: flags.includeUnmanaged,
 	})
@@ -122,7 +124,7 @@ func validateServerImportRequest(name string, flags *importFlags, all bool) erro
 }
 
 func (a *app) selectImportCandidates(ctx context.Context, name string, flags *importFlags) ([]importsync.Candidate, string, error) {
-	provider, account, err := a.importProviderAccount()
+	provider, account, err := a.importProviderAccount("serverpro server import")
 	if err != nil {
 		return nil, "", err
 	}
@@ -143,9 +145,9 @@ func (a *app) selectImportCandidates(ctx context.Context, name string, flags *im
 	return candidates, account.Token, nil
 }
 
-func (a *app) importProviderAccount() (compute.Provider, compute.Account, error) {
+func (a *app) importProviderAccount(commandPath string) (compute.Provider, compute.Account, error) {
 	if a.provider == "" {
-		return nil, compute.Account{}, fmt.Errorf("--provider/-p required")
+		return nil, compute.Account{}, requiredFlagError(commandPath, "provider", "p")
 	}
 	provider, err := a.resolveProvider(a.provider)
 	if err != nil {

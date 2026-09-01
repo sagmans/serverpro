@@ -88,6 +88,24 @@ func TestWriteJSONNormalizesNilSlicesInsideArrays(t *testing.T) {
 	}
 }
 
+func TestWriteJSONNormalizesNilSlicesBehindPointerFields(t *testing.T) {
+	// WHY: writeJSON accepts arbitrary payload shapes; pointer fields must keep
+	// the same nil-slice normalization contract as direct struct fields.
+	type inner struct {
+		Items []string `json:"items"`
+	}
+	var out bytes.Buffer
+	row := struct {
+		Enabled *inner `json:"enabled"`
+	}{Enabled: &inner{}}
+	if err := writeJSON(&out, row); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "null") || !strings.Contains(out.String(), "\"items\": []") {
+		t.Fatalf("pointer field nil slice not normalized:\n%s", out.String())
+	}
+}
+
 func TestWriteJSONEncodesNestedNilSlicesAsEmptyArrays(t *testing.T) {
 	var out bytes.Buffer
 	row := struct {
