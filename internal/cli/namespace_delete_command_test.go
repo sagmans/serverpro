@@ -619,9 +619,10 @@ func TestNamespaceDeleteInvokesExternalCleanupPerServer(t *testing.T) {
 	cleanupCalls := 0
 	var out bytes.Buffer
 	a := &app{stdin: strings.NewReader(""), stdout: &out, stderr: io.Discard, yes: true, providers: providerRegistryForPower(t, provider), services: serviceHooks{
-		deleteTrackedExternalResources: func(context.Context, serverDeleteCleanup) (state.State, error) {
+		cleanupClients: successfulDeletePreflightClients,
+		deleteTrackedExternalResources: func(_ context.Context, cleanup serverDeleteCleanup) (state.State, error) {
 			cleanupCalls++
-			return state.State{}, nil
+			return cleanup.State, nil
 		},
 	}}
 	cmd := a.namespaceDeleteCmd()

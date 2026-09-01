@@ -597,6 +597,21 @@ serverpro server delete webapp -n mynamespace -p hetzner --yes
 serverpro server delete webapp -n mynamespace -p hetzner --dry-run
 ```
 
+After approval, serverpro reloads and checks local destructive authority. It
+then reads each tracked Tailscale device, Tailscale auth key, and owned
+Cloudflare tunnel before compute deletion. An API or ownership error stops the
+command before compute mutation. External cleanup repeats each ownership check
+immediately before its DELETE.
+
+Independent provider APIs cannot form one atomic transaction. If compute
+deletion completes but external cleanup fails, the command exits nonzero and
+writes a `partial` JSON result. The result sets `compute_deleted`,
+`local_state_retained`, and `retryable`. It also reports `failure_stage`,
+`error`, `next_action`, and `remaining_external_cleanup`. Remaining cleanup is
+tracked recovery evidence. It does not prove that each resource is still live.
+Resolve the reported error, then rerun the same delete command. Compute adapters
+treat missing tracked compute resources as already deleted.
+
 State is removed only after provider deletion succeeds. Provider resources are
 validated before the first provider DELETE. For DigitalOcean servers created
 before dedicated per-server firewall tags, cleanup accepts only the exact

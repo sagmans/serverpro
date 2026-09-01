@@ -223,6 +223,13 @@ Power and delete operations require:
 - Cloudflare tunnel deletion only when state proves `created` provenance;
   adopted, imported, unknown, and legacy provenance are retained
 
+After locked authority revalidation, server deletion reads and checks each
+tracked external resource before compute mutation. External DELETE operations
+repeat the ownership check. This preflight prevents avoidable partial deletion
+when a credential or ownership check already fails. It cannot make independent
+provider APIs atomic. If external cleanup fails after compute deletion,
+serverpro retains local state and registry authority for a safe retry.
+
 State is removed only after provider deletion succeeds. Registry reads and
 workflow-lock creation use root-scoped filesystem operations so symlinks cannot
 escape the selected registry parent or nearest accessible lock-path ancestor.
