@@ -21,7 +21,7 @@ func TestUsageDocumentsScopedPathsAndNamespaceDelete(t *testing.T) {
 		"`--state` is accepted only by",
 		"`server create`, `server status`, `server doctor`, `server ssh`",
 		"`server delete`, `server start`, `server stop`, `server restart`",
-		"`server bootstrap`, `ingress add`, `ingress list`, and `ingress remove`",
+		"`server bootstrap`, `server ingress add`, `server ingress list`, and `server ingress remove`",
 	} {
 		if !strings.Contains(doc, want) {
 			t.Fatalf("USAGE.md missing %q", want)

@@ -5,6 +5,21 @@ resource-first and provider-neutral. A namespace is the top-level serverpro
 resource group; server credentials are scoped to one server inside that
 namespace.
 
+## Command grammar
+
+Every command follows one shape:
+
+```text
+serverpro GROUP [SUBGROUP] VERB [TARGET] [--scope-flags] [--flags]
+```
+
+The target is positional and is the resource the verb acts on (`server status
+webapp`, `provider status hetzner`, `tailnet reconcile example.ts.net`).
+Namespace and provider are scope flags (`-n`, `-p`), never positional outside
+their own command groups. Flags filter or set options; they never name the
+target. Per-server subresources nest under `server` (for example `serverpro
+server ingress add webapp`).
+
 ## Supported runtime
 
 The supported controller is macOS 27 arm64. Managed hosts must be Ubuntu 24.04
@@ -18,8 +33,8 @@ widen support. `INSTALLATION.md` owns the full tool and package version matrix.
 ## Global flags
 
 ```text
---config <path>          config override: server create, doctor, and bootstrap
---state <path>           state override: supported server and ingress commands
+--config <path>          config override: server create, server doctor, and server bootstrap
+--state <path>           state override: supported server and server ingress commands
 -n, --namespace <id>     serverpro namespace
 -p, --provider <name>    compute provider, e.g. hetzner, vultr, or digitalocean
 -A, --all                operate on every matching resource where supported
@@ -35,7 +50,7 @@ that command accepts. `--config` is accepted only by
 
 - `server create`, `server status`, `server doctor`, `server ssh`
 - `server delete`, `server start`, `server stop`, `server restart`
-- `server bootstrap`, `ingress add`, `ingress list`, and `ingress remove`
+- `server bootstrap`, `server ingress add`, `server ingress list`, and `server ingress remove`
 
 Command results are JSON on stdout except live `server ssh`, which hands
 terminal I/O directly to `tailscale ssh`. Prompts and confirmations go to
@@ -68,7 +83,7 @@ serverpro server list
 serverpro server status NAME
 serverpro server doctor NAME
 serverpro server ssh NAME
-serverpro server discover
+serverpro server discover [-p PROVIDER] [--server NAME] [--provider-id ID] [--include-unmanaged]
 serverpro server import [NAME]
 serverpro server start|stop|restart NAME
 serverpro server delete NAME
@@ -77,15 +92,15 @@ serverpro provider list
 serverpro provider status NAME
 serverpro provider doctor NAME
 
-serverpro catalog locations -p PROVIDER
-serverpro catalog sizes -p PROVIDER --location LOCATION
-serverpro catalog images -p PROVIDER --location LOCATION
+serverpro location list -p PROVIDER
+serverpro size list -p PROVIDER --location LOCATION
+serverpro image list -p PROVIDER --location LOCATION
 
-serverpro ingress list SERVER
-serverpro ingress add SERVER --type cloudflare-tunnel --hostname HOSTNAME
-serverpro ingress remove SERVER --hostname HOSTNAME
+serverpro server ingress list SERVER
+serverpro server ingress add SERVER --type cloudflare-tunnel --hostname HOSTNAME
+serverpro server ingress remove SERVER --hostname HOSTNAME
 
-serverpro tailnet reconcile --tailnet TAILNET
+serverpro tailnet reconcile TAILNET
 ```
 
 ## Namespaces and server credentials
@@ -214,7 +229,7 @@ Previously accepted `credentials.mode`, `network.egress.allow`,
 `access.emergency_ssh`, and `cloudflare.tunnel.smoke_route` keys never controlled
 runtime behavior and are now rejected. Remove them from existing config files;
 use `network.egress.mode`, provider rescue-console guidance, and explicit
-`serverpro ingress` commands instead.
+`serverpro server ingress` commands instead.
 
 ## Create a server
 
@@ -240,7 +255,8 @@ serverpro server create webapp \
 ```
 
 Create requires explicit provider, location, size, and image values. Use
-`serverpro catalog ...` first to select a supported Ubuntu 24.04 image. Live
+`serverpro location list`, `serverpro size list`, and `serverpro image list`
+first to select a supported Ubuntu 24.04 image. Live
 create verifies that exact image against the current selected-location catalog
 before the first provider mutation. During live create, every externally visible policy, tunnel, auth-key, compute, and device
 mutation is checkpointed. A failed create reports its lifecycle phase and known
@@ -293,17 +309,18 @@ MYNAMESPACE_WEBAPP_SUDOPASS='use-a-long-remote-admin-password' \
 
 ## Catalog and provider checks
 
-`catalog` and `provider doctor` run before a server credential file may exist,
-so they use an ephemeral server provider token. Interactive runs prompt for it;
-non-interactive runs read `SERVERPRO_SERVER_PROVIDER_TOKEN`.
+`location list`, `size list`, `image list`, and `provider doctor` run before a
+server credential file may exist, so they use an ephemeral server provider
+token. Interactive runs prompt for it; non-interactive runs read
+`SERVERPRO_SERVER_PROVIDER_TOKEN`.
 
 ```sh
 SERVERPRO_SERVER_PROVIDER_TOKEN='provider-token' \
-  serverpro catalog locations -p hetzner --non-interactive
+  serverpro location list -p hetzner --non-interactive
 SERVERPRO_SERVER_PROVIDER_TOKEN='provider-token' \
-  serverpro catalog locations -p vultr --non-interactive
+  serverpro location list -p vultr --non-interactive
 SERVERPRO_SERVER_PROVIDER_TOKEN='provider-token' \
-  serverpro catalog locations -p digitalocean --non-interactive
+  serverpro location list -p digitalocean --non-interactive
 SERVERPRO_SERVER_PROVIDER_TOKEN='provider-token' \
   serverpro provider doctor hetzner --non-interactive
 SERVERPRO_SERVER_PROVIDER_TOKEN='provider-token' \
@@ -313,7 +330,7 @@ SERVERPRO_SERVER_PROVIDER_TOKEN='provider-token' \
 ```
 
 The Vultr adapter uses numeric OS IDs for `--image`; choose the current Ubuntu
-24.04 entry shown by `serverpro catalog images -p vultr`. The DigitalOcean
+24.04 entry shown by `serverpro image list -p vultr`. The DigitalOcean
 adapter uses image slugs such as `ubuntu-24-04-x64` or its arm64 counterpart.
 The token is used
 for that command only and is never stored globally.
@@ -324,11 +341,11 @@ for that command only and is never stored globally.
 # 1. Get your Vultr API token from https://my.vultr.com/settings/#settingsapi
 # 2. Check available locations/plans/images
 SERVERPRO_SERVER_PROVIDER_TOKEN='vultr-api-token' \
-  serverpro catalog locations -p vultr --non-interactive
+  serverpro location list -p vultr --non-interactive
 SERVERPRO_SERVER_PROVIDER_TOKEN='vultr-api-token' \
-  serverpro catalog sizes -p vultr --location ewr --non-interactive
+  serverpro size list -p vultr --location ewr --non-interactive
 SERVERPRO_SERVER_PROVIDER_TOKEN='vultr-api-token' \
-  serverpro catalog images -p vultr --location ewr --non-interactive
+  serverpro image list -p vultr --location ewr --non-interactive
 
 # 3. Preview a create
 serverpro server create webapp \
@@ -368,11 +385,11 @@ convention.
 # 1. Get your DigitalOcean API token from https://cloud.digitalocean.com/account/api/tokens
 # 2. Check available regions/sizes/images
 SERVERPRO_SERVER_PROVIDER_TOKEN='digitalocean-api-token' \
-  serverpro catalog locations -p digitalocean --non-interactive
+  serverpro location list -p digitalocean --non-interactive
 SERVERPRO_SERVER_PROVIDER_TOKEN='digitalocean-api-token' \
-  serverpro catalog sizes -p digitalocean --location nyc3 --non-interactive
+  serverpro size list -p digitalocean --location nyc3 --non-interactive
 SERVERPRO_SERVER_PROVIDER_TOKEN='digitalocean-api-token' \
-  serverpro catalog images -p digitalocean --location nyc3 --non-interactive
+  serverpro image list -p digitalocean --location nyc3 --non-interactive
 
 # 3. Preview a create
 serverpro server create webapp \
@@ -519,13 +536,13 @@ commands record pending local route metadata only; they do not yet create or
 delete Cloudflare routes.
 
 ```sh
-serverpro ingress add webapp \
+serverpro server ingress add webapp \
   -n mynamespace \
   --type cloudflare-tunnel \
   --hostname app.example.com
-serverpro ingress list webapp -n mynamespace
+serverpro server ingress list webapp -n mynamespace
 serverpro server status webapp -n mynamespace
-serverpro ingress remove webapp \
+serverpro server ingress remove webapp \
   -n mynamespace \
   --hostname app.example.com
 ```
@@ -555,15 +572,15 @@ serverpro policy entries only with the explicit tailnet-wide command:
 ```sh
 # Preview only
 SERVERPRO_TAILSCALE_TOKEN='...' \
-  serverpro tailnet reconcile --tailnet example.ts.net --dry-run --non-interactive
+  serverpro tailnet reconcile example.ts.net --dry-run --non-interactive
 
 # Apply without an interactive confirmation
 SERVERPRO_TAILSCALE_TOKEN='...' \
-  serverpro tailnet reconcile --tailnet example.ts.net --yes --non-interactive
+  serverpro tailnet reconcile example.ts.net --yes --non-interactive
 ```
 
 Interactive runs prompt for the token when neither `SERVERPRO_TAILSCALE_TOKEN`
-nor legacy fallback `TAILSCALE_API_TOKEN` is set. `--tailnet` must name a stable
+nor legacy fallback `TAILSCALE_API_TOKEN` is set. The TAILNET argument must name a stable
 identity; the token-relative `-` alias is rejected. Registered state carrying
 policy evidence must also contain an explicit identity. Existing token-relative
 state can be migrated by setting the explicit tailnet in config and rerunning
