@@ -278,8 +278,8 @@ run_ok_text_grep "server bootstrap help names managed toolset" 'Node 24\.20\.0.*
 
 run_ok "root no args shows help" "$bin"
 run_ok "version flag" "$bin" --version
-run_fail_grep "invalid global timeout" 'time: invalid duration' "$bin" --timeout nope doctor
-run_ok "global timeout parses" "$bin" --timeout 1s doctor
+run_fail_grep "invalid global timeout" 'time: invalid duration' "$bin" --timeout nope provider list
+run_ok "global timeout parses" "$bin" --timeout 1s provider list
 run_fail_grep "tailnet reconcile token guard" 'SERVERPRO_TAILSCALE_TOKEN required' "$bin" --non-interactive --dry-run tailnet reconcile example.ts.net
 
 run_ok_grep "namespace list empty" '^\[\]$' "$bin" namespace list
@@ -299,8 +299,6 @@ else
 	fail=$((fail + 1))
 fi
 
-run_ok_grep "doctor global" '"scope": "providers"' "$bin" doctor
-run_fail_grep "doctor --fix guard" '--fix is only supported' "$bin" doctor --fix
 run_ok_grep "provider list" 'digitalocean|hetzner|vultr' "$bin" provider list
 for provider in digitalocean hetzner vultr; do
 	run_ok_grep "provider status $provider" "\"name\": \"$provider\"" "$bin" provider status "$provider"

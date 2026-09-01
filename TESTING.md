@@ -15,7 +15,7 @@ why a layer is not applicable.
 | --- | --- | --- | --- |
 | Unit | `make test-unit` | Standalone fast run of every Go package test. | No |
 | Consolidated Go gate | `make test-go-check` | Run every Go test once with the race detector and one aggregate coverage profile; enforce 81.8% minimum coverage and reject 0%-covered functions. | No |
-| Smoke | `make test-smoke` | Prove binary starts, help renders, and root doctor exits successfully (output discarded; JSON shape is covered by the consolidated Go gate and e2e layers). | No |
+| Smoke | `make test-smoke` | Prove binary starts and help renders (output discarded; JSON shape is covered by the consolidated Go gate and e2e layers). | No |
 | Integration | `make test-integration` | Standalone focused rerun of CLI orchestration, provider HTTP adapters, lifecycle, import, doctor, state, and credentials with fakes or `httptest`; omitted from `make check` because the consolidated Go gate already includes it. | No |
 | E2E | `make test-e2e` | Run the compiled CLI through isolated-home workflows, strict JSON parsing, inventory-derived help and parent coverage, disposition evidence, dry-runs, fixture state, and no-token safety checks. | No |
 | Full-chain E2E | `make test-full-chain-e2e` | Build the test-only composition binary and run concurrent create→status→doctor→delete journeys against stateful local Hetzner, Vultr, and DigitalOcean APIs. Production doctor and cleanup orchestration consume injected local clients; fixed time, checkpoint recovery, strict JSON, cleanup evidence, and sanitized failure artifacts remain hermetic. | No |
@@ -38,7 +38,6 @@ paid infrastructure by accident.
 | Command | Capability | Unit/integration proof | Smoke/e2e proof | Dogfood proof |
 | --- | --- | --- | --- | --- |
 | `serverpro` | Root command, JSON default, version, timeout parsing, scoped global flags. | `internal/cli/root_test.go` | `scripts/test-cli-no-token-surface.sh` help/version/timeout cases | Read-only dogfood |
-| `serverpro doctor` | Global provider/default ingress/Tailscale SSH sanity checks. | `internal/cli/global_doctor_command_test.go` tests through CLI | no-token `doctor` case | Read-only dogfood |
 | `serverpro namespace` | Namespace parent help and unknown-child rejection. | `internal/cli/root_test.go` | parent help case | Read-only dogfood |
 | `serverpro namespace create` | Create namespace config/state dirs with private permissions; dry-run preview; serialize against namespace server work. | `internal/cli/namespace_command_test.go` | namespace create + mode checks | Read-only dogfood |
 | `serverpro namespace list` | Deterministic namespace inventory JSON. | `internal/cli/namespace_command_test.go` | empty and populated list cases | Read-only dogfood |

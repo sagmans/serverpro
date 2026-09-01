@@ -20,7 +20,7 @@ func TestRootHelpShowsResourceFirstSurface(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"namespace", "server", "provider", "location", "size", "image", "tailnet", "doctor"} {
+	for _, want := range []string{"namespace", "server", "provider", "location", "size", "image", "tailnet"} {
 		listing := "\n  " + want
 		if !strings.Contains(out.String(), listing) {
 			t.Fatalf("missing %q in help:\n%s", want, out.String())
@@ -141,6 +141,7 @@ func TestRemovedRootSurfaceIsRejected(t *testing.T) {
 		{name: "completion", args: []string{"completion"}, want: "unknown command"},
 		{name: "catalog", args: []string{"catalog"}, want: "unknown command"},
 		{name: "ingress", args: []string{"ingress"}, want: "unknown command"},
+		{name: "doctor", args: []string{"doctor"}, want: "unknown command"},
 		{name: "ingress add", args: []string{"ingress", "add", "webapp"}, want: "unknown command"},
 		{name: "verbose", args: []string{"--" + "verbose"}, want: "unknown flag"},
 	} {
@@ -227,7 +228,7 @@ func TestServerCreateRejectsProjectFlag(t *testing.T) {
 }
 
 func TestPublicHelpUsesNamespaceNotProject(t *testing.T) {
-	for _, args := range [][]string{{"server", "create", "--help"}, {"doctor", "--help"}} {
+	for _, args := range [][]string{{"server", "create", "--help"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			var out bytes.Buffer
 			cmd := New()

@@ -6,7 +6,6 @@ serverpro location	parent help: location
 serverpro location list	location list digitalocean token guard
 serverpro size	parent help: size
 serverpro size list	size list digitalocean token guard
-serverpro doctor	doctor global
 serverpro server ingress	parent help: server ingress
 serverpro server ingress add	ingress add cloudflare-tunnel
 serverpro server ingress list	ingress list after add

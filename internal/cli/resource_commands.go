@@ -112,14 +112,6 @@ func (a *app) serverRestartCmd() *cobra.Command {
 	}}, "state", "namespace", "provider", "non-interactive", "dry-run", "yes")
 }
 
-func (a *app) globalDoctorCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "doctor", Short: "run validation checks", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
-		return a.runGlobalDoctor()
-	}}
-	cmd.Flags().BoolVar(&a.doctorFix, "fix", false, "apply failed fixable checks")
-	return cmd
-}
-
 func (a *app) providerCmd() *cobra.Command {
 	cmd := parentCommand("provider", "manage compute providers")
 	cmd.AddCommand(a.providerListCmd(), a.providerStatusCmd(), a.providerDoctorCmd())
