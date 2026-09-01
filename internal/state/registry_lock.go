@@ -3,16 +3,13 @@ package state
 import (
 	"context"
 	"crypto/sha256"
-	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
-	"github.com/sagmans/serverpro/internal/filedescriptor"
-	"golang.org/x/sys/unix"
+	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/privatefile"
 )
 
 const (
@@ -23,7 +20,6 @@ const (
 	tailnetPolicyLockPrefix      = ".tailnet-policy-"
 	tailnetPolicyGlobalLockName  = ".tailnet-policy-global.operation.lock"
 	tokenRelativeTailnetIdentity = "-"
-	operationLockRetryInterval   = 10 * time.Millisecond
 )
 
 func lockRegistry(path string) (func(), error) {
@@ -31,13 +27,33 @@ func lockRegistry(path string) (func(), error) {
 }
 
 func lockState(path string) (func(), error) {
-	return lockFile(path + stateLockSuffix)
+	return lockLocalArtifact(context.Background(), path+stateLockSuffix)
 }
 
 // LockServerOperation serializes create, import, and delete workflows that can
 // otherwise make overlapping provider mutations from the same local authority.
 func LockServerOperation(ctx context.Context, statePath string) (func(), error) {
-	return lockFileModeContext(ctx, statePath+serverOperationLockSuffix, syscall.LOCK_EX)
+	return lockLocalArtifact(ctx, statePath+serverOperationLockSuffix)
+}
+
+func LockLocalArtifactCleanup(ctx context.Context) (func(), error) {
+	return privatefile.LockExclusiveContext(ctx, config.LocalArtifactGuardPath())
+}
+
+func lockLocalArtifact(ctx context.Context, path string) (func(), error) {
+	unlockGuard, err := privatefile.LockSharedContext(ctx, config.LocalArtifactGuardPath())
+	if err != nil {
+		return nil, err
+	}
+	unlockArtifact, err := privatefile.LockExclusiveContext(ctx, path)
+	if err != nil {
+		unlockGuard()
+		return nil, err
+	}
+	return func() {
+		unlockArtifact()
+		unlockGuard()
+	}, nil
 }
 
 // LockServerWorkflow owns the namespace-before-server ordering shared by
@@ -116,124 +132,12 @@ func lockFile(lockPath string) (func(), error) {
 }
 
 func lockFileMode(lockPath string, mode int) (func(), error) {
-	f, fd, err := openLockFile(lockPath)
-	if err != nil {
-		return nil, err
-	}
-	if err := syscall.Flock(fd, mode); err != nil {
-		_ = f.Close()
-		return nil, err
-	}
-	return lockFileRelease(f, fd), nil
+	return lockFileModeContext(context.Background(), lockPath, mode)
 }
 
 func lockFileModeContext(ctx context.Context, lockPath string, mode int) (func(), error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
+	if mode == syscall.LOCK_SH {
+		return privatefile.LockSharedContext(ctx, lockPath)
 	}
-	f, fd, err := openLockFile(lockPath)
-	if err != nil {
-		return nil, err
-	}
-	retry := time.NewTicker(operationLockRetryInterval)
-	defer retry.Stop()
-	for {
-		err = syscall.Flock(fd, mode|syscall.LOCK_NB)
-		if err == nil {
-			return lockFileRelease(f, fd), nil
-		}
-		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EAGAIN) {
-			_ = f.Close()
-			return nil, err
-		}
-		select {
-		case <-ctx.Done():
-			_ = f.Close()
-			return nil, ctx.Err()
-		case <-retry.C:
-		}
-	}
-}
-
-func openLockFile(lockPath string) (*os.File, int, error) {
-	parent, name, err := openParentDirectory(lockPath, true)
-	if err != nil {
-		return nil, 0, err
-	}
-	fd, openErr := unix.Openat(int(parent.Fd()), name, unix.O_CREAT|unix.O_RDWR|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
-	closeErr := parent.Close()
-	if openErr != nil {
-		return nil, 0, openErr
-	}
-	f := os.NewFile(uintptr(fd), lockPath)
-	if f == nil {
-		_ = unix.Close(fd)
-		return nil, 0, fmt.Errorf("open lock file %s", lockPath)
-	}
-	if closeErr != nil {
-		_ = f.Close()
-		return nil, 0, closeErr
-	}
-	fileDescriptor, err := filedescriptor.Int(f)
-	if err != nil {
-		_ = f.Close()
-		return nil, 0, err
-	}
-	return f, fileDescriptor, nil
-}
-
-func openParentDirectory(path string, create bool) (*os.File, string, error) {
-	absolutePath, err := filepath.Abs(path)
-	if err != nil {
-		return nil, "", err
-	}
-	current, err := os.Open(string(os.PathSeparator))
-	if err != nil {
-		return nil, "", err
-	}
-	parent := filepath.Dir(absolutePath)
-	firstComponent := true
-	for _, component := range strings.Split(strings.TrimPrefix(parent, string(os.PathSeparator)), string(os.PathSeparator)) {
-		if component == "" || component == "." {
-			continue
-		}
-		if create {
-			mkdirErr := unix.Mkdirat(int(current.Fd()), component, 0o700)
-			if mkdirErr != nil && !errors.Is(mkdirErr, syscall.EEXIST) {
-				_ = current.Close()
-				return nil, "", mkdirErr
-			}
-		}
-		flags := unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC
-		// The first component beneath / is root-owned and may be a platform alias
-		// such as macOS /var. Every operator-controlled descendant stays no-follow.
-		if !firstComponent {
-			flags |= unix.O_NOFOLLOW
-		}
-		fd, openErr := unix.Openat(int(current.Fd()), component, flags, 0)
-		if openErr != nil {
-			_ = current.Close()
-			return nil, "", openErr
-		}
-		next := os.NewFile(uintptr(fd), component)
-		if next == nil {
-			_ = unix.Close(fd)
-			_ = current.Close()
-			return nil, "", fmt.Errorf("open path component %s", component)
-		}
-		if err := current.Close(); err != nil {
-			_ = next.Close()
-			return nil, "", err
-		}
-		current = next
-		firstComponent = false
-	}
-	return current, filepath.Base(absolutePath), nil
-}
-
-func lockFileRelease(f *os.File, fd int) func() {
-	return func() {
-		_ = syscall.Flock(fd, syscall.LOCK_UN)
-		_ = f.Close()
-	}
+	return privatefile.LockExclusiveContext(ctx, lockPath)
 }

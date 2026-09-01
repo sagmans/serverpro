@@ -1,6 +1,8 @@
 package privatefile
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +36,84 @@ func TestLockSerializesExclusiveUsers(t *testing.T) {
 		unlockSecond()
 	case <-time.After(time.Second):
 		t.Fatal("waiting lock did not acquire released resource")
+	}
+}
+
+func TestLockModesCoordinateAndHonorContext(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "artifact.guard")
+	unlockShared, err := LockSharedContext(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := LockExclusiveContext(ctx, path); !errors.Is(err, context.DeadlineExceeded) {
+		unlockShared()
+		t.Fatalf("exclusive guard error = %v", err)
+	}
+	unlockShared()
+	unlockExclusive, err := LockExclusiveContext(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlockExclusive()
+}
+
+func TestLockContextRejectsSymlinkedAncestor(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	link := filepath.Join(root, "linked")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LockExclusiveContext(context.Background(), filepath.Join(link, "resource.lock")); err == nil {
+		t.Fatal("lock accepted symlinked ancestor")
+	}
+}
+
+func TestRemoveDurablyRejectsSymlinkedAncestor(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	victim := filepath.Join(outside, "victim")
+	if err := os.WriteFile(victim, []byte("keep"), DefaultFileMode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveDurably(filepath.Join(root, "linked", "victim")); err == nil {
+		t.Fatal("durable removal accepted symlinked ancestor")
+	}
+	if body, err := os.ReadFile(victim); err != nil || string(body) != "keep" {
+		t.Fatalf("outside file changed: body=%q err=%v", body, err)
+	}
+}
+
+func TestRemoveTreeDurablyDoesNotFollowSymlinks(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	victim := filepath.Join(outside, "victim")
+	if err := os.WriteFile(victim, []byte("keep"), DefaultFileMode); err != nil {
+		t.Fatal(err)
+	}
+	tree := filepath.Join(root, "tree")
+	if err := os.MkdirAll(filepath.Join(tree, "nested"), DefaultDirMode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tree, "nested", "local"), []byte("remove"), DefaultFileMode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(tree, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveTreeDurably(tree); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(tree); !os.IsNotExist(err) {
+		t.Fatalf("tree remains: %v", err)
+	}
+	if body, err := os.ReadFile(victim); err != nil || string(body) != "keep" {
+		t.Fatalf("outside file changed: body=%q err=%v", body, err)
 	}
 }
 

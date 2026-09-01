@@ -230,13 +230,21 @@ when a credential or ownership check already fails. It cannot make independent
 provider APIs atomic. If external cleanup fails after compute deletion,
 serverpro retains local state and registry authority for a safe retry.
 
-State is removed only after provider deletion succeeds. Registry reads and
-workflow-lock creation use root-scoped filesystem operations so symlinks cannot
-escape the selected registry parent or nearest accessible lock-path ancestor.
-Create, import, and single-server delete acquire one state-owned
+Canonical config, credentials, state, import markers, and adjacent server locks
+are removed only after provider deletion succeeds. Custom config and state
+paths remain operator-owned. Config, credential, state, and server-operation writers share
+a root-scoped local-artifact guard. Existing-server publishing workflows also
+hold the namespace lock shared; delete holds it exclusively and takes the
+artifact guard exclusively before cleanup so a stale managed writer cannot
+recreate a removed artifact. Registry authority is removed last.
+Registry reads, workflow-lock creation, and canonical artifact removal use
+root-scoped filesystem operations so symlinks cannot escape the selected parent
+or nearest accessible lock-path ancestor. Create and import acquire one state-owned
 shared-namespace/exclusive-server workflow lock in canonical order and release
-in reverse. Nonblocking flock retry honors command cancellation and deadlines.
-Namespace create/delete take the namespace lock exclusively. Namespace delete rejects canonical config,
+in reverse. Single-server delete holds the namespace lock exclusively across
+remote cleanup and canonical local purge. Nonblocking flock retry honors command
+cancellation and deadlines. Namespace create/delete take the namespace lock
+exclusively. Namespace delete rejects canonical config,
 credential, state, or import-marker artifacts lacking registry authority before
 approval, then revalidates the complete registry set plus each parsed state or
 missing-state status after locking, so partial imports and replacement authority

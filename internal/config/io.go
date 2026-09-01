@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -61,7 +62,7 @@ func LoadPartialBytes(body []byte) (Config, error) {
 
 func Save(path string, cfg Config) error {
 	path = Expand(path)
-	unlock, err := privatefile.Lock(configLockPath(path))
+	unlock, err := lockConfig(path)
 	if err != nil {
 		return err
 	}
@@ -73,7 +74,7 @@ func Save(path string, cfg Config) error {
 // callers cannot overwrite a newer managed config publication.
 func Update(path string, mutate func(*Config) error) error {
 	path = Expand(path)
-	unlock, err := privatefile.Lock(configLockPath(path))
+	unlock, err := lockConfig(path)
 	if err != nil {
 		return err
 	}
@@ -96,7 +97,7 @@ func Update(path string, mutate func(*Config) error) error {
 // managed writer cannot overwrite authority another managed writer replaced.
 func SaveIfUnchanged(path string, cfg Config, expected []byte, expectedExists bool) error {
 	path = Expand(path)
-	unlock, err := privatefile.Lock(configLockPath(path))
+	unlock, err := lockConfig(path)
 	if err != nil {
 		return err
 	}
@@ -110,6 +111,22 @@ func SaveIfUnchanged(path string, cfg Config, expected []byte, expectedExists bo
 		return ErrSourceChanged
 	}
 	return saveUnlocked(path, cfg)
+}
+
+func lockConfig(path string) (func(), error) {
+	unlockGuard, err := privatefile.LockSharedContext(context.Background(), LocalArtifactGuardPath())
+	if err != nil {
+		return nil, err
+	}
+	unlockConfig, err := privatefile.Lock(configLockPath(path))
+	if err != nil {
+		unlockGuard()
+		return nil, err
+	}
+	return func() {
+		unlockConfig()
+		unlockGuard()
+	}, nil
 }
 
 func configLockPath(path string) string {

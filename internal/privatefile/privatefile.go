@@ -1,20 +1,25 @@
 package privatefile
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/sagmans/serverpro/internal/filedescriptor"
+	"golang.org/x/sys/unix"
 )
 
 const (
-	DefaultFileMode os.FileMode = 0o600
-	DefaultDirMode  os.FileMode = 0o700
+	DefaultFileMode   os.FileMode = 0o600
+	DefaultDirMode    os.FileMode = 0o700
+	lockRetryInterval             = 10 * time.Millisecond
 )
 
 type WriteOptions struct {
@@ -52,6 +57,124 @@ func Lock(path string) (func(), error) {
 		_ = syscall.Flock(fd, syscall.LOCK_UN)
 		_ = file.Close()
 	}, nil
+}
+
+func LockSharedContext(ctx context.Context, path string) (func(), error) {
+	return lockContext(ctx, path, syscall.LOCK_SH)
+}
+
+func LockExclusiveContext(ctx context.Context, path string) (func(), error) {
+	return lockContext(ctx, path, syscall.LOCK_EX)
+}
+
+func lockContext(ctx context.Context, path string, mode int) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	file, fd, err := openLockFile(path)
+	if err != nil {
+		return nil, err
+	}
+	retry := time.NewTicker(lockRetryInterval)
+	defer retry.Stop()
+	for {
+		err = syscall.Flock(fd, mode|syscall.LOCK_NB)
+		if err == nil {
+			return lockRelease(file, fd), nil
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EAGAIN) {
+			_ = file.Close()
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			_ = file.Close()
+			return nil, ctx.Err()
+		case <-retry.C:
+		}
+	}
+}
+
+func openLockFile(path string) (*os.File, int, error) {
+	parent, name, err := OpenParentDirectory(path, true)
+	if err != nil {
+		return nil, 0, err
+	}
+	fd, openErr := unix.Openat(int(parent.Fd()), name, unix.O_CREAT|unix.O_RDWR|unix.O_NOFOLLOW|unix.O_CLOEXEC, uint32(DefaultFileMode))
+	closeErr := parent.Close()
+	if openErr != nil {
+		return nil, 0, openErr
+	}
+	file := os.NewFile(uintptr(fd), path)
+	if file == nil {
+		_ = unix.Close(fd)
+		return nil, 0, fmt.Errorf("open lock file %s", path)
+	}
+	if closeErr != nil {
+		_ = file.Close()
+		return nil, 0, closeErr
+	}
+	fileDescriptor, err := filedescriptor.Int(file)
+	if err != nil {
+		_ = file.Close()
+		return nil, 0, err
+	}
+	return file, fileDescriptor, nil
+}
+
+func OpenParentDirectory(path string, create bool) (*os.File, string, error) {
+	absolutePath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, "", err
+	}
+	current, err := os.Open(string(os.PathSeparator))
+	if err != nil {
+		return nil, "", err
+	}
+	parent := filepath.Dir(absolutePath)
+	firstComponent := true
+	for _, component := range strings.Split(strings.TrimPrefix(parent, string(os.PathSeparator)), string(os.PathSeparator)) {
+		if component == "" || component == "." {
+			continue
+		}
+		if create {
+			mkdirErr := unix.Mkdirat(int(current.Fd()), component, uint32(DefaultDirMode))
+			if mkdirErr != nil && !errors.Is(mkdirErr, syscall.EEXIST) {
+				_ = current.Close()
+				return nil, "", mkdirErr
+			}
+		}
+		flags := unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC
+		// macOS can expose the root-owned first component through a platform alias.
+		if !firstComponent {
+			flags |= unix.O_NOFOLLOW
+		}
+		fd, openErr := unix.Openat(int(current.Fd()), component, flags, 0)
+		if openErr != nil {
+			_ = current.Close()
+			return nil, "", openErr
+		}
+		next := os.NewFile(uintptr(fd), component)
+		if next == nil {
+			_ = unix.Close(fd)
+			_ = current.Close()
+			return nil, "", fmt.Errorf("open path component %s", component)
+		}
+		if err := current.Close(); err != nil {
+			_ = next.Close()
+			return nil, "", err
+		}
+		current = next
+		firstComponent = false
+	}
+	return current, filepath.Base(absolutePath), nil
+}
+
+func lockRelease(file *os.File, fd int) func() {
+	return func() {
+		_ = syscall.Flock(fd, syscall.LOCK_UN)
+		_ = file.Close()
+	}
 }
 
 func AtomicWrite(path string, body []byte, opt WriteOptions) error {
@@ -114,10 +237,68 @@ func AtomicWrite(path string, body []byte, opt WriteOptions) error {
 // RemoveDurably publishes deletion before returning so registry removal cannot
 // be reported successful while only residing in the filesystem cache.
 func RemoveDurably(path string) error {
-	if err := os.Remove(path); err != nil {
+	parent, name, err := OpenParentDirectory(path, false)
+	if err != nil {
 		return err
 	}
-	return syncDirectory(filepath.Dir(path))
+	defer func() { _ = parent.Close() }()
+	if err := removeAt(parent, name, false); err != nil {
+		return err
+	}
+	return parent.Sync()
+}
+
+func RemoveTreeDurably(path string) error {
+	parent, name, err := OpenParentDirectory(path, false)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = parent.Close() }()
+	if err := removeAt(parent, name, true); err != nil {
+		return err
+	}
+	return parent.Sync()
+}
+
+func removeAt(parent *os.File, name string, recursive bool) error {
+	var info unix.Stat_t
+	if err := unix.Fstatat(int(parent.Fd()), name, &info, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return err
+	}
+	if info.Mode&unix.S_IFMT != unix.S_IFDIR {
+		return unix.Unlinkat(int(parent.Fd()), name, 0)
+	}
+	if !recursive {
+		return unix.Unlinkat(int(parent.Fd()), name, unix.AT_REMOVEDIR)
+	}
+	fd, err := unix.Openat(int(parent.Fd()), name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return err
+	}
+	dir := os.NewFile(uintptr(fd), name)
+	if dir == nil {
+		_ = unix.Close(fd)
+		return fmt.Errorf("open directory %s", name)
+	}
+	names, err := dir.Readdirnames(-1)
+	if err != nil {
+		_ = dir.Close()
+		return err
+	}
+	for _, child := range names {
+		if err := removeAt(dir, child, true); err != nil {
+			_ = dir.Close()
+			return err
+		}
+	}
+	if err := dir.Sync(); err != nil {
+		_ = dir.Close()
+		return err
+	}
+	if err := dir.Close(); err != nil {
+		return err
+	}
+	return unix.Unlinkat(int(parent.Fd()), name, unix.AT_REMOVEDIR)
 }
 
 func syncDirectory(path string) error {

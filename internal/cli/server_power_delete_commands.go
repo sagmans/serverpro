@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"reflect"
 	"time"
 
@@ -36,6 +35,7 @@ type serverOperationRow struct {
 	Provider                 string                         `json:"provider"`
 	Power                    string                         `json:"power,omitempty"`
 	StatePath                string                         `json:"state_path,omitempty"`
+	LocalCleanup             []string                       `json:"local_cleanup,omitempty"`
 	ComputeServer            string                         `json:"compute_server,omitempty"`
 	ManagedResources         []compute.ManagedResourceRef   `json:"managed_resources,omitempty"`
 	ExternalCleanup          []serverDeleteExternalResource `json:"external_cleanup,omitempty"`
@@ -117,7 +117,8 @@ func (a *app) runServerDelete(ctx context.Context, name string) error {
 		if err != nil {
 			return err
 		}
-		plan := serverOperationRow{Status: "planned", Action: deleteOperationAction, DryRun: true, Namespace: st.Namespace, Server: st.Server, Provider: st.Compute.Provider, StatePath: config.Expand(stPath), ComputeServer: st.Compute.ID, ManagedResources: append([]compute.ManagedResourceRef(nil), st.Compute.ManagedResources...), ExternalCleanup: externalCleanup}
+		localCleanup := canonicalServerDeleteLocalArtifacts(st).preview()
+		plan := serverOperationRow{Status: "planned", Action: deleteOperationAction, DryRun: true, Namespace: st.Namespace, Server: st.Server, Provider: st.Compute.Provider, StatePath: config.Expand(stPath), LocalCleanup: localCleanup, ComputeServer: st.Compute.ID, ManagedResources: append([]compute.ManagedResourceRef(nil), st.Compute.ManagedResources...), ExternalCleanup: externalCleanup}
 		if a.dryRun {
 			return writeJSON(a.stdout, plan)
 		}
@@ -153,11 +154,11 @@ func (a *app) deleteServerDestructive(ctx context.Context, name, stPath string, 
 	if err != nil {
 		return err
 	}
-	unlock, err := state.LockServerWorkflow(ctx, config.RegistryPath(), st.NamespaceName(), config.Expand(stPath))
+	unlockNamespace, err := state.LockNamespaceOperationExclusive(ctx, config.RegistryPath(), st.NamespaceName())
 	if err != nil {
 		return err
 	}
-	defer unlock()
+	defer unlockNamespace()
 	return a.executeApprovedServerDelete(ctx, name, stPath, authority)
 }
 
@@ -168,20 +169,35 @@ func (a *app) deleteServerDestructiveInNamespace(ctx context.Context, name, stPa
 	if err != nil {
 		return err
 	}
-	unlock, err := state.LockServerOperation(ctx, config.Expand(stPath))
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	return a.executeApprovedServerDelete(ctx, name, stPath, authority)
 }
 
 func (a *app) executeApprovedServerDelete(ctx context.Context, name, stPath string, authority serverDeleteAuthority) error {
+	unlockServer, err := state.LockServerOperation(ctx, config.Expand(stPath))
+	if err != nil {
+		return err
+	}
+	serverLocked := true
+	defer func() {
+		if serverLocked {
+			unlockServer()
+		}
+	}()
 	execution, err := a.revalidateServerDelete(name, stPath, authority)
 	if err != nil {
 		return err
 	}
-	return a.executeServerDelete(ctx, authority, execution)
+	if err := a.executeServerDeleteRemote(ctx, execution); err != nil {
+		return err
+	}
+	unlockServer()
+	serverLocked = false
+	unlockCleanup, err := state.LockLocalArtifactCleanup(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlockCleanup()
+	return a.executeServerDeleteLocal(authority, execution)
 }
 
 func (a *app) approveServerDelete(name, stPath string, st state.State) (serverDeleteAuthority, error) {
@@ -235,7 +251,7 @@ func (a *app) revalidateServerDelete(name, stPath string, authority serverDelete
 	return serverDeleteExecution{Cleanup: cleanup, Provider: provider, Account: account}, nil
 }
 
-func (a *app) executeServerDelete(ctx context.Context, authority serverDeleteAuthority, execution serverDeleteExecution) error {
+func (a *app) executeServerDeleteRemote(ctx context.Context, execution serverDeleteExecution) error {
 	st := execution.Cleanup.State
 	operationCtx, cancel := contextWithDefaultTimeout(ctx, defaultServerOperationTimeout)
 	defer cancel()
@@ -265,18 +281,7 @@ func (a *app) executeServerDelete(ctx context.Context, authority serverDeleteAut
 			return newServerDeletePartialFailure(execution.Cleanup, retained, safeErr)
 		}
 	}
-	if err := state.RemoveDurably(config.Expand(execution.Cleanup.StatePath)); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	// Delete registry metadata with state so future reads never chase stale files.
-	return state.UpdateRegistry(config.RegistryPath(), func(reg *state.Registry) error {
-		currentRegistry, exists := reg.Find(st.Namespace, targetServer(st.Server))
-		if !sameServerDeleteRegistryAuthority(authority.Registry, true, currentRegistry, exists) {
-			return fmt.Errorf("server destructive authority changed before registry cleanup; retained current registry entry")
-		}
-		reg.Remove(st.Namespace, targetServer(st.Server))
-		return nil
-	})
+	return nil
 }
 
 func serverDeleteAuthorityChangedError() error {
@@ -354,9 +359,9 @@ func sameServerDeleteCleanupAuthority(approved, current serverDeleteCleanup) boo
 
 func serverDeleteConfirmMessage(st state.State) string {
 	if serverDeleteCleanupRequired(st) {
-		return "delete managed server, local state, and tracked external provider resources?"
+		return "delete managed server, canonical config, credentials, state, synchronization artifacts, and tracked external provider resources?"
 	}
-	return "delete managed server and local state?"
+	return "delete managed server, canonical config, credentials, state, and synchronization artifacts?"
 }
 
 func serverDeleteExternalCleanupPreview(st state.State) ([]serverDeleteExternalResource, error) {

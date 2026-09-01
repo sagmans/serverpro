@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/sagmans/serverpro/internal/config"
@@ -41,6 +42,11 @@ func save(cfg config.Config, creds Set, requireComplete bool) error {
 	if err := rejectSymlinkInCredentialAbsPath(path, "save"); err != nil {
 		return err
 	}
+	unlockGuard, err := privatefile.LockSharedContext(context.Background(), config.LocalArtifactGuardPath())
+	if err != nil {
+		return err
+	}
+	defer unlockGuard()
 	return privatefile.AtomicWriteJSON(path, creds, privatefile.WriteOptions{TempPattern: ".credentials-*.tmp", Sync: true, BeforeRename: func() error {
 		return rejectSymlinkInCredentialAbsPath(path, "save")
 	}})

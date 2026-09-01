@@ -89,6 +89,15 @@ func (a *app) runServerDoctor(ctx context.Context, name string) error {
 		row := serverDoctorDryRunRow{Status: "planned", Action: "doctor", DryRun: true, Namespace: cfg.Namespace, Server: targetServer(cfg.Server)}
 		return writeJSON(a.stdout, row)
 	}
+	unlockWorkflow, err := lockServerArtifactWorkflow(ctx, st)
+	if err != nil {
+		return err
+	}
+	defer unlockWorkflow()
+	cfg, _, st, err = a.loadConfigAndStateForServer(name)
+	if err != nil {
+		return err
+	}
 	creds, _, err := a.ensureCredentials(cfg)
 	if err != nil {
 		return err
@@ -143,6 +152,15 @@ func reportNeedsSudoPassword(report doctor.Report) bool {
 
 func (a *app) runServerSSH(ctx context.Context, name string) error {
 	ref, err := a.loadServerReadRef(name)
+	if err != nil {
+		return err
+	}
+	unlockWorkflow, err := lockServerArtifactWorkflow(ctx, ref.State)
+	if err != nil {
+		return err
+	}
+	defer unlockWorkflow()
+	ref, err = a.loadServerReadRef(name)
 	if err != nil {
 		return err
 	}
@@ -279,6 +297,15 @@ func (a *app) localServerRows() ([]serverReadRow, error) {
 }
 
 func (a *app) refreshServerRow(ctx context.Context, stPath string, st state.State) (serverReadRow, error) {
+	unlockWorkflow, err := lockServerArtifactWorkflow(ctx, st)
+	if err != nil {
+		return serverReadRow{}, err
+	}
+	defer unlockWorkflow()
+	st, err = state.Load(config.Expand(stPath))
+	if err != nil {
+		return serverReadRow{}, err
+	}
 	provider, accountRef, err := a.serverProviderAccount(st)
 	if err != nil {
 		return serverReadRow{}, err

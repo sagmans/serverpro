@@ -41,6 +41,22 @@ func TestLockServerOperationRejectsSymlinkedAncestor(t *testing.T) {
 	}
 }
 
+func TestLockServerOperationWaitsForLocalArtifactCleanup(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	path := stateTestPath(t, "state.json")
+	unlockCleanup, err := LockLocalArtifactCleanup(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), operationLockDeadline)
+	defer cancel()
+	if _, err := LockServerOperation(ctx, path); !errors.Is(err, context.DeadlineExceeded) {
+		unlockCleanup()
+		t.Fatalf("server operation guard error = %v", err)
+	}
+	unlockCleanup()
+}
+
 func TestLockServerOperationSerializesSameState(t *testing.T) {
 	path := stateTestPath(t, "state.json")
 	unlockFirst, err := LockServerOperation(context.Background(), path)
