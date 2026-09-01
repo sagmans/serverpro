@@ -1,9 +1,11 @@
 # Cobra command path	compiled-harness evidence label
 serverpro	root no args shows help
-serverpro catalog	parent help: catalog
-serverpro catalog images	catalog images digitalocean token guard
-serverpro catalog locations	catalog locations digitalocean token guard
-serverpro catalog sizes	catalog sizes digitalocean token guard
+serverpro image	parent help: image
+serverpro image list	image list digitalocean token guard
+serverpro location	parent help: location
+serverpro location list	location list digitalocean token guard
+serverpro size	parent help: size
+serverpro size list	size list digitalocean token guard
 serverpro doctor	doctor global
 serverpro server ingress	parent help: server ingress
 serverpro server ingress add	ingress add cloudflare-tunnel

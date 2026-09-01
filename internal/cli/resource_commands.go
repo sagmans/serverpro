@@ -144,21 +144,33 @@ func (a *app) providerDoctorCmd() *cobra.Command {
 	}}, "non-interactive")
 }
 
-func (a *app) catalogCmd() *cobra.Command {
-	cmd := parentCommand("catalog", "browse provider catalogs")
-	cmd.AddCommand(a.catalogLocationsCmd(), a.catalogSizesCmd(), a.catalogImagesCmd())
+func (a *app) locationCmd() *cobra.Command {
+	cmd := parentCommand("location", "browse provider locations")
+	cmd.AddCommand(a.catalogLocationsCmd())
+	return cmd
+}
+
+func (a *app) sizeCmd() *cobra.Command {
+	cmd := parentCommand("size", "browse provider sizes")
+	cmd.AddCommand(a.catalogSizesCmd())
+	return cmd
+}
+
+func (a *app) imageCmd() *cobra.Command {
+	cmd := parentCommand("image", "browse provider images")
+	cmd.AddCommand(a.catalogImagesCmd())
 	return cmd
 }
 
 func (a *app) catalogLocationsCmd() *cobra.Command {
-	return withScopedFlags(&cobra.Command{Use: "locations", Short: "list locations", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+	return withScopedFlags(&cobra.Command{Use: "list", Short: "list locations", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		return a.runCatalog(cmd.Context(), "locations", "", cmd.CommandPath())
 	}}, "provider", "non-interactive")
 }
 
 func (a *app) catalogSizesCmd() *cobra.Command {
 	var location string
-	cmd := withScopedFlags(&cobra.Command{Use: "sizes", Short: "list sizes", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := withScopedFlags(&cobra.Command{Use: "list", Short: "list sizes", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		return a.runCatalog(cmd.Context(), "sizes", location, cmd.CommandPath())
 	}}, "provider", "non-interactive")
 	cmd.Flags().StringVar(&location, "location", "", "filter by location")
@@ -167,7 +179,7 @@ func (a *app) catalogSizesCmd() *cobra.Command {
 
 func (a *app) catalogImagesCmd() *cobra.Command {
 	var location string
-	cmd := withScopedFlags(&cobra.Command{Use: "images", Short: "list images", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
+	cmd := withScopedFlags(&cobra.Command{Use: "list", Short: "list images", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, args []string) error {
 		return a.runCatalog(cmd.Context(), "images", location, cmd.CommandPath())
 	}}, "provider", "non-interactive")
 	cmd.Flags().StringVar(&location, "location", "", "filter by location")

@@ -310,11 +310,11 @@ for provider in digitalocean hetzner vultr; do
 	run_fail_grep "provider doctor $provider token guard" 'SERVERPRO_SERVER_PROVIDER_TOKEN required' "$bin" --non-interactive provider doctor "$provider"
 done
 
-run_fail_grep "catalog locations missing provider" '--provider/-p is required for "serverpro catalog locations"' "$bin" --non-interactive catalog locations
+run_fail_grep "location list missing provider" '--provider/-p is required for "serverpro location list"' "$bin" --non-interactive location list
 for provider in digitalocean hetzner vultr; do
-	run_fail_grep "catalog locations $provider token guard" 'SERVERPRO_SERVER_PROVIDER_TOKEN required' "$bin" --non-interactive -p "$provider" catalog locations
-	run_fail_grep "catalog sizes $provider token guard" 'SERVERPRO_SERVER_PROVIDER_TOKEN required' "$bin" --non-interactive -p "$provider" catalog sizes --location test
-	run_fail_grep "catalog images $provider token guard" 'SERVERPRO_SERVER_PROVIDER_TOKEN required' "$bin" --non-interactive -p "$provider" catalog images --location test
+	run_fail_grep "location list $provider token guard" 'SERVERPRO_SERVER_PROVIDER_TOKEN required' "$bin" --non-interactive -p "$provider" location list
+	run_fail_grep "size list $provider token guard" 'SERVERPRO_SERVER_PROVIDER_TOKEN required' "$bin" --non-interactive -p "$provider" size list --location test
+	run_fail_grep "image list $provider token guard" 'SERVERPRO_SERVER_PROVIDER_TOKEN required' "$bin" --non-interactive -p "$provider" image list --location test
 done
 
 run_fail_grep "server discover missing provider" '--provider/-p is required for "serverpro server discover"' "$bin" --non-interactive server discover

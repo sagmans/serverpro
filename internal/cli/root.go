@@ -81,7 +81,7 @@ func newRoot(a *app) *cobra.Command {
 	cmd.PersistentFlags().BoolVarP(&a.yes, "yes", "y", false, "assume yes for confirmations")
 	cmd.PersistentFlags().StringVar(&a.timeout, "timeout", "", "operation timeout")
 	installScopedFlagHelp(cmd)
-	cmd.AddCommand(a.namespaceCmd(), a.serverCmd(), a.providerCmd(), a.catalogCmd(), a.tailnetCmd(), a.globalDoctorCmd())
+	cmd.AddCommand(a.namespaceCmd(), a.serverCmd(), a.providerCmd(), a.locationCmd(), a.sizeCmd(), a.imageCmd(), a.tailnetCmd(), a.globalDoctorCmd())
 	return cmd
 }
 

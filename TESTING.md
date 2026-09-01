@@ -61,10 +61,12 @@ paid infrastructure by accident.
 | `serverpro provider list` | Registered provider inventory. | `internal/cli/provider_catalog_command_test.go` | provider list case | Read-only dogfood |
 | `serverpro provider status` | Provider capability JSON. | `internal/cli/provider_catalog_command_test.go` | status for Hetzner, Vultr, DigitalOcean | Read-only dogfood |
 | `serverpro provider doctor` | Ephemeral token validation against provider APIs. | `internal/cli/provider_catalog_command_test.go`, provider adapter doctor tests with fake HTTP/clients | non-interactive token guard | Live read-only API dogfood |
-| `serverpro catalog` | Catalog parent help and unknown-child rejection. | `internal/cli/root_test.go` | parent help case | Read-only dogfood |
-| `serverpro catalog locations` | Provider location catalog via ephemeral token. | `internal/cli/provider_catalog_command_test.go`, provider catalog mapping tests | token guard for every provider | Live read-only API dogfood |
-| `serverpro catalog sizes` | Provider size/plan catalog filtered by location. | Provider catalog mapping tests | token guard for every provider | Live read-only API dogfood |
-| `serverpro catalog images` | Provider image catalog filtered by location where supported. | Provider catalog mapping tests | token guard for every provider | Live read-only API dogfood |
+| `serverpro location` | Location parent help and unknown-child rejection. | `internal/cli/root_test.go` | parent help case | Read-only dogfood |
+| `serverpro location list` | Provider location inventory via ephemeral token. | `internal/cli/provider_catalog_command_test.go`, provider catalog mapping tests | token guard for every provider | Live read-only API dogfood |
+| `serverpro size` | Size parent help and unknown-child rejection. | `internal/cli/root_test.go` | parent help case | Read-only dogfood |
+| `serverpro size list` | Provider size/plan inventory filtered by location. | Provider catalog mapping tests | token guard for every provider | Live read-only API dogfood |
+| `serverpro image` | Image parent help and unknown-child rejection. | `internal/cli/root_test.go` | parent help case | Read-only dogfood |
+| `serverpro image list` | Provider image inventory filtered by location where supported. | Provider catalog mapping tests | token guard for every provider | Live read-only API dogfood |
 | `serverpro server ingress` | Ingress parent help and unknown-child rejection. | `internal/cli/root_test.go` | parent help case | Read-only dogfood |
 | `serverpro server ingress add` | Add pending Cloudflare Tunnel route metadata without false public-route success claims. | `internal/cli/ingress_command_test.go`, `internal/ingress/ingress_test.go` | fixture add/duplicate/error cases | Read-only dogfood |
 | `serverpro server ingress list` | List local ingress state. | `internal/cli/ingress_command_test.go` | fixture list cases | Read-only dogfood |
