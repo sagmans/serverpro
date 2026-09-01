@@ -122,7 +122,7 @@ func (a *app) runCreateCommand(cmd *cobra.Command) error {
 
 func (a *app) validateCreateProviderFlag() error {
 	if a.provider == "" {
-		return fmt.Errorf("--provider required for server create")
+		return requiredFlagError("serverpro server create", "provider", "p")
 	}
 	_, err := a.resolveProvider(a.provider)
 	return err

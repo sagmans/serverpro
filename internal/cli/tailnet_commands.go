@@ -34,9 +34,9 @@ func (a *app) tailnetCmd() *cobra.Command {
 
 func (a *app) tailnetReconcileCmd() *cobra.Command {
 	tailnet := ""
-	cmd := &cobra.Command{Use: "reconcile", Short: "remove unused serverpro tailnet policy", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
+	cmd := withScopedFlags(&cobra.Command{Use: "reconcile", Short: "remove unused serverpro tailnet policy", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		return a.runTailnetReconcile(cmd.Context(), tailnet)
-	}}
+	}}, "non-interactive", "dry-run", "yes")
 	cmd.Flags().StringVar(&tailnet, "tailnet", "", "explicit Tailscale tailnet identity")
 	return cmd
 }

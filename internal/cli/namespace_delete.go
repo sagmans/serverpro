@@ -55,9 +55,9 @@ type namespaceDeleteAuthority struct {
 }
 
 func (a *app) namespaceDeleteCmd() *cobra.Command {
-	return &cobra.Command{Use: "delete NAME", Short: "delete a namespace and its managed servers", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+	return withScopedFlags(&cobra.Command{Use: "delete NAME", Short: "delete a namespace and its managed servers", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		return a.runNamespaceDelete(cmd.Context(), args[0])
-	}}
+	}}, "dry-run", "non-interactive", "yes")
 }
 
 func (a *app) runNamespaceDelete(ctx context.Context, namespace string) error {

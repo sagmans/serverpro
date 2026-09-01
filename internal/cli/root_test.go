@@ -192,7 +192,7 @@ func TestServerCreateRequiresProviderOnly(t *testing.T) {
 	cmd.SetErr(io.Discard)
 	cmd.SetArgs([]string{"server", "create", "webapp", "-n", "demoapp", "--dry-run", "--non-interactive"})
 	err := cmd.Execute()
-	if err == nil || !strings.Contains(err.Error(), "--provider required") {
+	if err == nil || !strings.Contains(err.Error(), `--provider/-p is required for "serverpro server create"`) {
 		t.Fatalf("expected provider requirement, got %v", err)
 	}
 }

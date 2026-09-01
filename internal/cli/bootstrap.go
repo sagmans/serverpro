@@ -22,7 +22,7 @@ type serverBootstrapRow struct {
 }
 
 func (a *app) serverBootstrapCmd() *cobra.Command {
-	return &cobra.Command{
+	return withScopedFlags(&cobra.Command{
 		Use:   "bootstrap NAME [all|git|docker|mise|node|pi]",
 		Short: "bootstrap tools on an existing managed server",
 		Long: "Bootstrap managed host tools on an existing server. The all target installs " +
@@ -72,5 +72,5 @@ func (a *app) serverBootstrapCmd() *cobra.Command {
 			row := serverBootstrapRow{Status: "complete", Action: "bootstrap", Namespace: cfg.Namespace, Server: cfg.Server, Target: string(target), User: cfg.Admin.Username, Host: st.Tailscale.Name}
 			return writeJSON(a.stdout, row)
 		},
-	}
+	}, "config", "state", "namespace", "provider", "non-interactive", "dry-run")
 }
