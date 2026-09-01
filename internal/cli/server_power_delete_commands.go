@@ -10,10 +10,14 @@ import (
 	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
+	"github.com/sagmans/serverpro/internal/redact"
 	"github.com/sagmans/serverpro/internal/state"
 )
 
-const defaultServerOperationTimeout = 10 * time.Minute
+const (
+	defaultServerOperationTimeout       = 10 * time.Minute
+	deleteExternalCleanupPreflightError = "tracked external cleanup preflight failed before compute deletion"
+)
 
 const (
 	deleteResourceTailscaleDevice  = "tailscale_device"
@@ -220,6 +224,12 @@ func (a *app) executeServerDelete(ctx context.Context, authority serverDeleteAut
 	st := execution.Cleanup.State
 	operationCtx, cancel := contextWithDefaultTimeout(ctx, defaultServerOperationTimeout)
 	defer cancel()
+	if execution.Cleanup.Required {
+		if err := a.preflightTrackedExternalResources(operationCtx, execution.Cleanup); err != nil {
+			safeErr := redact.New(a.redactionSecrets(execution.Cleanup.Creds)...).Error(err)
+			return fmt.Errorf("%s: %w", deleteExternalCleanupPreflightError, safeErr)
+		}
+	}
 	diagnostics := execution.Provider.Delete(operationCtx, compute.DeleteServerRequest{Account: execution.Account, Record: serverRecordFromState(st)})
 	if !diagnostics.Passed() {
 		return diagnostics.Err()

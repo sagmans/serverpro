@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"syscall"
@@ -18,24 +19,31 @@ import (
 	"github.com/sagmans/serverpro/internal/doctor"
 	"github.com/sagmans/serverpro/internal/lifecycle"
 	"github.com/sagmans/serverpro/internal/mesh"
+	"github.com/sagmans/serverpro/internal/provider/httpjson"
 	"github.com/sagmans/serverpro/internal/remote"
 	"github.com/sagmans/serverpro/internal/state"
 	"github.com/spf13/cobra"
 )
 
 const (
-	e2eAuthKeyID             = "e2e-auth-key"
-	e2eAuthKey               = "tskey-auth-e2e"
-	e2eDeviceID              = "e2e-device"
-	e2eDeviceIP              = "100.64.0.10"
-	e2eCheckpointError       = "injected completion checkpoint failure"
-	e2eCheckpointFileMode    = 0o600
-	e2eAuditEnv              = "SERVERPRO_E2E_CLEANUP_AUDIT"
-	e2ePreflightPolicyEvent  = "preflight-policy"
-	e2eProvisionOptionsEvent = "provision-options"
-	e2eDeleteDeviceEvent     = "delete-device"
-	e2eDeleteAuthKeyEvent    = "delete-auth-key"
-	e2eRemoteSuccessEvidence = "ok"
+	e2eAuthKeyID                     = "e2e-auth-key"
+	e2eAuthKey                       = "tskey-auth-e2e"
+	e2eDeviceID                      = "e2e-device"
+	e2eDeviceIP                      = "100.64.0.10"
+	e2eCheckpointError               = "injected completion checkpoint failure"
+	e2eCheckpointFileMode            = 0o600
+	e2eAuditEnv                      = "SERVERPRO_E2E_CLEANUP_AUDIT"
+	e2ePreflightPolicyEvent          = "preflight-policy"
+	e2eProvisionOptionsEvent         = "provision-options"
+	e2eDeleteDeviceEvent             = "delete-device"
+	e2eDeleteAuthKeyEvent            = "delete-auth-key"
+	e2eRemoteSuccessEvidence         = "ok"
+	e2eDeleteCleanupFailureEnv       = "SERVERPRO_E2E_DELETE_CLEANUP_FAILURE"
+	e2eDeleteCleanupFailPreflight    = "preflight"
+	e2eDeleteCleanupFailAfter        = "after-compute"
+	e2eDeleteCleanupDevicesPath      = "/tailnet/-/devices"
+	e2eDeleteCleanupUnauthorized     = "401 Unauthorized"
+	e2eDeleteCleanupUnauthorizedBody = `{"message":"API token invalid"}`
 )
 
 var e2eNow = time.Date(2026, time.July, 23, 12, 0, 0, 0, time.UTC)
@@ -48,6 +56,7 @@ func NewE2E(apiURL string) (*cobra.Command, error) {
 	registry := e2eProviderRegistry(apiURL)
 	a := &app{stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr, providers: registry}
 	tailscaleClient := e2eTailscale{}
+	cleanupTailscale := &e2eCleanupTailscale{}
 	a.services = serviceHooks{
 		preflightTailscaleClient: func(string, string) preflightTailscaleClient {
 			return tailscaleClient
@@ -79,7 +88,8 @@ func NewE2E(apiURL string) (*cobra.Command, error) {
 			return clients, account, nil
 		},
 		cleanupClients: func(cleanup serverDeleteCleanup) serverCleanupClients {
-			return serverCleanupClients{Tailscale: e2eCleanupTailscale{state: cleanup.State}}
+			cleanupTailscale.state = cleanup.State
+			return serverCleanupClients{Tailscale: cleanupTailscale}
 		},
 	}
 	return newRoot(a), nil
@@ -153,10 +163,22 @@ func (e2eDoctorRemote) RunBatch(_ context.Context, _, _ string, commands []remot
 }
 
 type e2eCleanupTailscale struct {
-	state state.State
+	state       state.State
+	deviceReads int
 }
 
-func (c e2eCleanupTailscale) Devices(context.Context) ([]mesh.Device, error) {
+func (c *e2eCleanupTailscale) Devices(context.Context) ([]mesh.Device, error) {
+	c.deviceReads++
+	failure := os.Getenv(e2eDeleteCleanupFailureEnv)
+	if failure == e2eDeleteCleanupFailPreflight || failure == e2eDeleteCleanupFailAfter && c.deviceReads > 1 {
+		return nil, &httpjson.StatusError{
+			Method:     http.MethodGet,
+			Path:       e2eDeleteCleanupDevicesPath,
+			Status:     e2eDeleteCleanupUnauthorized,
+			StatusCode: http.StatusUnauthorized,
+			Body:       e2eDeleteCleanupUnauthorizedBody,
+		}
+	}
 	return []mesh.Device{{
 		ID:       c.state.Tailscale.NodeID,
 		NodeID:   c.state.Tailscale.NodeID,
@@ -166,7 +188,7 @@ func (c e2eCleanupTailscale) Devices(context.Context) ([]mesh.Device, error) {
 	}}, nil
 }
 
-func (c e2eCleanupTailscale) AuthKeys(context.Context) ([]mesh.AuthKey, error) {
+func (c *e2eCleanupTailscale) AuthKeys(context.Context) ([]mesh.AuthKey, error) {
 	if c.state.Tailscale.AuthKeyID == "" {
 		return nil, nil
 	}
@@ -179,11 +201,11 @@ func (c e2eCleanupTailscale) AuthKeys(context.Context) ([]mesh.AuthKey, error) {
 	}}, nil
 }
 
-func (e2eCleanupTailscale) DeleteDevice(_ context.Context, id string) error {
+func (*e2eCleanupTailscale) DeleteDevice(_ context.Context, id string) error {
 	return appendE2EAudit(e2eDeleteDeviceEvent, id)
 }
 
-func (e2eCleanupTailscale) DeleteAuthKey(_ context.Context, id string) error {
+func (*e2eCleanupTailscale) DeleteAuthKey(_ context.Context, id string) error {
 	return appendE2EAudit(e2eDeleteAuthKeyEvent, id)
 }
 

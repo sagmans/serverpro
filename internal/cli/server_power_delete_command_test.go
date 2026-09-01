@@ -780,8 +780,9 @@ func TestServerDeletePreservesStateWhenExternalCleanupFails(t *testing.T) {
 
 	provider := &powerDeleteFakeProvider{}
 	a := &app{stdout: io.Discard, stderr: io.Discard, project: "demoapp", provider: "hetzner", yes: true, providers: providerRegistryForPower(t, provider), services: serviceHooks{
-		deleteTrackedExternalResources: func(context.Context, serverDeleteCleanup) (state.State, error) {
-			return state.State{}, errors.New("cleanup failed")
+		cleanupClients: successfulDeletePreflightClients,
+		deleteTrackedExternalResources: func(_ context.Context, cleanup serverDeleteCleanup) (state.State, error) {
+			return cleanup.State, errors.New("cleanup failed")
 		},
 	}}
 	cmd := a.serverDeleteCmd()

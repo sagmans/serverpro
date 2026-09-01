@@ -39,7 +39,11 @@ type cleanupCloudflareClient interface {
 
 const deleteTunnelActiveConnectionRetryDelay = 5 * time.Second
 
-var errTunnelActiveConnections = errors.New("tunnel has active connections")
+var (
+	errTunnelActiveConnections         = errors.New("tunnel has active connections")
+	errTailscaleCleanupClientRequired  = errors.New("tailscale cleanup client required")
+	errCloudflareCleanupClientRequired = errors.New("cloudflare cleanup client required")
+)
 
 type serverCleanupClients struct {
 	Tailscale  cleanupTailscaleClient
@@ -89,6 +93,45 @@ func cleanupCredentialConfig(cfg config.Config, st state.State) config.Config {
 	return cfg
 }
 
+func (a *app) preflightTrackedExternalResources(ctx context.Context, cleanup serverDeleteCleanup) error {
+	clients := newServerCleanupClients(cleanup)
+	if a.services.cleanupClients != nil {
+		clients = a.services.cleanupClients(cleanup)
+	}
+	return preflightTrackedExternalResources(ctx, cleanup, clients)
+}
+
+func preflightTrackedExternalResources(ctx context.Context, cleanup serverDeleteCleanup, clients serverCleanupClients) error {
+	ctx, cancel := contextWithDefaultTimeout(ctx, defaultServerOperationTimeout)
+	defer cancel()
+	st := cleanup.State
+	if st.Tailscale.NodeID != "" {
+		if clients.Tailscale == nil {
+			return errTailscaleCleanupClientRequired
+		}
+		if _, err := validateTrackedTailscaleDevice(ctx, cleanup.Config, st, clients.Tailscale); err != nil {
+			return err
+		}
+	}
+	if st.Cloudflare.OwnsTunnel() {
+		if clients.Cloudflare == nil {
+			return errCloudflareCleanupClientRequired
+		}
+		if _, err := validateTrackedTunnel(ctx, cleanup.Config, st, clients.Cloudflare); err != nil {
+			return err
+		}
+	}
+	if st.Tailscale.AuthKeyID != "" {
+		if clients.Tailscale == nil {
+			return errTailscaleCleanupClientRequired
+		}
+		if _, err := validateTrackedAuthKey(ctx, cleanup.Config, st, clients.Tailscale); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (a *app) deleteTrackedExternalResources(ctx context.Context, cleanup serverDeleteCleanup) (state.State, error) {
 	if a.services.deleteTrackedExternalResources != nil {
 		return a.services.deleteTrackedExternalResources(ctx, cleanup)
@@ -121,7 +164,7 @@ func deleteTrackedTailscaleDevice(ctx context.Context, cleanup serverDeleteClean
 		return nil
 	}
 	if clients.Tailscale == nil {
-		return fmt.Errorf("tailscale cleanup client required")
+		return errTailscaleCleanupClientRequired
 	}
 	found, err := validateTrackedTailscaleDevice(ctx, cleanup.Config, *st, clients.Tailscale)
 	if err != nil {
@@ -141,7 +184,7 @@ func deleteTrackedCloudflareTunnel(ctx context.Context, cleanup serverDeleteClea
 		return nil
 	}
 	if clients.Cloudflare == nil {
-		return fmt.Errorf("cloudflare cleanup client required")
+		return errCloudflareCleanupClientRequired
 	}
 	found, err := validateTrackedTunnel(ctx, cleanup.Config, *st, clients.Cloudflare)
 	if err != nil {
@@ -160,7 +203,7 @@ func deleteTrackedTailscaleAuthKey(ctx context.Context, cleanup serverDeleteClea
 		return nil
 	}
 	if clients.Tailscale == nil {
-		return fmt.Errorf("tailscale cleanup client required")
+		return errTailscaleCleanupClientRequired
 	}
 	found, err := validateTrackedAuthKey(ctx, cleanup.Config, *st, clients.Tailscale)
 	if err != nil {
