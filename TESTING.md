@@ -65,10 +65,10 @@ paid infrastructure by accident.
 | `serverpro catalog locations` | Provider location catalog via ephemeral token. | `internal/cli/provider_catalog_command_test.go`, provider catalog mapping tests | token guard for every provider | Live read-only API dogfood |
 | `serverpro catalog sizes` | Provider size/plan catalog filtered by location. | Provider catalog mapping tests | token guard for every provider | Live read-only API dogfood |
 | `serverpro catalog images` | Provider image catalog filtered by location where supported. | Provider catalog mapping tests | token guard for every provider | Live read-only API dogfood |
-| `serverpro ingress` | Ingress parent help and unknown-child rejection. | `internal/cli/root_test.go` | parent help case | Read-only dogfood |
-| `serverpro ingress add` | Add pending Cloudflare Tunnel route metadata without false public-route success claims. | `internal/cli/ingress_command_test.go`, `internal/ingress/ingress_test.go` | fixture add/duplicate/error cases | Read-only dogfood |
-| `serverpro ingress list` | List local ingress state. | `internal/cli/ingress_command_test.go` | fixture list cases | Read-only dogfood |
-| `serverpro ingress remove` | Remove local route metadata through adapter. | `internal/cli/ingress_command_test.go`, `internal/ingress/ingress_test.go` | fixture remove/error cases | Read-only dogfood |
+| `serverpro server ingress` | Ingress parent help and unknown-child rejection. | `internal/cli/root_test.go` | parent help case | Read-only dogfood |
+| `serverpro server ingress add` | Add pending Cloudflare Tunnel route metadata without false public-route success claims. | `internal/cli/ingress_command_test.go`, `internal/ingress/ingress_test.go` | fixture add/duplicate/error cases | Read-only dogfood |
+| `serverpro server ingress list` | List local ingress state. | `internal/cli/ingress_command_test.go` | fixture list cases | Read-only dogfood |
+| `serverpro server ingress remove` | Remove local route metadata through adapter. | `internal/cli/ingress_command_test.go`, `internal/ingress/ingress_test.go` | fixture remove/error cases | Read-only dogfood |
 | `serverpro tailnet` | Tailnet parent help and unknown-child rejection. | `internal/cli/root_test.go` | parent help case | Read-only dogfood |
 | `serverpro tailnet reconcile` | Conservatively remove unused serverpro ACL entries using stable matching-tailnet state, live-device evidence, retained tag-owner dependencies, and an unchanged approved plan. | `internal/cli/tailnet_reconcile_command_test.go`, `internal/provider/tailscale/policy_reconcile_test.go` cover explicit identity, shared locking, scoped evidence, owner-reference retention, stderr preview/one stdout document, changed-plan rejection, and mixed-rule rewrite | help and non-interactive token guard; no live mutation | Manual/live only because policy mutation is tailnet-global |
 

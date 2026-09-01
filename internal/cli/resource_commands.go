@@ -31,6 +31,7 @@ func (a *app) serverCmd() *cobra.Command {
 		a.serverStartCmd(),
 		a.serverStopCmd(),
 		a.serverRestartCmd(),
+		a.ingressCmd(),
 	)
 	return cmd
 }
@@ -174,7 +175,7 @@ func (a *app) catalogImagesCmd() *cobra.Command {
 }
 
 func (a *app) ingressCmd() *cobra.Command {
-	cmd := parentCommand("ingress", "manage optional public ingress")
+	cmd := parentCommand("ingress", "manage optional public ingress for a server")
 	cmd.AddCommand(a.ingressAddCmd(), a.ingressListCmd(), a.ingressRemoveCmd())
 	return cmd
 }

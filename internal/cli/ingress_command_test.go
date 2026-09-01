@@ -144,7 +144,7 @@ func TestIngressAddDryRunDoesNotMutateState(t *testing.T) {
 	cmd := New()
 	cmd.SetOut(&out)
 	cmd.SetErr(io.Discard)
-	cmd.SetArgs([]string{"--dry-run", "--non-interactive", "-n", "demoapp", "ingress", "add", "webapp", "--type", "cloudflare-tunnel", "--hostname", "app.example.com"})
+	cmd.SetArgs([]string{"--dry-run", "--non-interactive", "-n", "demoapp", "server", "ingress", "add", "webapp", "--type", "cloudflare-tunnel", "--hostname", "app.example.com"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestIngressRemoveDryRunDoesNotMutateState(t *testing.T) {
 	cmd := New()
 	cmd.SetOut(&out)
 	cmd.SetErr(io.Discard)
-	cmd.SetArgs([]string{"--dry-run", "--non-interactive", "-n", "demoapp", "ingress", "remove", "webapp", "--hostname", "app.example.com"})
+	cmd.SetArgs([]string{"--dry-run", "--non-interactive", "-n", "demoapp", "server", "ingress", "remove", "webapp", "--hostname", "app.example.com"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}

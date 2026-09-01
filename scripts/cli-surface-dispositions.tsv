@@ -5,10 +5,10 @@ serverpro catalog images	catalog images digitalocean token guard
 serverpro catalog locations	catalog locations digitalocean token guard
 serverpro catalog sizes	catalog sizes digitalocean token guard
 serverpro doctor	doctor global
-serverpro ingress	parent help: ingress
-serverpro ingress add	ingress add cloudflare-tunnel
-serverpro ingress list	ingress list after add
-serverpro ingress remove	ingress remove
+serverpro server ingress	parent help: server ingress
+serverpro server ingress add	ingress add cloudflare-tunnel
+serverpro server ingress list	ingress list after add
+serverpro server ingress remove	ingress remove
 serverpro namespace	parent help: namespace
 serverpro namespace create	namespace create mynamespace
 serverpro namespace delete	namespace delete dry-run

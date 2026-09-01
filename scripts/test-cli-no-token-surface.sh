@@ -310,24 +310,24 @@ for provider in digitalocean hetzner vultr; do
 	run_fail_grep "provider doctor $provider token guard" 'SERVERPRO_SERVER_PROVIDER_TOKEN required' "$bin" --non-interactive provider doctor "$provider"
 done
 
-run_fail_grep "catalog locations missing provider" '--provider required for catalog locations' "$bin" --non-interactive catalog locations
+run_fail_grep "catalog locations missing provider" '--provider/-p is required for "serverpro catalog locations"' "$bin" --non-interactive catalog locations
 for provider in digitalocean hetzner vultr; do
 	run_fail_grep "catalog locations $provider token guard" 'SERVERPRO_SERVER_PROVIDER_TOKEN required' "$bin" --non-interactive -p "$provider" catalog locations
 	run_fail_grep "catalog sizes $provider token guard" 'SERVERPRO_SERVER_PROVIDER_TOKEN required' "$bin" --non-interactive -p "$provider" catalog sizes --location test
 	run_fail_grep "catalog images $provider token guard" 'SERVERPRO_SERVER_PROVIDER_TOKEN required' "$bin" --non-interactive -p "$provider" catalog images --location test
 done
 
-run_fail_grep "server discover missing provider" '--provider/-p required' "$bin" --non-interactive server discover
+run_fail_grep "server discover missing provider" '--provider/-p is required for "serverpro server discover"' "$bin" --non-interactive server discover
 run_fail_grep "server discover token guard" 'SERVERPRO_SERVER_PROVIDER_TOKEN required' "$bin" --non-interactive -p hetzner server discover
 run_fail_grep "server import missing criteria" 'import requires NAME, --provider-id, or --all' "$bin" --non-interactive --dry-run -p hetzner server import
-run_fail_grep "server import missing provider" '--provider/-p required' "$bin" --non-interactive --dry-run server import webapp
+run_fail_grep "server import missing provider" '--provider/-p is required for "serverpro server import"' "$bin" --non-interactive --dry-run server import webapp
 run_fail_grep "server import token guard" 'SERVERPRO_SERVER_PROVIDER_TOKEN required' "$bin" --non-interactive --dry-run -p hetzner server import webapp
 
 run_ok_grep "server create dry-run hetzner" 'size=cx23 image=ubuntu-24.04 location=fsn1' "$bin" --non-interactive --dry-run -n previewns -p hetzner server create previewapp --location fsn1 --size cx23 --image ubuntu-24.04
 run_ok_grep "server create dry-run vultr" 'size=vc2-1c-1gb image=1743 location=ewr' "$bin" --non-interactive --dry-run -n previewns -p vultr server create previewapp --location ewr --size vc2-1c-1gb --image 1743
 run_ok_grep "server create dry-run digitalocean" 'size=s-1vcpu-1gb image=ubuntu-24-04-x64 location=nyc3' "$bin" --non-interactive --dry-run -n previewns -p digitalocean server create previewapp --location nyc3 --size s-1vcpu-1gb --image ubuntu-24-04-x64
 run_ok_grep "server create dry-run all flags" 'cloudflare tunnel' "$bin" --non-interactive --dry-run -n previewns -p hetzner server create previewapp --compute-name previewns-previewapp --location fsn1 --size cx23 --image ubuntu-24.04 --admin-user ops --tailscale-tailnet example.ts.net --tailscale-tags tag:serverpro-previewns --ingress cloudflare-tunnel --cloudflare-account-id acct-test --cloudflare-tunnel-name previewns-previewapp --egress-mode open
-run_fail_grep "server create missing provider" '--provider required for server create' "$bin" --non-interactive --dry-run -n previewns server create previewapp --location fsn1 --size cx23 --image ubuntu-24.04
+run_fail_grep "server create missing provider" '--provider/-p is required for "serverpro server create"' "$bin" --non-interactive --dry-run -n previewns server create previewapp --location fsn1 --size cx23 --image ubuntu-24.04
 run_fail_grep "server create invalid provider" 'provider "digital ocean" not found' "$bin" --non-interactive --dry-run -n previewns -p 'digital ocean' server create previewapp --location nyc3 --size s-1vcpu-1gb --image ubuntu-24-04-x64
 run_fail_grep "server create missing location" 'missing required config: compute.location' "$bin" --non-interactive --dry-run -n previewns -p hetzner server create previewapp --size cx23 --image ubuntu-24.04
 run_fail_grep "server create unsupported ingress" 'network.ingress must be none or cloudflare-tunnel' "$bin" --non-interactive --dry-run -n previewns -p hetzner server create previewapp --location fsn1 --size cx23 --image ubuntu-24.04 --ingress tailscale-funnel
@@ -470,17 +470,17 @@ fi
 run_ok_grep "explicit config/state doctor dry-run" '"action": "doctor"' "$bin" --non-interactive --dry-run --config "$config_path" --state "$state_path" server doctor webapp
 run_ok_grep "explicit state delete dry-run" '"action": "delete"' "$bin" --non-interactive --dry-run --state "$state_path" server delete webapp
 
-run_ok_grep "ingress list empty" '^\[\]$' "$bin" --non-interactive -n mynamespace ingress list webapp
-run_fail_grep "ingress add missing type" '--type required for ingress add' "$bin" --non-interactive -n mynamespace ingress add webapp --hostname app.example.com
-run_fail_grep "ingress add missing hostname" '--hostname required for ingress add' "$bin" --non-interactive -n mynamespace ingress add webapp --type cloudflare-tunnel
-run_fail_grep "ingress add unsupported type" 'unsupported ingress type "none"' "$bin" --non-interactive -n mynamespace ingress add webapp --type none --hostname app.example.com
-run_ok_grep "ingress add cloudflare-tunnel" '"status": "added"' "$bin" --non-interactive -n mynamespace ingress add webapp --type cloudflare-tunnel --hostname app.example.com
-run_ok_grep "ingress list after add" 'app.example.com' "$bin" --non-interactive -n mynamespace ingress list webapp
-run_fail_grep "ingress add duplicate" 'ingress hostname "app.example.com" already exists' "$bin" --non-interactive -n mynamespace ingress add webapp --type cloudflare-tunnel --hostname app.example.com
-run_ok_grep "ingress remove" '"status": "removed"' "$bin" --non-interactive -n mynamespace ingress remove webapp --hostname app.example.com
-run_ok_grep "ingress list after remove" '^\[\]$' "$bin" --non-interactive -n mynamespace ingress list webapp
-run_fail_grep "ingress remove missing hostname" '--hostname required for ingress remove' "$bin" --non-interactive -n mynamespace ingress remove webapp
-run_fail_grep "ingress remove missing route" 'ingress hostname "missing.example.com" not found' "$bin" --non-interactive -n mynamespace ingress remove webapp --hostname missing.example.com
+run_ok_grep "ingress list empty" '^\[\]$' "$bin" --non-interactive -n mynamespace server ingress list webapp
+run_fail_grep "ingress add missing type" '--type is required for "serverpro server ingress add"' "$bin" --non-interactive -n mynamespace server ingress add webapp --hostname app.example.com
+run_fail_grep "ingress add missing hostname" '--hostname is required for "serverpro server ingress add"' "$bin" --non-interactive -n mynamespace server ingress add webapp --type cloudflare-tunnel
+run_fail_grep "ingress add unsupported type" 'unsupported ingress type "none"' "$bin" --non-interactive -n mynamespace server ingress add webapp --type none --hostname app.example.com
+run_ok_grep "ingress add cloudflare-tunnel" '"status": "added"' "$bin" --non-interactive -n mynamespace server ingress add webapp --type cloudflare-tunnel --hostname app.example.com
+run_ok_grep "ingress list after add" 'app.example.com' "$bin" --non-interactive -n mynamespace server ingress list webapp
+run_fail_grep "ingress add duplicate" 'ingress hostname "app.example.com" already exists' "$bin" --non-interactive -n mynamespace server ingress add webapp --type cloudflare-tunnel --hostname app.example.com
+run_ok_grep "ingress remove" '"status": "removed"' "$bin" --non-interactive -n mynamespace server ingress remove webapp --hostname app.example.com
+run_ok_grep "ingress list after remove" '^\[\]$' "$bin" --non-interactive -n mynamespace server ingress list webapp
+run_fail_grep "ingress remove missing hostname" '--hostname is required for "serverpro server ingress remove"' "$bin" --non-interactive -n mynamespace server ingress remove webapp
+run_fail_grep "ingress remove missing route" 'ingress hostname "missing.example.com" not found' "$bin" --non-interactive -n mynamespace server ingress remove webapp --hostname missing.example.com
 
 if find "$HOME" -type f | grep -E 'credentials\.json|previewapp|previewns' >/dev/null; then
 	log "FAIL | unwanted credential/preview files"
