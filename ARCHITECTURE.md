@@ -234,7 +234,9 @@ flowchart LR
     to account-key removes the managed repository rewrite and SSH block before
     clearing that transitional scope.
 11. Run doctor with the reloaded intent, including exact configured Git identity
-    and signing checks for account-key access.
+    and signing checks for account-key access. Provisioning and doctor use
+    independent bounded contexts. Interactive GitHub prompts do not consume the
+    doctor timeout.
 
 ### Delete and tailnet policy
 
