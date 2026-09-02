@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/privatefile"
 	"github.com/sagmans/serverpro/internal/state"
 	"github.com/spf13/cobra"
 )
@@ -237,6 +238,11 @@ func (a *app) executeNamespaceDelete(ctx context.Context, authority namespaceDel
 			return err
 		}
 	}
+	unlockCleanup, err := state.LockLocalArtifactCleanup(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlockCleanup()
 	if err := removeNamespaceLocalState(authority.namespace); err != nil {
 		return err
 	}
@@ -248,7 +254,7 @@ func (a *app) executeNamespaceDelete(ctx context.Context, authority namespaceDel
 
 func removeNamespaceLocalState(namespace string) error {
 	for _, path := range []string{config.NamespaceConfigDir(namespace), config.NamespaceStateDir(namespace)} {
-		if err := os.RemoveAll(config.Expand(path)); err != nil {
+		if err := privatefile.RemoveTreeDurably(config.Expand(path)); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}

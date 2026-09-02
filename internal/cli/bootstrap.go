@@ -50,6 +50,15 @@ func (a *app) serverBootstrapCmd() *cobra.Command {
 				row := serverBootstrapRow{Status: "planned", Action: "bootstrap", DryRun: true, Namespace: cfg.Namespace, Server: cfg.Server, Target: string(target), User: cfg.Admin.Username, Host: st.Tailscale.Name}
 				return writeJSON(a.stdout, row)
 			}
+			unlockWorkflow, err := lockServerArtifactWorkflow(cmd.Context(), st)
+			if err != nil {
+				return err
+			}
+			defer unlockWorkflow()
+			cfg, _, st, err = a.loadConfigAndStateForServer(args[0])
+			if err != nil {
+				return err
+			}
 			sudoPassword, err := a.resolveSudoPassword(cfg)
 			if err != nil {
 				return err

@@ -630,7 +630,12 @@ tracked recovery evidence. It does not prove that each resource is still live.
 Resolve the reported error, then rerun the same delete command. Compute adapters
 treat missing tracked compute resources as already deleted.
 
-State is removed only after provider deletion succeeds. Provider resources are
+Canonical local server artifacts are removed only after provider deletion succeeds.
+The dry-run plan lists them in `local_cleanup`: config, credentials, state,
+import marker, and adjacent server lock files. The empty canonical credential
+directory is also removed. Custom `--config` and `--state` paths and their locks are preserved because
+serverpro does not own those locations. The registry entry is removed last;
+a local cleanup failure retains it for diagnosis and recovery. Provider resources are
 validated before the first provider DELETE. For DigitalOcean servers created
 before dedicated per-server firewall tags, cleanup accepts only the exact
 historical ownership selectors and first proves through live Droplet inventory

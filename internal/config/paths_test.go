@@ -21,6 +21,15 @@ func TestRegistryPathExpandsUnderStateHome(t *testing.T) {
 	}
 }
 
+func TestLocalArtifactGuardPathExpandsUnderStateHome(t *testing.T) {
+	dir := configTestHome(t)
+	got := LocalArtifactGuardPath()
+	want := filepath.Join(dir, ".local", "state", "serverpro", ".local-artifacts.lock")
+	if got != want {
+		t.Fatalf("LocalArtifactGuardPath() = %q, want %q", got, want)
+	}
+}
+
 func TestServerStatePathSeparatesNamespaceAndServer(t *testing.T) {
 	dir := configTestHome(t)
 	got := ServerStatePath("prod", "web")

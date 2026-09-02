@@ -14,10 +14,15 @@ import (
 )
 
 const (
-	testServer         = "web"
-	testProviderToken  = "e2e-provider-token"
-	testTailscaleToken = "e2e-tailscale-token"
-	testSudoPassword   = "correct horse battery staple"
+	testServer                    = "web"
+	testProviderToken             = "e2e-provider-token"
+	testTailscaleToken            = "e2e-tailscale-token"
+	testSudoPassword              = "correct horse battery staple"
+	testConfigLockSuffix          = ".lock"
+	testStateLockSuffix           = ".lock"
+	testServerOperationLockSuffix = ".operation.lock"
+	testImportMarkerSuffix        = ".import.json"
+	testCredentialFileName        = "credentials.json"
 )
 
 type providerCase struct {
@@ -86,10 +91,7 @@ func TestCompiledFullChainJourneys(t *testing.T) {
 					t.Fatalf("production orchestration evidence %q missing: err=%v audit=%q", want, err, orchestrationAudit)
 				}
 			}
-			statePath := filepath.Join(home, ".local", "state", "serverpro", "namespaces", namespace, "servers", testServer+".json")
-			if _, err := os.Stat(statePath); !os.IsNotExist(err) {
-				t.Fatalf("state still exists after delete: %v", err)
-			}
+			requireServerArtifactsAbsent(t, home, namespace)
 		})
 	}
 }
@@ -225,6 +227,46 @@ func TestCompiledCheckpointFailureKeepsRecoveryEvidenceAndCleanup(t *testing.T) 
 	requireSuccessJSON(t, remove)
 	if fixture.resourceCount("hetzner") != 0 {
 		t.Fatalf("checkpoint recovery left resources: %d", fixture.resourceCount("hetzner"))
+	}
+}
+
+func requireServerArtifactsAbsent(t *testing.T, home, namespace string) {
+	t.Helper()
+	for _, path := range serverArtifactPaths(home, namespace) {
+		if _, err := os.Lstat(path); !os.IsNotExist(err) {
+			t.Fatalf("server artifact remains at %s: %v", path, err)
+		}
+	}
+}
+
+func requireServerArtifactsPresent(t *testing.T, home, namespace string) {
+	t.Helper()
+	for _, path := range serverPersistentArtifactPaths(home, namespace) {
+		if _, err := os.Lstat(path); err != nil {
+			t.Fatalf("server artifact missing at %s: %v", path, err)
+		}
+	}
+}
+
+func serverArtifactPaths(home, namespace string) []string {
+	paths := serverPersistentArtifactPaths(home, namespace)
+	statePath := filepath.Join(home, ".local", "state", "serverpro", "namespaces", namespace, "servers", testServer+".json")
+	return append(paths, statePath+testImportMarkerSuffix)
+}
+
+func serverPersistentArtifactPaths(home, namespace string) []string {
+	configPath := filepath.Join(home, ".config", "serverpro", "namespaces", namespace, "servers", testServer+".yaml")
+	credentialsDir := filepath.Join(home, ".config", "serverpro", "namespaces", namespace, "servers", testServer)
+	credentialsPath := filepath.Join(credentialsDir, testCredentialFileName)
+	statePath := filepath.Join(home, ".local", "state", "serverpro", "namespaces", namespace, "servers", testServer+".json")
+	return []string{
+		configPath,
+		configPath + testConfigLockSuffix,
+		credentialsPath,
+		credentialsDir,
+		statePath,
+		statePath + testStateLockSuffix,
+		statePath + testServerOperationLockSuffix,
 	}
 }
 

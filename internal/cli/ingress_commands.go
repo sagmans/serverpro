@@ -27,7 +27,7 @@ func (a *app) runIngressList(_ context.Context, name string) error {
 }
 
 func (a *app) runIngressAdd(ctx context.Context, name, ingressType, hostname string) error {
-	stPath, st, err := a.loadServerReadState(name)
+	_, st, err := a.loadServerReadState(name)
 	if err != nil {
 		return err
 	}
@@ -49,6 +49,20 @@ func (a *app) runIngressAdd(ctx context.Context, name, ingressType, hostname str
 	if a.dryRun {
 		row := ingressMutationRow{Status: "planned", Action: "add", DryRun: true, Server: name, Type: ingressType, Hostname: hostname}
 		return writeJSON(a.stdout, row)
+	}
+	unlockWorkflow, err := lockServerArtifactWorkflow(ctx, st)
+	if err != nil {
+		return err
+	}
+	defer unlockWorkflow()
+	stPath, st, err := a.loadServerReadState(name)
+	if err != nil {
+		return err
+	}
+	for _, existing := range st.Ingress {
+		if existing.Hostname == hostname {
+			return fmt.Errorf("ingress hostname %q already exists", hostname)
+		}
 	}
 	route, err := adapter.Add(ctx, ingress.Route{Hostname: hostname, Target: st.Tailscale.Name})
 	if err != nil {
@@ -88,6 +102,17 @@ func (a *app) runIngressRemove(ctx context.Context, name, hostname string) error
 	}
 	if hostname == "" {
 		return requiredFlagError("serverpro server ingress remove", "hostname", "")
+	}
+	if !a.dryRun {
+		unlockWorkflow, err := lockServerArtifactWorkflow(ctx, st)
+		if err != nil {
+			return err
+		}
+		defer unlockWorkflow()
+		stPath, st, err = a.loadServerReadState(name)
+		if err != nil {
+			return err
+		}
 	}
 	removed := false
 	for _, item := range st.Ingress {

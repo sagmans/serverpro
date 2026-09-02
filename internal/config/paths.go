@@ -11,6 +11,10 @@ func RegistryPath() string {
 	return Expand("~/.local/state/serverpro/registry.json")
 }
 
+func LocalArtifactGuardPath() string {
+	return Expand("~/.local/state/serverpro/.local-artifacts.lock")
+}
+
 func NamespaceStateDir(namespace string) string {
 	return Expand(filepath.Join("~/.local/state/serverpro/namespaces", namespace))
 }

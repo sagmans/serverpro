@@ -51,6 +51,7 @@ func TestCompiledDeleteRejectsInvalidExternalCredentialBeforeComputeMutation(t *
 	if _, err := os.Stat(statePath); err != nil {
 		t.Fatalf("state missing after preflight failure: %v", err)
 	}
+	requireServerArtifactsPresent(t, home, namespace)
 
 	retry := runCommand(binary, env, "server", "delete", testServer,
 		"--namespace", namespace, "--provider", "hetzner", "--non-interactive", "--yes")
@@ -59,9 +60,7 @@ func TestCompiledDeleteRejectsInvalidExternalCredentialBeforeComputeMutation(t *
 	if got := fixture.resourceCount("hetzner"); got != 0 {
 		t.Fatalf("provider resources remain after retry: %d", got)
 	}
-	if _, err := os.Stat(statePath); !os.IsNotExist(err) {
-		t.Fatalf("state remains after retry: %v", err)
-	}
+	requireServerArtifactsAbsent(t, home, namespace)
 }
 
 func TestCompiledDeleteReportsPartialAfterPostComputeCleanupFailure(t *testing.T) {
@@ -111,14 +110,13 @@ func TestCompiledDeleteReportsPartialAfterPostComputeCleanupFailure(t *testing.T
 	if _, err := os.Stat(statePath); err != nil {
 		t.Fatalf("state missing after partial delete: %v", err)
 	}
+	requireServerArtifactsPresent(t, home, namespace)
 
 	retry := runCommand(binary, env, "server", "delete", testServer,
 		"--namespace", namespace, "--provider", "hetzner", "--non-interactive", "--yes")
 	artifacts.record("delete-partial-retry", retry)
 	requireSuccessJSON(t, retry)
-	if _, err := os.Stat(statePath); !os.IsNotExist(err) {
-		t.Fatalf("state remains after partial retry: %v", err)
-	}
+	requireServerArtifactsAbsent(t, home, namespace)
 }
 
 func replaceEnv(env []string, key, value string) []string {

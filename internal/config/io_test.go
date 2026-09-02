@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -159,6 +160,32 @@ func TestSaveIfUnchangedValidatesAfterAcquiringConfigLock(t *testing.T) {
 	}
 	if string(body) != string(replacement) {
 		t.Fatalf("replacement source overwritten:\n%s", body)
+	}
+}
+
+func TestSaveWaitsForLocalArtifactCleanup(t *testing.T) {
+	configTestHome(t)
+	path := ServerConfigPath("approved", "web")
+	unlock, err := privatefile.LockExclusiveContext(context.Background(), LocalArtifactGuardPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- Save(path, ExampleServer("approved", "web")) }()
+	select {
+	case err := <-done:
+		unlock()
+		t.Fatalf("save bypassed artifact cleanup guard: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	unlock()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("save did not resume after artifact cleanup")
 	}
 }
 

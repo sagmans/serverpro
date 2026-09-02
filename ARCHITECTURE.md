@@ -251,7 +251,10 @@ resources and treats absent compute
 resources as completed cleanup.
 
 Server deletion owns only server-scoped compute, Tailscale device/auth-key, and
-Cloudflare tunnels proven `created` by serverpro. Adopted, imported, and legacy
+Cloudflare tunnels proven `created` by serverpro. After remote cleanup, it
+removes canonical config, credentials, state, import marker, adjacent server
+locks, and the empty credential directory, then removes registry authority last.
+Custom config and state paths remain operator-owned and are preserved. Adopted, imported, and legacy
 unknown-provenance tunnels remain external. DigitalOcean validates the tracked
 Droplet and firewall before its first provider mutation. Historical firewalls
 using broad ownership-tag selectors are deletion-compatible only when their
@@ -306,10 +309,17 @@ coalesce, conflicts fail closed, and canonical writes remove every legacy key.
 Unrelated provider-specific data stays inside opaque provider state fields.
 Per-server state mutations use adjacent advisory locks
 and read-modify-write updates so concurrent status, ingress, and cleanup
-checkpoints preserve one another. Longer operations use context-cancellable,
-nonblocking advisory-lock retries. `internal/state.LockServerWorkflow` owns the
-canonical shared-namespace then exclusive-server acquisition order and reverse
-release for create, import, and single-server delete. Namespace create/delete
+checkpoints preserve one another. Config, credential, state, and server-operation writers hold a shared
+local-artifact guard. Existing-server workflows that can publish those artifacts
+also hold the namespace lock shared. Successful delete holds that namespace lock
+exclusively, releases its server-operation lock, acquires the artifact guard
+exclusively, and removes canonical artifacts without a stale managed writer
+recreating them. Longer operations use
+context-cancellable, nonblocking advisory-lock retries.
+`internal/state.LockServerWorkflow` owns the canonical shared-namespace then
+exclusive-server acquisition order and reverse release for create and import.
+Single-server delete holds the namespace lock exclusively across remote and local
+cleanup. Namespace create/delete
 acquire the namespace lock exclusively; recursive delete then acquires only
 server locks because it already owns the namespace. Namespace delete inventories
 canonical config, credentials, state,

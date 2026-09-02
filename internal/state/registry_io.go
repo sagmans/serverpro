@@ -37,7 +37,7 @@ func LoadRegistry(path string) (Registry, error) {
 }
 
 func readRegistryFile(path string) ([]byte, error) {
-	parent, name, err := openParentDirectory(path, false)
+	parent, name, err := privatefile.OpenParentDirectory(path, false)
 	if err != nil {
 		return nil, err
 	}

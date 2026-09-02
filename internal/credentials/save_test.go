@@ -1,13 +1,18 @@
 package credentials
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/privatefile"
 )
+
+const credentialGuardProbe = 50 * time.Millisecond
 
 func TestSaveRejectsEmptyCredentialPath(t *testing.T) {
 	err := Save(testConfig("prod", ""), Set{ServerProvider: "h", Tailscale: "ts", Cloudflare: "cf"})
@@ -48,6 +53,33 @@ func TestSavePartialStoresScopedIncompleteCredentials(t *testing.T) {
 	}
 	if _, err := Load(cfg); err == nil || !strings.Contains(err.Error(), "Tailscale API token") {
 		t.Fatalf("complete load accepted partial credentials: %v", err)
+	}
+}
+
+func TestSaveWaitsForLocalArtifactCleanup(t *testing.T) {
+	credentialsTestHome(t)
+	path := config.ServerCredentialsPath("prod", "server")
+	cfg := testConfig("prod", path)
+	unlock, err := privatefile.LockExclusiveContext(context.Background(), config.LocalArtifactGuardPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- Save(cfg, Set{ServerProvider: "h", Tailscale: "ts", Cloudflare: "cf"}) }()
+	select {
+	case err := <-done:
+		unlock()
+		t.Fatalf("credential save bypassed artifact cleanup guard: %v", err)
+	case <-time.After(credentialGuardProbe):
+	}
+	unlock()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("credential save did not resume after artifact cleanup")
 	}
 }
 
