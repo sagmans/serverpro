@@ -394,7 +394,7 @@ verify_package_candidates() {
     if installed=$(installed_package_version "${name}") && dpkg --compare-versions "${installed}" ge "${minimum}"; then
       continue
     fi
-    candidate=$(apt-cache policy "${name}" | awk '$1 == "Candidate:" { print $2; exit }')
+    candidate=$(apt-cache policy "${name}" | awk '$1 == "Candidate:" { print $2 }')
     if [[ -z ${candidate} || ${candidate} == '(none)' ]]; then
       printf 'managed package has no install candidate: %s\n' "${name}" >&2
       return 1

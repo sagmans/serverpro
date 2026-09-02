@@ -36,7 +36,8 @@ const (
 	minNamerefMinor = 3
 	// testDockerGPGFingerprint mirrors the reviewed key identity so executable
 	// tests can prove exact primary-key set handling without network access.
-	testDockerGPGFingerprint = "9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
+	testDockerGPGFingerprint     = "9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
+	candidatePolicyTrailingLines = "100000"
 )
 
 // bashSupportsNamerefs reports whether PATH's bash is new enough to expose
@@ -477,20 +478,24 @@ func TestShellVerifyPackageCandidatesBeforeInstall(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(binDir, "dpkg"), []byte("#!/bin/sh\ncase \"${2:-}\" in 2.0|3.0) exit 0 ;; *) exit 1 ;; esac\n"), 0o700); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(filepath.Join(binDir, "apt-cache"), []byte("#!/bin/sh\nprintf '  Candidate: %s\\n' \"$CANDIDATE_VERSION\"\n"), 0o700); err != nil {
-				t.Fatal(err)
-			}
 			installMarker := filepath.Join(t.TempDir(), "installed")
 			if err := os.WriteFile(filepath.Join(binDir, "apt-get"), []byte("#!/bin/sh\nif [ \"${1:-}\" = update ]; then exit 0; fi\nprintf ran >\"$INSTALL_MARKER\"\n"), 0o700); err != nil {
 				t.Fatal(err)
 			}
-			code, _, _ := runHelper(t, `apt_install test-package`,
+			code, _, _ := runHelper(t, `
+# WHY: exceed pipe capacity so an early consumer exit deterministically signals the producer.
+apt-cache() {
+  printf '  Candidate: %s\n' "$CANDIDATE_VERSION"
+  awk -v count="$POLICY_TRAILING_LINES" 'BEGIN { for (i = 0; i < count; i++) print "trailing policy data" }'
+}
+apt_install test-package`,
 				"SERVERPRO_BOOTSTRAP_PACKAGE_BASELINES=test-package|2.0",
 				"PATH="+binDir+":"+os.Getenv("PATH"),
 				"INSTALLED_VERSION="+tc.installed,
 				"INSTALLED_STATE="+tc.installedState,
 				"INSTALLED_STATUS="+tc.installedStatus,
 				"CANDIDATE_VERSION="+tc.candidate,
+				"POLICY_TRAILING_LINES="+candidatePolicyTrailingLines,
 				"INSTALL_MARKER="+installMarker)
 			if tc.wantOK && code != 0 {
 				t.Fatalf("safe candidate rejected with exit %d", code)
