@@ -16,6 +16,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const createPhaseTimeout = 30 * time.Minute
+
 type createOverrides struct {
 	ComputeName          string
 	Location             string
@@ -92,25 +94,28 @@ func (a *app) runCreateCommand(cmd *cobra.Command) error {
 	if err := a.upsertRegistryEntry(cfg, stPath); err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(cmd.Context(), 30*time.Minute)
-	defer cancel()
+	provisionCtx, cancelProvision := context.WithTimeout(cmd.Context(), createPhaseTimeout)
+	defer cancelProvision()
 	if err := progress.emit(progressPhaseProvision); err != nil {
 		return err
 	}
-	st, err := a.runProvision(ctx, cfg, stPath, providerAccount, creds, sudoPassword, adminPasswordHash)
+	st, err := a.runProvision(provisionCtx, cfg, stPath, providerAccount, creds, sudoPassword, adminPasswordHash)
+	cancelProvision()
 	unlockTailnet()
 	tailnetLocked = false
 	if err != nil {
 		return redact.New(a.redactionSecrets(creds)...).Error(err)
 	}
-	cfg, err = a.maybeSetupGitHubAccess(ctx, cfg, st, sudoPassword, progress)
+	cfg, err = a.maybeSetupGitHubAccess(cmd.Context(), cfg, st, sudoPassword, progress)
 	if err != nil {
 		return redact.New(a.redactionSecrets(creds)...).Error(err)
 	}
 	if err := progress.emit(progressPhaseDoctor); err != nil {
 		return err
 	}
-	report := a.doctorReport(ctx, cfg, st, creds, sudoPassword, adminPasswordHash)
+	doctorCtx, cancelDoctor := context.WithTimeout(cmd.Context(), createPhaseTimeout)
+	defer cancelDoctor()
+	report := a.doctorReport(doctorCtx, cfg, st, creds, sudoPassword, adminPasswordHash)
 	if err := report.Write(a.stdout); err != nil {
 		return redact.New(a.redactionSecrets(creds)...).Error(err)
 	}

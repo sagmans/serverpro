@@ -56,7 +56,9 @@ Command results are JSON on stdout except live `server ssh`, which hands
 terminal I/O directly to `tailscale ssh`. Prompts and confirmations go to
 stderr. Long create/bootstrap stages also emit secret-safe stderr events such
 as `progress phase=provision elapsed=12s attempt=1`; fixed phase names never
-include tokens, passwords, hashes, bootstrap data, or target values.
+include tokens, passwords, hashes, bootstrap data, or target values. Create uses
+independent timeout budgets for provisioning and doctor. Interactive GitHub
+prompts do not consume the doctor timeout.
 
 Interactive commands resolve missing inputs when safe:
 
