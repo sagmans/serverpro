@@ -55,7 +55,7 @@ func remoteToolChecksWithWait(ctx context.Context, r remote.Runner, user, host s
 			results[i] = pass("remote", check.Name, summarizeRemoteEvidence(check.Name, out))
 			continue
 		}
-		results[i] = fail("remote", check.Name, err.Error(), "run serverpro server doctor --fix")
+		results[i] = fail("remote", check.Name, remoteFailureEvidence(out, err), "run serverpro server doctor --fix")
 		failed[check.repair] = append(failed[check.repair], i)
 	}
 	if !opt.Fix {
@@ -69,13 +69,13 @@ func remoteToolChecksWithWait(ctx context.Context, r remote.Runner, user, host s
 		if check.Name != bootstraptools.ManagedPackageCheckName || slices.Contains(failed[remoteToolRepairBootstrap], i) {
 			continue
 		}
-		if _, err := fixRunner.Run(ctx, user, host, bootstraptools.ManagedPackageRefreshCommand()); err != nil {
-			results[i] = fail("remote", check.Name, results[i].Evidence+"; fix failed: "+err.Error(), "inspect remote command")
+		if out, err := fixRunner.Run(ctx, user, host, bootstraptools.ManagedPackageRefreshCommand()); err != nil {
+			results[i] = fail("remote", check.Name, results[i].Evidence+"; fix failed: "+remoteFailureEvidence(out, err), "inspect remote command")
 			break
 		}
 		out, err := fixRunner.Run(ctx, user, host, check.Command)
 		if err != nil {
-			results[i] = fail("remote", check.Name, err.Error(), "run serverpro server doctor --fix")
+			results[i] = fail("remote", check.Name, remoteFailureEvidence(out, err), "run serverpro server doctor --fix")
 			failed[remoteToolRepairBootstrap] = append(failed[remoteToolRepairBootstrap], i)
 		} else {
 			results[i] = pass("remote", check.Name, "fixed: "+summarizeRemoteEvidence(check.Name, out))
@@ -95,8 +95,8 @@ func remoteToolChecksWithWait(ctx context.Context, r remote.Runner, user, host s
 }
 
 func repairBootstrapTools(ctx context.Context, r remote.Runner, user, host string, checks []remoteToolDefinition, failed []int, results []Result) {
-	if _, err := r.Run(ctx, user, host, bootstraptools.InstallScriptForUser(user)); err != nil {
-		markToolFixFailed(checks, failed, results, err.Error())
+	if out, err := r.Run(ctx, user, host, bootstraptools.InstallScriptForUser(user)); err != nil {
+		markToolFixFailed(checks, failed, results, remoteFailureEvidence(out, err))
 		return
 	}
 	fixed := indexSet(failed)
@@ -106,7 +106,7 @@ func repairBootstrapTools(ctx context.Context, r remote.Runner, user, host strin
 		}
 		out, err := r.Run(ctx, user, host, check.Command)
 		if err != nil {
-			results[i] = fail("remote", check.Name, err.Error(), "fix applied but check still failed")
+			results[i] = fail("remote", check.Name, remoteFailureEvidence(out, err), "fix applied but check still failed")
 			continue
 		}
 		evidence := summarizeRemoteEvidence(check.Name, out)

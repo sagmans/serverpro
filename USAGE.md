@@ -485,6 +485,11 @@ then checks exact managed pins, the Tailscale client and running daemon, and
 updates visible in the existing apt cache; it does not refresh package metadata.
 A platform failure disables every requested `--fix` action. If sudo authentication requires a prompt, only remote inventory/checks
 rerun; provider and local results remain from the original report.
+Failed package and tool checks include captured command output in `evidence`.
+Doctor redacts known credentials before it limits failure evidence to 4 KiB.
+Long failures retain the beginning and end, separated by `... [truncated] ...`,
+so terminal errors remain visible after bootstrap progress. Successful checks
+keep their concise summaries.
 `serverpro server doctor NAME --fix` refreshes package repositories, upgrades
 serverpro-managed apt packages, repairs exact pins, and checksum-verifies a
 stale Tailscale release. Tailscale daemon restart is delayed until the updating

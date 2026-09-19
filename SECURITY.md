@@ -121,7 +121,11 @@ explicit plan; unplanned reads never fall through to live execution, and
 per-command overflow, frame, or transport failures fail closed before any
 requested remediation runs. The first remote doctor check is a blocking
 OS/codename/architecture authority check; failure disables every later fix in
-both batched and sequential execution.
+both batched and sequential execution. Package/tool diagnostic results retain
+captured output, but generic transport errors remain free of batch output.
+The CLI redacts known configured and runtime credentials before failure
+evidence truncation. JSON reports limit each failure excerpt to 4 KiB and
+preserve UTF-8 boundaries. Raw failure output is not written to a separate log.
 
 Provider API calls never follow redirects that leave the credential's trust
 boundary. The shared provider HTTP client refuses redirect chains after five
