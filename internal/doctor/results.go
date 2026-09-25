@@ -13,7 +13,8 @@ func skip(scope, name, evidence string) Result {
 }
 
 func fail(scope, name, evidence, fix string) Result {
-	return Result{Name: name, Scope: scope, Status: Fail, Evidence: trim(evidence), Remediation: fix}
+	// Failure output must remain intact until credential redaction has run.
+	return Result{Name: name, Scope: scope, Status: Fail, Evidence: evidence, Remediation: fix}
 }
 
 func trim(s string) string {

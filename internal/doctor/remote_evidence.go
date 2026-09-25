@@ -2,6 +2,15 @@ package doctor
 
 import "strings"
 
+func remoteFailureEvidence(out string, err error) string {
+	evidence := err.Error()
+	// Batch errors omit output; SSH errors already include it. Keep one copy.
+	if out != "" && !strings.Contains(evidence, out) {
+		evidence += "\n" + out
+	}
+	return evidence
+}
+
 func summarizeRemoteEvidence(name, out string) string {
 	text := strings.TrimSpace(out)
 	if text == "" {

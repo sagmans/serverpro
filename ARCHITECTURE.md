@@ -141,6 +141,9 @@ access paths for app-owned deployment flows.
     support. `--fix` refreshes repositories, upgrades the
     general managed package set, repairs exact tool pins, and stages Tailscale
     before restarting its daemon after the SSH update command returns.
+    Package/tool failures retain captured output without duplicating output
+    already present in SSH errors. The CLI redacts complete failure evidence
+    before report serialization bounds it to 4 KiB with a head/tail excerpt.
 - Polling: `internal/poll`
   - Shared context-aware wait policy used by provider and lifecycle polling.
 - Mesh facade: `internal/mesh`

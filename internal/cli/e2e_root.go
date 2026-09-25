@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/sagmans/serverpro/internal/bootstraptools"
 	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
@@ -44,6 +46,17 @@ const (
 	e2eDeleteCleanupDevicesPath      = "/tailnet/-/devices"
 	e2eDeleteCleanupUnauthorized     = "401 Unauthorized"
 	e2eDeleteCleanupUnauthorizedBody = `{"message":"API token invalid"}`
+	e2eDoctorPackageFailureEnv       = "SERVERPRO_E2E_DOCTOR_PACKAGE_FAILURE"
+	e2eDoctorPackageFailureShort     = "short"
+	e2eDoctorPackageFailureBoundary  = "boundary"
+	e2eDoctorPackageEvidence         = "managed package below baseline: synthetic-package 0.1 < 1.0"
+	e2eDoctorRepairCause             = "E: synthetic fixture package transaction rejected"
+	e2eDoctorRepairErrorPrefix       = "tailscale ssh failed: exit status 100: "
+	e2eDoctorNoise                   = "synthetic package metadata progress\n"
+	e2eDoctorNoiseLines              = 256
+	e2eDoctorEvidenceHeadBytes       = 1024
+	e2eDoctorPadding                 = "."
+	e2eDoctorPackageFailureStatus    = 1
 )
 
 var e2eNow = time.Date(2026, time.July, 23, 12, 0, 0, 0, time.UTC)
@@ -71,7 +84,7 @@ func NewE2E(apiURL string) (*cobra.Command, error) {
 			}
 			return lifecycle.ConfigureE2E(options, func() time.Time { return e2eNow }, e2eSaveState), nil
 		},
-		doctorClients: func(_ context.Context, cfg config.Config, st state.State, creds credentials.Set, _ string) (doctor.Clients, compute.Account, error) {
+		doctorClients: func(_ context.Context, cfg config.Config, st state.State, creds credentials.Set, sudoPassword string) (doctor.Clients, compute.Account, error) {
 			provider, ok := registry.Get(compute.ProviderName(st.Compute.Provider))
 			if !ok {
 				return doctor.Clients{}, compute.Account{}, errors.New("e2e provider missing")
@@ -80,7 +93,7 @@ func NewE2E(apiURL string) (*cobra.Command, error) {
 			clients := doctor.Clients{
 				Compute:   provider,
 				Tailscale: tailscaleClient,
-				Remote:    e2eDoctorRemote{},
+				Remote:    e2eDoctorRemote{secrets: []string{creds.ServerProvider, creds.Tailscale, sudoPassword}},
 				PublicSSHProbe: func(context.Context, string) error {
 					return syscall.ECONNREFUSED
 				},
@@ -148,16 +161,50 @@ func (e2eTailscale) WaitDevice(_ context.Context, name string, tags []string) (m
 	return mesh.Device{NodeID: e2eDeviceID, Name: name, Hostname: name, Addresses: []string{e2eDeviceIP}, Tags: append([]string(nil), tags...), Online: true}, nil
 }
 
-type e2eDoctorRemote struct{}
+type e2eDoctorRemote struct {
+	secrets []string
+}
 
-func (e2eDoctorRemote) Run(context.Context, string, string, string) (string, error) {
+func (r e2eDoctorRemote) Run(_ context.Context, user, _ string, script string) (string, error) {
+	failure := os.Getenv(e2eDoctorPackageFailureEnv)
+	if (failure == e2eDoctorPackageFailureShort || failure == e2eDoctorPackageFailureBoundary) && script == bootstraptools.InstallScriptForUser(user) {
+		out := strings.Join(r.secrets, "\n") + "\n" + strings.Repeat(e2eDoctorNoise, e2eDoctorNoiseLines) +
+			strings.Join(r.secrets, "\n") + "\n" + e2eDoctorRepairCause
+		return out, errors.New(e2eDoctorRepairErrorPrefix + out)
+	}
 	return e2eRemoteSuccessEvidence, nil
 }
 
-func (e2eDoctorRemote) RunBatch(_ context.Context, _, _ string, commands []remote.BatchCommand) ([]remote.BatchResult, error) {
+func (r e2eDoctorRemote) RunBatch(_ context.Context, user, _ string, commands []remote.BatchCommand) ([]remote.BatchResult, error) {
 	results := make([]remote.BatchResult, len(commands))
 	for i := range results {
 		results[i].Output = e2eRemoteSuccessEvidence
+	}
+	failure := os.Getenv(e2eDoctorPackageFailureEnv)
+	if failure != e2eDoctorPackageFailureShort && failure != e2eDoctorPackageFailureBoundary {
+		return results, nil
+	}
+	var packageCommand string
+	for _, check := range bootstraptools.Checks(user) {
+		if check.Name == bootstraptools.ManagedPackageCheckName {
+			packageCommand = check.Command
+			break
+		}
+	}
+	for i, command := range commands {
+		if command.Script != packageCommand {
+			continue
+		}
+		err := fmt.Errorf("remote batch command %d failed with status %d", i, e2eDoctorPackageFailureStatus)
+		out := e2eDoctorPackageEvidence + "\n"
+		if failure == e2eDoctorPackageFailureBoundary {
+			// A split credential exposes truncation before redaction even when the complete token disappears.
+			secret := r.secrets[0]
+			padding := e2eDoctorEvidenceHeadBytes - len(err.Error()+"\n"+out) - len(secret)/2
+			out += strings.Repeat(e2eDoctorPadding, padding) + secret + "\n" + strings.Repeat(e2eDoctorNoise, e2eDoctorNoiseLines)
+		}
+		out += strings.Join(r.secrets, "\n")
+		results[i] = remote.BatchResult{Output: out, Err: err}
 	}
 	return results, nil
 }
