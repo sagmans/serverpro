@@ -308,6 +308,8 @@ func TestSetupGitHubCLIPassesTokenViaStdinOnly(t *testing.T) {
 		"git_protocol: ssh",
 		"chmod 0600 \"${hosts_yml}\"",
 		"stored GitHub PAT verification failed",
+		// double-escaped backslashes made the awk host match fail silently
+		"/^github\\.com:/",
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("script missing %q:\n%s", want, script)

@@ -155,11 +155,11 @@ github.com:
 EOF
 chown "${TARGET_USER}:${TARGET_GID}" "${hosts_yml}"
 chmod 0600 "${hosts_yml}"
-stored="$(awk '/^github\\.com:/{f=1;next} f && /^[[:space:]]*oauth_token:/{sub(/^[[:space:]]*oauth_token:[[:space:]]*/,""); print; exit}' "${hosts_yml}")"
+stored="$(awk '/^github\.com:/{f=1;next} f && /^[[:space:]]*oauth_token:/{sub(/^[[:space:]]*oauth_token:[[:space:]]*/,""); print; exit}' "${hosts_yml}")"
 if [ "${stored}" != "${GH_PAT}" ] || ! curl -fsS -H "Authorization: Bearer ${stored}" -o /dev/null https://api.github.com/user; then
   echo 'stored GitHub PAT verification failed' >&2
   exit 1
 fi
-printf 'gh authenticated as %s\\n' "${login}"
+printf 'gh authenticated as %s\n' "${login}"
 `
 }
