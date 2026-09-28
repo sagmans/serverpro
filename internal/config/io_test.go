@@ -331,6 +331,17 @@ func TestLoadPartialAcceptsSupportedSchema(t *testing.T) {
 	}
 }
 
+func TestLoadPartialDefaultsStoreConsolePasswordTrue(t *testing.T) {
+	path := writeConfigFixture(t, "namespace: prod\ncompute:\n  name: prod-01\ncloudflare:\n  account_id: acc\n  tunnel:\n    name: prod-01\n")
+	cfg, err := LoadPartial(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Admin.StoreConsolePassword {
+		t.Fatal("omitted admin.store_console_password must default to true")
+	}
+}
+
 func writeConfigFixture(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "serverpro.yaml")

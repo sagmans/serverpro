@@ -43,7 +43,10 @@ func LoadPartialBytes(body []byte) (Config, error) {
 	// WHY: decoding onto this one true-by-default safety bit distinguishes an
 	// omitted field from an explicit false without inventing unrelated defaults
 	// such as the admin username or catalog selections.
-	file := configFile{Config: Config{Network: Network{Egress: Egress{PhaseLockdownAfterBootstrap: d.Network.Egress.PhaseLockdownAfterBootstrap}}}}
+	file := configFile{Config: Config{
+		Network: Network{Egress: Egress{PhaseLockdownAfterBootstrap: d.Network.Egress.PhaseLockdownAfterBootstrap}},
+		Admin:   Admin{StoreConsolePassword: d.Admin.StoreConsolePassword},
+	}}
 	dec := yaml.NewDecoder(bytes.NewReader(body))
 	dec.KnownFields(true)
 	if err := dec.Decode(&file); err != nil {

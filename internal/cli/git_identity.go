@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/redact"
 	"github.com/sagmans/serverpro/internal/state"
 )
@@ -106,17 +107,38 @@ func (a *app) promptGitDevIntent(cfg config.Config) (config.Config, string, erro
 	if err != nil {
 		return cfg, "", err
 	}
-	pat, err := a.promptSecret("GitHub fine-grained PAT (Contents, Pull requests, Actions, Workflows: read/write)")
+	pat, err := a.storedOrPromptedGitHubPAT(cfg)
 	if err != nil {
 		return cfg, "", err
-	}
-	if pat == "" {
-		return cfg, "", errors.New("GitHub PAT required for full development access")
 	}
 	cfg.Git.Identity = config.GitIdentity{Name: name, Email: email}
 	cfg.Git.Access = config.GitAccessAccountKey
 	cfg.Git.Signing = signing
 	return cfg, pat, nil
+}
+
+// storedOrPromptedGitHubPAT reuses the persisted PAT across runs and stores a
+// freshly prompted one so later git-dev setups stop asking for it.
+func (a *app) storedOrPromptedGitHubPAT(cfg config.Config) (string, error) {
+	creds, err := credentials.LoadPartial(cfg)
+	if err != nil {
+		return "", err
+	}
+	if creds.GitHubPAT != "" {
+		return creds.GitHubPAT, nil
+	}
+	pat, err := a.promptSecret("GitHub fine-grained PAT (Contents, Pull requests, Actions, Workflows: read/write)")
+	if err != nil {
+		return "", err
+	}
+	if pat == "" {
+		return "", errors.New("GitHub PAT required for full development access")
+	}
+	creds.GitHubPAT = pat
+	if err := credentials.SavePartial(cfg, creds); err != nil {
+		return "", err
+	}
+	return pat, nil
 }
 
 func (a *app) verifyGitHubSSHWithRetry(ctx context.Context, cfg config.Config, st state.State, sudoPassword string) error {

@@ -6,6 +6,12 @@ import (
 	"testing"
 )
 
+func TestDefaultStoresConsolePassword(t *testing.T) {
+	if !Default().Admin.StoreConsolePassword {
+		t.Fatal("default config must store the console password")
+	}
+}
+
 func TestDefaultCreateUsesNoPublicIngress(t *testing.T) {
 	cfg := Default()
 	if cfg.Cloudflare.Tunnel.Enabled || cfg.Network.Ingress != "none" {

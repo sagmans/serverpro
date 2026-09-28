@@ -97,20 +97,26 @@ func TestLoadRejectsDifferentNamespace(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsTailscaleAuthKey(t *testing.T) {
-	body := `{"namespace":"prod","server":"server","server_provider_token":"file-h","tailscale_token":"file-ts","tailscale_auth_key":"tskey-auth","cloudflare_token":"file-c"}`
+func TestLoadReadsStoredOperatorAuth(t *testing.T) {
+	body := `{"namespace":"prod","server":"server","server_provider_token":"file-h","tailscale_token":"file-ts","tailscale_auth_key":"tskey-auth","cloudflare_token":"file-c","admin_sudo_password":"sudo-pass-0123456789","github_pat":"ghp_token"}`
 	path := writeCredentialsFileFixture(t, body, 0o600)
-	_, err := Load(testConfig("prod", path))
-	if err == nil || !strings.Contains(err.Error(), "tailscale_auth_key") {
-		t.Fatalf("expected auth key rejection, got %v", err)
+	creds, err := Load(testConfig("prod", path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if creds.TSAuthKey != "tskey-auth" || creds.AdminSudoPassword != "sudo-pass-0123456789" || creds.GitHubPAT != "ghp_token" {
+		t.Fatalf("stored operator auth lost: %+v", creds)
 	}
 }
 
-func TestLoadPartialRejectsTailscaleAuthKey(t *testing.T) {
+func TestLoadPartialAcceptsTailscaleAuthKey(t *testing.T) {
 	body := `{"namespace":"prod","server":"server","server_provider_token":"file-h","tailscale_token":"file-ts","tailscale_auth_key":"tskey-auth","cloudflare_token":"file-c"}`
 	path := writeCredentialsFileFixture(t, body, 0o600)
-	_, err := LoadPartial(testConfig("prod", path))
-	if err == nil || !strings.Contains(err.Error(), "tailscale_auth_key") {
-		t.Fatalf("expected auth key rejection, got %v", err)
+	creds, err := LoadPartial(testConfig("prod", path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if creds.TSAuthKey != "tskey-auth" {
+		t.Fatalf("auth key = %q", creds.TSAuthKey)
 	}
 }

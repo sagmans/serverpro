@@ -685,6 +685,15 @@ remaining servers intact so the operation can be retried.
 ~/.local/state/serverpro/namespaces/<namespace>/servers/<server>.json
 ```
 
+credentials.json holds service tokens (`server_provider_token`,
+`tailscale_token`, `cloudflare_token`) and stored operator auth
+(`admin_sudo_password`, `github_pat`, optional `tailscale_auth_key`) as
+plaintext `0600`. The sudo password resolves from in-process cache, then the
+`<NAMESPACE>_<SERVER>_SUDOPASS` env var, then credentials.json, then a prompt;
+prompted or env values are stored unless `admin.store_console_password: false`.
+The GitHub PAT prompted during full development access setup is stored and
+reused on later runs.
+
 State is provider-neutral. Managed access policies are stored as typed
 `compute.managed_resources` references. Legacy provider-state policy keys are
 migrated on read; opaque adapter state remains only for adapter compatibility.

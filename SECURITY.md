@@ -89,13 +89,23 @@ default.
 
 ## Credentials and secrets
 
-Provider and service credentials live in server-scoped files:
+Provider and service credentials plus stored operator auth live in server-scoped files:
 
 ```text
 ~/.config/serverpro/namespaces/<namespace>/servers/<server>/credentials.json
 ```
 
 Credential directories must be `0700`; files must be `0600`.
+
+Stored operator auth, plaintext at rest by operator decision: the remote admin
+sudo password (`admin_sudo_password`, gated by `admin.store_console_password`,
+default on, `false` keeps it runtime-only), the GitHub fine-grained PAT
+(`github_pat`), and an optional user-supplied Tailscale auth key
+(`tailscale_auth_key`). Sudo-password resolution order is: in-process cache,
+`<NAMESPACE>_<SERVER>_SUDOPASS` env var, stored file, prompt; prompted or
+env-supplied values are persisted when the flag is on. Disk compromise or a
+leaked backup/home copy exposes these secrets — protect the home directory and
+backups accordingly.
 
 This is the early-release credential model. Future hardening should evaluate OS
 keychains, encrypted local databases, explicit lock/unlock flows, and
@@ -111,9 +121,10 @@ sentinel credentials and redacts them from failure artifacts before upload.
 Provider account tokens are marked non-serializable so even request DTO JSON
 omits them. Redacted error messages
 retain wrapped causes for `errors.Is`/`errors.As` decisions while their public
-message stays masked. Remote admin sudo passwords are runtime-only. Direct
-user-supplied Tailscale auth keys are rejected; serverpro creates short-lived
-tagged keys. Doctor remote batching base64-frames command output and reports
+message stays masked. Sudo passwords may now persist in credentials.json per
+the stored-operator-auth model above; every other handling rule is unchanged.
+serverpro still creates short-lived tagged keys itself, and a stored
+user-supplied auth key is only a fallback input, never logged or exported. Doctor remote batching base64-frames command output and reports
 nonzero status without copying command text or output into batch errors.
 Per-command, decoded-aggregate, and transport byte ceilings return typed errors
 before hostile output can grow memory without bound. Read commands come from an
