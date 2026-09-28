@@ -303,16 +303,21 @@ func TestSetupGitHubCLIPassesTokenViaStdinOnly(t *testing.T) {
 	}
 	for _, want := range []string{
 		"IFS= read -r GH_PAT",
-		"GH_TOKEN=\"${GH_PAT}\"",
-		"api user --jq .login",
+		"Authorization: Bearer ${GH_PAT}",
 		"oauth_token: ${GH_PAT}",
 		"git_protocol: ssh",
 		"chmod 0600 \"${hosts_yml}\"",
-		"auth status",
+		"stored GitHub PAT verification failed",
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("script missing %q:\n%s", want, script)
 		}
+	}
+	// Validation must stay independent of the gh CLI and its tool manager:
+	// a stale hosts.yml token previously broke the very redeploy meant to
+	// replace it.
+	if strings.Contains(script, ".local/bin/mise") {
+		t.Fatalf("script must not route validation through mise:\n%s", script)
 	}
 }
 

@@ -128,6 +128,10 @@ cat "${key_path}.pub"
 // it root-protected; git_protocol ssh keeps gh repo operations on SSH.
 // Exported so doctor can redeploy the locally stored PAT through the single
 // writer of hosts.yml instead of growing a second credential-handling script.
+// Validation talks to api.github.com with curl on purpose: routing it through
+// `mise exec -- gh` made validation impossible while hosts.yml held a stale
+// token, because mise prefers the gh CLI credential over GH_TOKEN and tries to
+// resolve github-backed tools before running any command.
 func GHTokenScript(user string) string {
 	return targetUserHomeScript(user) + `
 IFS= read -r GH_PAT
@@ -135,9 +139,11 @@ if [ -z "${GH_PAT}" ]; then
   echo 'GitHub PAT required on stdin' >&2
   exit 1
 fi
-mise_bin="${TARGET_HOME}/.local/bin/mise"
-gh_exec() { runuser -u "${TARGET_USER}" -- env HOME="${TARGET_HOME}" GH_TOKEN="${GH_PAT}" "${mise_bin}" exec -- gh "$@"; }
-login="$(gh_exec api user --jq .login)" || { echo 'GitHub PAT validation failed' >&2; exit 1; }
+login="$(curl -fsS -H "Authorization: Bearer ${GH_PAT}" https://api.github.com/user | jq -r .login)" || { echo 'GitHub PAT validation failed' >&2; exit 1; }
+if [ -z "${login}" ] || [ "${login}" = "null" ]; then
+  echo 'GitHub PAT validation failed' >&2
+  exit 1
+fi
 gh_dir="${TARGET_HOME}/.config/gh"
 install -d -m 0700 -o "${TARGET_USER}" -g "${TARGET_GID}" "${gh_dir}"
 hosts_yml="${gh_dir}/hosts.yml"
@@ -149,7 +155,11 @@ github.com:
 EOF
 chown "${TARGET_USER}:${TARGET_GID}" "${hosts_yml}"
 chmod 0600 "${hosts_yml}"
-gh_exec auth status >/dev/null
-printf 'gh authenticated as %s\n' "${login}"
+stored="$(awk '/^github\\.com:/{f=1;next} f && /^[[:space:]]*oauth_token:/{sub(/^[[:space:]]*oauth_token:[[:space:]]*/,""); print; exit}' "${hosts_yml}")"
+if [ "${stored}" != "${GH_PAT}" ] || ! curl -fsS -H "Authorization: Bearer ${stored}" -o /dev/null https://api.github.com/user; then
+  echo 'stored GitHub PAT verification failed' >&2
+  exit 1
+fi
+printf 'gh authenticated as %s\\n' "${login}"
 `
 }
