@@ -331,6 +331,54 @@ func TestLoadPartialAcceptsSupportedSchema(t *testing.T) {
 	}
 }
 
+func TestLoadPartialMigratesLegacyStoreConsolePasswordFalse(t *testing.T) {
+	// Legacy builds serialized the tool-forced false and rejected true, so the
+	// unstamped value must never count as an operator opt-out.
+	path := writeConfigFixture(t, "namespace: prod\nadmin:\n  username: deploy\n  store_console_password: false\ncompute:\n  name: prod-01\ncloudflare:\n  account_id: acc\n  tunnel:\n    name: prod-01\n")
+	cfg, err := LoadPartial(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Admin.StoreConsolePassword {
+		t.Fatal("legacy store_console_password: false must migrate to stored")
+	}
+	if cfg.SchemaVersion != ConfigSchemaVersionCurrent {
+		t.Fatalf("schema version = %d", cfg.SchemaVersion)
+	}
+}
+
+func TestLoadPartialHonorsStampedOptOut(t *testing.T) {
+	path := writeConfigFixture(t, "schema_version: 1\nnamespace: prod\nadmin:\n  username: deploy\n  store_console_password: false\ncompute:\n  name: prod-01\ncloudflare:\n  account_id: acc\n  tunnel:\n    name: prod-01\n")
+	cfg, err := LoadPartial(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Admin.StoreConsolePassword {
+		t.Fatal("stamped explicit false must stay runtime-only")
+	}
+}
+
+func TestLoadPartialRejectsUnknownSchemaVersion(t *testing.T) {
+	path := writeConfigFixture(t, "schema_version: 2\nnamespace: prod\ncompute:\n  name: prod-01\n")
+	if _, err := LoadPartial(path); err == nil || !strings.Contains(err.Error(), "schema_version 2 not supported") {
+		t.Fatalf("expected schema rejection, got %v", err)
+	}
+}
+
+func TestSaveStampsSchemaVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "serverpro.yaml")
+	if err := Save(path, ExampleServer("prod", "web")); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "schema_version: 1") {
+		t.Fatalf("saved config missing schema stamp:\n%s", body)
+	}
+}
+
 func TestLoadPartialDefaultsStoreConsolePasswordTrue(t *testing.T) {
 	path := writeConfigFixture(t, "namespace: prod\ncompute:\n  name: prod-01\ncloudflare:\n  account_id: acc\n  tunnel:\n    name: prod-01\n")
 	cfg, err := LoadPartial(path)

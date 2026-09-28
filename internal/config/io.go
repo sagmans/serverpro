@@ -19,6 +19,15 @@ func Load(path string) (Config, error) {
 	return cfg, cfg.Validate()
 }
 
+const (
+	// ConfigSchemaVersionLegacy marks files written before schema stamping;
+	// the zero value needs no explicit YAML key.
+	ConfigSchemaVersionLegacy = 0
+	// ConfigSchemaVersionCurrent must change whenever saved-field semantics
+	// shift enough that a legacy default can no longer be assumed.
+	ConfigSchemaVersionCurrent = 1
+)
+
 type configFile struct {
 	Config  `yaml:",inline"`
 	Project string `yaml:"project,omitempty"`
@@ -53,6 +62,9 @@ func LoadPartialBytes(body []byte) (Config, error) {
 		return file.Config, err
 	}
 	cfg := file.Config
+	if err := migrateLegacyConfig(&cfg); err != nil {
+		return cfg, err
+	}
 	if err := validateNamespaceIdentity(cfg.Namespace, file.Project); err != nil {
 		return cfg, err
 	}
@@ -138,11 +150,31 @@ func configLockPath(path string) string {
 
 func saveUnlocked(path string, cfg Config) error {
 	applyDefaults(&cfg)
+	// Saved files always carry the stamp so later loads can tell a deliberate
+	// opt-out from a legacy tool-forced value.
+	cfg.SchemaVersion = ConfigSchemaVersionCurrent
 	body, err := yaml.Marshal(cfg)
 	if err != nil {
 		return err
 	}
 	return privatefile.AtomicWrite(path, body, privatefile.WriteOptions{TempPattern: ".config-*.tmp", Sync: true})
+}
+
+// migrateLegacyConfig upgrades unstamped files: legacy builds always
+// serialized admin.store_console_password as the tool-forced false and
+// rejected true, so a legacy false never expressed operator opt-out.
+func migrateLegacyConfig(cfg *Config) error {
+	if cfg.SchemaVersion == ConfigSchemaVersionLegacy {
+		if !cfg.Admin.StoreConsolePassword {
+			cfg.Admin.StoreConsolePassword = true
+		}
+		cfg.SchemaVersion = ConfigSchemaVersionCurrent
+		return nil
+	}
+	if cfg.SchemaVersion != ConfigSchemaVersionCurrent {
+		return fmt.Errorf("config schema_version %d not supported", cfg.SchemaVersion)
+	}
+	return nil
 }
 
 func validateNamespaceIdentity(namespace, project string) error {

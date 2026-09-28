@@ -692,7 +692,10 @@ plaintext `0600`. The sudo password resolves from in-process cache, then the
 `<NAMESPACE>_<SERVER>_SUDOPASS` env var, then credentials.json, then a prompt;
 prompted or env values are stored unless `admin.store_console_password: false`.
 The GitHub PAT prompted during full development access setup is stored and
-reused on later runs.
+reused on later runs. Configs written before schema stamping carry a tool-forced
+`store_console_password: false`; loading one migrates it to stored, and any
+later config save records `schema_version: 1`. A stamped explicit `false` stays
+runtime-only.
 
 State is provider-neutral. Managed access policies are stored as typed
 `compute.managed_resources` references. Legacy provider-state policy keys are

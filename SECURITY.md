@@ -103,7 +103,9 @@ default on, `false` keeps it runtime-only), the GitHub fine-grained PAT
 (`github_pat`), and an optional user-supplied Tailscale auth key
 (`tailscale_auth_key`). Sudo-password resolution order is: in-process cache,
 `<NAMESPACE>_<SERVER>_SUDOPASS` env var, stored file, prompt; prompted or
-env-supplied values are persisted when the flag is on. Disk compromise or a
+env-supplied values are persisted when the flag is on. Unstamped legacy
+configs migrate their tool-forced `false` to stored on load; `schema_version: 1`
+files keep an explicit `false` as runtime-only. Disk compromise or a
 leaked backup/home copy exposes these secrets — protect the home directory and
 backups accordingly.
 

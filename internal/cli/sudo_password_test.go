@@ -97,6 +97,36 @@ func TestValidateSudoPasswordRejectsWeakValues(t *testing.T) {
 	}
 }
 
+func TestLegacyConfigSudoPasswordStoresAcrossDoctorRuns(t *testing.T) {
+	// Configs written before schema stamping carry a tool-forced
+	// store_console_password: false; migrated loads must still store.
+	dir := createTestHome(t)
+	cfgPath := filepath.Join(dir, "serverpro.yaml")
+	legacy := "namespace: demo\nserver: web\nadmin:\n  username: deploy\n  store_console_password: false\ncompute:\n  name: demo-web\n  location: fsn1\n  size: cx23\n  image: ubuntu-24.04\ncloudflare:\n  account_id: acc\n  tunnel:\n    name: demo-web\n"
+	if err := os.WriteFile(cfgPath, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := &app{stdin: strings.NewReader("correct horse battery staple\n"), stdout: io.Discard}
+	if _, err := first.resolveSudoPassword(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".config", "serverpro", "namespaces", "demo", "servers", "web", "credentials.json")); err != nil {
+		t.Fatal(err)
+	}
+	second := &app{nonInteractive: true, stdin: strings.NewReader("ignored\n"), stdout: io.Discard}
+	got, err := second.resolveSudoPassword(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "correct horse battery staple" {
+		t.Fatalf("second run password = %q", got)
+	}
+}
+
 func TestResolveSudoPasswordStoresPromptedValueForLaterRuns(t *testing.T) {
 	dir := createTestHome(t)
 	cfg := config.ExampleServer("demo", "web")
