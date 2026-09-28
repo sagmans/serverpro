@@ -124,9 +124,11 @@ cat "${key_path}.pub"
 `
 }
 
-// ghTokenScript reads the PAT from stdin (never argv/script text) and stores
+// GHTokenScript reads the PAT from stdin (never argv/script text) and stores
 // it root-protected; git_protocol ssh keeps gh repo operations on SSH.
-func ghTokenScript(user string) string {
+// Exported so doctor can redeploy the locally stored PAT through the single
+// writer of hosts.yml instead of growing a second credential-handling script.
+func GHTokenScript(user string) string {
 	return targetUserHomeScript(user) + `
 IFS= read -r GH_PAT
 if [ -z "${GH_PAT}" ]; then

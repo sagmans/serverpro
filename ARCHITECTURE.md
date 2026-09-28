@@ -134,6 +134,10 @@ access paths for app-owned deployment flows.
     repeating providers.
     Batched diagnostics declare conditional reads before evaluation, replay
     baseline evidence strictly, and delegate only planned fixes and rechecks.
+    The ungated `gh token parity` check runs before the managed tool apply
+    because github-backed tool installs cannot converge while remote `gh`
+    auth is dead; it redeploys the stored PAT under `--fix` and recommends
+    rotation once both copies are proven stale.
     Managed-package diagnostics verify package floors and use cached apt
     candidates without mutating; ingress-enabled diagnostics also verify the
     cloudflared floor and service. A first, blocking platform check disables

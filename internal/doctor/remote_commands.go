@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/sagmans/serverpro/internal/config"
@@ -108,6 +109,27 @@ func githubSSHAuthReadCommand(user string) string {
 	return "home=\"$(getent passwd " + quotedUser + " | cut -d: -f6)\"; " +
 		"out=\"$(runuser -u " + quotedUser + " -- env HOME=\"$home\" ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -T git@github.com 2>&1)\"; " +
 		"printf '%s\n' \"$out\"; case \"$out\" in *'successfully authenticated'*) exit 0 ;; esac; exit 1"
+}
+
+const (
+	ghHostsConfigRelativePath = ".config/gh/hosts.yml"
+	ghTokenFingerprintLength  = 12
+)
+
+// ghCredentialReadCommand reports a truncated SHA-256 of the remote gh token
+// plus gh auth liveness, never the credential itself, so parity evidence stays
+// safe in logs and failure artifacts even though the token sits in hosts.yml.
+func ghCredentialReadCommand(user string) string {
+	quotedUser := shell.Quote(user)
+	return "set -eu\n" +
+		"home=\"$(getent passwd " + quotedUser + " | cut -d: -f6)\"\n" +
+		"hosts=\"$home/" + ghHostsConfigRelativePath + "\"\n" +
+		"token=\"\"\n" +
+		"if [ -r \"$hosts\" ]; then\n" +
+		"  token=\"$(awk '/^github\\.com:/{f=1;next} f && /^[[:space:]]*oauth_token:/{sub(/^[[:space:]]*oauth_token:[[:space:]]*/,\"\"); print; exit}' \"$hosts\" 2>/dev/null || true)\"\n" +
+		"fi\n" +
+		"if [ -n \"$token\" ]; then printf 'sha=%s\\n' \"$(printf '%s' \"$token\" | sha256sum | cut -c1-" + strconv.Itoa(ghTokenFingerprintLength) + ")\"; else printf 'absent\\n'; fi\n" +
+		"if [ -n \"$token\" ] && runuser -u " + quotedUser + " -- env HOME=\"$home\" \"$home/.local/bin/mise\" exec -- gh auth status >/dev/null 2>&1; then printf 'auth=ok\\n'; else printf 'auth=failed\\n'; fi\n"
 }
 
 func ghAuthReadCommand(user string) string {

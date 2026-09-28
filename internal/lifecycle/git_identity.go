@@ -108,7 +108,7 @@ func SetupGitHubCLI(ctx context.Context, r remote.InputRunner, cfg config.Config
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	if _, err := r.RunWithInput(ctx, cfg.Admin.Username, st.Tailscale.Name, ghTokenScript(cfg.Admin.Username), pat+"\n"); err != nil {
+	if _, err := r.RunWithInput(ctx, cfg.Admin.Username, st.Tailscale.Name, GHTokenScript(cfg.Admin.Username), pat+"\n"); err != nil {
 		return fmt.Errorf("configure GitHub CLI token: %w", err)
 	}
 	return nil

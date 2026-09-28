@@ -7,6 +7,7 @@ import (
 	"github.com/sagmans/serverpro/internal/bootstraptools"
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/hostplatform"
+	"github.com/sagmans/serverpro/internal/lifecycle"
 	"github.com/sagmans/serverpro/internal/remote"
 	"github.com/sagmans/serverpro/internal/shell"
 	"github.com/sagmans/serverpro/internal/tailscaletools"
@@ -62,6 +63,10 @@ func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
 		remoteFixableSpecification("apparmor", "systemctl is-active apparmor && aa-status --enabled", "systemctl enable --now apparmor"),
 		remoteFixableSpecification("unattended upgrades", "systemctl is-enabled unattended-upgrades || systemctl is-enabled apt-daily.timer", "systemctl enable --now unattended-upgrades || systemctl enable --now apt-daily.timer"),
 		remoteFixableSpecification("journald persistent", "test -d /var/log/journal", "mkdir -p /var/log/journal && systemctl restart systemd-journald"),
+		// gh credential repair must precede tool convergence: the tool apply
+		// installs github:-backed assets and cannot succeed while remote gh
+		// auth is dead.
+		remoteGHTokenParitySpecification(user),
 		remoteToolSpecification(user),
 		remoteFixableSpecification("listening ports", "ss -H -tuln", ""),
 		remoteDNSResolutionSpecification(),
@@ -163,6 +168,21 @@ func remoteDNSResolutionSpecification() remoteCheckSpecification {
 				return []Result{fail("remote", "dns resolution", err.Error(), dnsResolutionRemediation)}
 			}
 			return []Result{pass("remote", "dns resolution", trim(out))}
+		},
+	}
+}
+
+// remoteGHTokenParitySpecification stays ungated on purpose: hosts.yml can
+// outlive the config that created it (rotated access mode, imported servers),
+// and an expired remote token must stay visible even when no git access is
+// configured anymore.
+func remoteGHTokenParitySpecification(user string) remoteCheckSpecification {
+	readCommand := ghCredentialReadCommand(user)
+	return remoteCheckSpecification{
+		readCommands: []string{readCommand},
+		liveCommands: []string{lifecycle.GHTokenScript(user)},
+		run: func(ctx context.Context, runner remote.Runner, user, host string, options Options) []Result {
+			return []Result{ghTokenParityCheck(ctx, runner, user, host, readCommand, options)}
 		},
 	}
 }

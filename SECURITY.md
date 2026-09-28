@@ -100,7 +100,8 @@ Credential directories must be `0700`; files must be `0600`.
 Stored operator auth, plaintext at rest by operator decision: the remote admin
 sudo password (`admin_sudo_password`, gated by `admin.store_console_password`,
 default on, `false` keeps it runtime-only), the GitHub fine-grained PAT
-(`github_pat`), and an optional user-supplied Tailscale auth key
+(`github_pat`, redeployable to a dead remote `gh` credential by
+`serverpro server doctor --fix`), and an optional user-supplied Tailscale auth key
 (`tailscale_auth_key`). Sudo-password resolution order is: in-process cache,
 `<NAMESPACE>_<SERVER>_SUDOPASS` env var, stored file, prompt; prompted or
 env-supplied values are persisted when the flag is on. Unstamped legacy
@@ -108,6 +109,12 @@ configs migrate their tool-forced `false` to stored on load; `schema_version: 1`
 files keep an explicit `false` as runtime-only. Disk compromise or a
 leaked backup/home copy exposes these secrets — protect the home directory and
 backups accordingly.
+
+`serverpro server doctor` compares the stored `github_pat` with the remote
+`gh` token through truncated SHA-256 fingerprints, so drift is diagnosable
+without either credential ever appearing in evidence or logs. Only a remote
+token that already fails `gh auth status` may be overwritten; a working but
+different remote token is reported, not replaced.
 
 This is the early-release credential model. Future hardening should evaluate OS
 keychains, encrypted local databases, explicit lock/unlock flows, and

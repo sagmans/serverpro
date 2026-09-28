@@ -221,6 +221,15 @@ organization. Git-over-SSH follows the account key's full account access, while
 `gh` API access remains limited to the PAT resource owner. Multiple GitHub
 usernames and multiple PAT resource-owner profiles are not managed.
 
+`serverpro server doctor` also reports `gh token parity` between the stored
+`github_pat` and the remote `gh` credential (`~/.config/gh/hosts.yml`) using
+truncated SHA-256 fingerprints only. Different fingerprints are a warning,
+never an automatic overwrite: either copy can be the stale one. When remote
+`gh auth` is provably dead and a local PAT is stored, `doctor --fix` redeploys
+the local copy before the managed tool apply; a rejected deploy means both
+copies are dead and the report says to rotate the PAT and rerun
+`serverpro server bootstrap NAME git`.
+
 Legacy config files containing only `project` still load, but every save rewrites
 that identity as `namespace`. Files containing both fields must use the same
 value; divergent identities are rejected. Legacy credential and state JSON
