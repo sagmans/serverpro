@@ -65,7 +65,9 @@ func (a *app) storedSudoPassword(cfg config.Config) (string, bool, error) {
 }
 
 // storeSudoPassword keeps the validated password beside the service tokens;
-// admin.store_console_password: false leaves it runtime-only.
+// admin.store_console_password: false leaves it runtime-only. The write merges
+// under the credential writer lock, so a rotation another run just stored is
+// never rolled back to the snapshot this run happened to load.
 func (a *app) storeSudoPassword(cfg config.Config, password string) error {
 	if !cfg.Admin.StoreConsolePassword {
 		return nil
@@ -73,15 +75,13 @@ func (a *app) storeSudoPassword(cfg config.Config, password string) error {
 	if err := validateSudoPassword(password); err != nil {
 		return err
 	}
-	creds, err := credentials.LoadPartial(cfg)
-	if err != nil {
-		return err
-	}
-	if creds.AdminSudoPassword == password {
+	return credentials.Update(cfg, func(current *credentials.Set) error {
+		if current.AdminSudoPassword == password {
+			return nil
+		}
+		current.AdminSudoPassword = password
 		return nil
-	}
-	creds.AdminSudoPassword = password
-	return credentials.SavePartial(cfg, creds)
+	})
 }
 
 func sudoPasswordEnvSet(cfg config.Config) (bool, error) {

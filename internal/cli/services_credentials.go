@@ -21,7 +21,7 @@ func (a *app) ensureCredentials(cfg config.Config) (credentials.Set, bool, error
 	missing := creds.MissingForConfig(cfg)
 	if len(missing) == 0 {
 		if usedCachedProvider {
-			if err := credentials.Save(cfg, creds); err != nil {
+			if err := a.mergeCredentials(cfg, creds); err != nil {
 				return creds, false, err
 			}
 			_, _ = fmt.Fprintf(a.promptWriter(), "auth saved: %s\n", config.Expand(cfg.Credentials.JSONPath))
@@ -51,14 +51,30 @@ func (a *app) ensureCredentials(cfg config.Config) (credentials.Set, bool, error
 			return creds, false, err
 		}
 	}
-	if err := creds.ValidateForConfig(cfg); err != nil {
-		return creds, false, err
-	}
-	if err := credentials.Save(cfg, creds); err != nil {
+	if err := a.mergeCredentials(cfg, creds); err != nil {
 		return creds, false, err
 	}
 	_, _ = fmt.Fprintf(a.promptWriter(), "auth saved: %s\n", config.Expand(cfg.Credentials.JSONPath))
 	return creds, true, nil
+}
+
+// mergeCredentials fills stored gaps with the values this run supplied instead
+// of publishing the snapshot it loaded: a credential another serverpro run
+// rotated in the meantime stays authoritative, and the persisted set is
+// revalidated for completeness against the current config.
+func (a *app) mergeCredentials(cfg config.Config, supplied credentials.Set) error {
+	return credentials.Update(cfg, func(current *credentials.Set) error {
+		if current.ServerProvider == "" {
+			current.ServerProvider = supplied.ServerProvider
+		}
+		if current.Tailscale == "" {
+			current.Tailscale = supplied.Tailscale
+		}
+		if current.Cloudflare == "" {
+			current.Cloudflare = supplied.Cloudflare
+		}
+		return current.ValidateForConfig(cfg)
+	})
 }
 
 func (a *app) applyCachedServerProviderCredential(creds *credentials.Set) bool {
