@@ -7,6 +7,10 @@ import sys
 from pathlib import Path
 
 PASSING_STATUSES = frozenset({"pass", "warn"})
+DOCTOR_STATUSES = ("pass", "warn", "fail", "skip")
+DOCTOR_DETAIL_STATUSES = ("warn", "fail", "skip")
+DOCTOR_SUMMARY_FIELDS = ("counts", "status", "report_path")
+DOCTOR_COUNT_FIELDS = (*DOCTOR_STATUSES, "total")
 INVENTORY_TEXT_FIELDS = ("id", "name", "namespace", "server")
 INVENTORY_ID_FIELDS = ("namespace", "server")
 INVENTORY_STATES = frozenset({"missing", "partial", "present"})
@@ -87,6 +91,41 @@ def validate_output(kind, value, provider="", namespace="", server=""):
         if not isinstance(value, dict):
             raise ValidationError("doctor report must be an object")
         results = value.get("results")
+        # Summary metadata must not bypass validation through the legacy report path.
+        if any(field in value for field in DOCTOR_SUMMARY_FIELDS):
+            counts = value.get("counts")
+            if (
+                value.get("namespace") != namespace
+                or value.get("server") != server
+                or not isinstance(value.get("report_path"), str)
+                or not value["report_path"].strip()
+                or not isinstance(counts, dict)
+                or any(
+                    type(counts.get(field)) is not int or counts[field] < 0
+                    for field in DOCTOR_COUNT_FIELDS
+                )
+            ):
+                raise ValidationError("doctor summary identity, report path or counts invalid")
+            # Omitted pass details need positive, internally consistent check counts.
+            if counts["total"] <= 0 or counts["total"] != sum(
+                counts[status] for status in DOCTOR_STATUSES
+            ):
+                raise ValidationError("doctor summary must account for non-empty checks")
+            if not isinstance(results, list) or any(
+                not isinstance(item, dict)
+                or item.get("status") not in DOCTOR_DETAIL_STATUSES
+                for item in results
+            ):
+                raise ValidationError("doctor summary results must contain only warn/fail/skip")
+            if any(
+                sum(item["status"] == status for item in results) != counts[status]
+                for status in DOCTOR_DETAIL_STATUSES
+            ):
+                raise ValidationError("doctor summary result counts mismatch")
+            expected_status = "fail" if counts["fail"] else "warn" if counts["warn"] else "pass"
+            if value.get("status") != expected_status or counts["fail"]:
+                raise ValidationError("doctor summary status mismatch or failing checks")
+            return
         valid = (
             isinstance(results, list)
             and bool(results)

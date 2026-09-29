@@ -5,6 +5,7 @@ package e2e_test
 import (
 	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -72,6 +73,21 @@ func TestCompiledDoctorPackageDiagnostics(t *testing.T) {
 			}
 			if !strings.Contains(result.stderr, "doctor failed") {
 				t.Fatalf("doctor failure missing from stderr: %q", result.stderr)
+			}
+			var summary struct {
+				ReportPath string `json:"report_path"`
+			}
+			if err := json.Unmarshal([]byte(result.stdout), &summary); err != nil {
+				t.Fatal(err)
+			}
+			persisted, err := os.ReadFile(summary.ReportPath)
+			if err != nil {
+				t.Fatalf("failed doctor did not persist its report: %v", err)
+			}
+			requireDoctorSecretFreeOutput(t, commandResult{stdout: string(persisted)})
+			var saved doctor.Report
+			if err := json.Unmarshal(persisted, &saved); err != nil || saved.Passed() {
+				t.Fatalf("persisted failed report invalid: err=%v report=%+v", err, saved)
 			}
 			var report doctor.Report
 			if err := json.Unmarshal([]byte(result.stdout), &report); err != nil {

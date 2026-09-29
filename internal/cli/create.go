@@ -116,7 +116,7 @@ func (a *app) runCreateCommand(cmd *cobra.Command) error {
 	doctorCtx, cancelDoctor := context.WithTimeout(cmd.Context(), createPhaseTimeout)
 	defer cancelDoctor()
 	report := a.doctorReport(doctorCtx, cfg, st, creds, sudoPassword, adminPasswordHash)
-	if err := report.Write(a.stdout); err != nil {
+	if err := a.writeDoctorReport(cfg, creds, report); err != nil {
 		return redact.New(a.redactionSecrets(creds)...).Error(err)
 	}
 	if !report.Passed() {

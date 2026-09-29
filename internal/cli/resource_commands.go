@@ -41,6 +41,7 @@ func (a *app) serverCreateCmd() *cobra.Command {
 		a.server = args[0]
 		return a.runCreateCommand(cmd)
 	}}, "config", "state", "namespace", "provider", "non-interactive", "dry-run", "yes")
+	cmd.Flags().BoolVar(&a.doctorFull, "full", false, "print the complete doctor report")
 	cmd.Flags().StringVar(&a.create.ComputeName, "compute-name", "", "compute provider server name")
 	cmd.Flags().StringVar(&a.create.Location, "location", "", "compute location")
 	cmd.Flags().StringVar(&a.create.Size, "size", "", "compute server size")
@@ -73,6 +74,7 @@ func (a *app) serverDoctorCmd() *cobra.Command {
 		a.server = args[0]
 		return a.runServerDoctor(cmd.Context(), args[0])
 	}}, "config", "state", "namespace", "provider", "non-interactive", "dry-run")
+	cmd.Flags().BoolVar(&a.doctorFull, "full", false, "print the complete doctor report")
 	cmd.Flags().BoolVar(&a.doctorFix, "fix", false, "apply failed fixable remote security checks")
 	return cmd
 }

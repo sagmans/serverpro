@@ -43,14 +43,14 @@ func summarizeRemoteEvidence(name, out string) string {
 	case "cloudflared":
 		return "active"
 	}
-	return trim(text)
+	return text
 }
 
 func firstMatchingLine(text, sub string) string {
 	for _, line := range strings.Split(text, "\n") {
 		if strings.Contains(strings.ToLower(line), strings.ToLower(sub)) {
-			return trim(strings.TrimSpace(line))
+			return strings.TrimSpace(line)
 		}
 	}
-	return trim(text)
+	return text
 }

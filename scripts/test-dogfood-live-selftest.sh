@@ -46,7 +46,19 @@ case " $* " in
 		;;
 esac
 
+# Real summary envelopes keep the shell boundary sensitive to schema regressions.
+DOCTOR_SUMMARY_FORMAT='{"namespace":"%s","server":"%s","status":"pass","counts":{"pass":%s,"warn":0,"fail":%s,"skip":0,"total":1},"results":%s,"report_path":"/tmp/selftest-doctor.json"}\n'
+DOCTOR_FAILURE_RESULTS='[{"name":"selftest","scope":"fake","status":"fail","evidence":"failed"}]'
 args=("$@")
+doctor_summary() {
+	local server="$1" invalid_semantic="$2"
+	local passing=1 failing=0 results='[]'
+	if [[ "${FAKE_INVALID_SEMANTIC:-}" == "$invalid_semantic" ]]; then
+		# A claimed pass must not hide a failed check from the real validator.
+		passing=0 failing=1 results="$DOCTOR_FAILURE_RESULTS"
+	fi
+	printf "$DOCTOR_SUMMARY_FORMAT" "$namespace" "$server" "$passing" "$failing" "$results"
+}
 value_after() {
 	local flag="$1"
 	local index
@@ -128,9 +140,7 @@ case " $* " in
 		if [[ "${SERVERPRO_CLOUDFLARE_TOKEN:-}" == "${SENT_CF:-}" ]]; then
 			printf 'exact\n' >"$FAKE_ARGV_DIR/cloudflare-env"
 		fi
-		status=pass
-		[[ "${FAKE_INVALID_SEMANTIC:-}" == create-doctor-status ]] && status=fail
-		printf '{"results":[{"name":"selftest","scope":"fake","status":"%s","evidence":"ok"}]}\n' "$status"
+		doctor_summary "$(sequence_value server create)" create-doctor-status
 		;;
 	*" server status "*)
 		server="$(sequence_value server status)"
@@ -142,9 +152,7 @@ case " $* " in
 		printf '{"namespace":"%s","server":"%s","provider":"%s","power":"%s"}\n' "$namespace" "$server" "$provider" "$power"
 		;;
 	*" server doctor "*)
-		status=pass
-		[[ "${FAKE_INVALID_SEMANTIC:-}" == server-doctor-status ]] && status=fail
-		printf '{"results":[{"name":"selftest","scope":"fake","status":"%s","evidence":"ok"}]}\n' "$status"
+		doctor_summary "$(sequence_value server doctor)" server-doctor-status
 		;;
 	*" server bootstrap "*)
 		server="$(sequence_value server bootstrap)"

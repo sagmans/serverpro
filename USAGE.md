@@ -52,6 +52,11 @@ that command accepts. `--config` is accepted only by
 - `server delete`, `server start`, `server stop`, `server restart`
 - `server bootstrap`, `server ingress add`, `server ingress list`, and `server ingress remove`
 
+Doctor and the final doctor phase of `server create` print a JSON summary.
+The summary lists only `warn`, `fail`, and `skip` results, plus counts and
+`report_path`. Use `--full` on either command for the complete JSON report
+on stdout. Both modes save the complete report.
+
 Command results are JSON on stdout except live `server ssh`, which hands
 terminal I/O directly to `tailscale ssh`. Prompts and confirmations go to
 stderr. Long create/bootstrap stages also emit secret-safe stderr events such
@@ -83,7 +88,7 @@ serverpro server create NAME
 serverpro server bootstrap NAME [all|git|docker|mise|node|pi]
 serverpro server list
 serverpro server status NAME
-serverpro server doctor NAME
+serverpro server doctor NAME [--fix] [--full]
 serverpro server ssh NAME
 serverpro server discover -p PROVIDER [--server NAME] [--provider-id ID] [--include-unmanaged]
 serverpro server import [NAME]
@@ -500,7 +505,24 @@ Failed package and tool checks include captured command output in `evidence`.
 Doctor redacts known credentials before it limits failure evidence to 4 KiB.
 Long failures retain the beginning and end, separated by `... [truncated] ...`,
 so terminal errors remain visible after bootstrap progress. Successful checks
-keep their concise summaries.
+remain in the saved report, not the default result list.
+
+Reports use the system temporary directory (`$TMPDIR` when set, otherwise
+the platform default, usually `/tmp`). The path is
+`<temp>/serverpro-<uid>/doctor/<namespace>/<server>/doctor-<unique-id>.json`.
+Directories are private (`0700`); report files are `0600`. Each server keeps
+its newest 5 reports when cleanup succeeds. The operating system can remove
+temporary files, so copy a report elsewhere if you need to keep it.
+The complete report includes inventory and all check results, with the same
+redaction and evidence limits as stdout. It is not an unbounded command transcript.
+
+The summary status is `fail` if any check fails, otherwise `warn` if any check
+warns, otherwise `pass`. Skipped checks do not change the exit status.
+If report storage fails, stdout contains the complete report instead. A warning
+on stderr explains the storage failure. Doctor failure exit behavior is unchanged.
+The existing cloud-init detail log remains at
+`~/.local/share/serverpro/logs/<namespace>/<server>/cloud-init-status-long.txt`.
+
 `serverpro server doctor NAME --fix` refreshes package repositories, upgrades
 serverpro-managed apt packages, repairs exact pins, and checksum-verifies a
 stale Tailscale release. Tailscale daemon restart is delayed until the updating

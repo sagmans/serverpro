@@ -150,6 +150,12 @@ access paths for app-owned deployment flows.
     Package/tool failures retain captured output without duplicating output
     already present in SSH errors. The CLI redacts complete failure evidence
     before report serialization bounds it to 4 KiB with a head/tail excerpt.
+    Server doctor and create share an output boundary that saves this complete
+    report in a private temporary directory. Default JSON output contains
+    non-pass results, counts, status, and the report path; `--full` retains
+    the complete stdout report without disabling persistence. Retention keeps
+    the newest 5 reports per server when cleanup succeeds. Storage failure
+    falls back to the complete stdout report and a stderr warning.
 - Polling: `internal/poll`
   - Shared context-aware wait policy used by provider and lifecycle polling.
 - Mesh facade: `internal/mesh`

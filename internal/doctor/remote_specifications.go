@@ -167,7 +167,7 @@ func remoteDNSResolutionSpecification() remoteCheckSpecification {
 			if err != nil {
 				return []Result{fail("remote", "dns resolution", err.Error(), dnsResolutionRemediation)}
 			}
-			return []Result{pass("remote", "dns resolution", trim(out))}
+			return []Result{pass("remote", "dns resolution", out)}
 		},
 	}
 }

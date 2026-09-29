@@ -13,7 +13,7 @@ func remoteSudoPasswordRequiredCheck(ctx context.Context, r remote.Runner, user,
 	command := sudoPasswordRequiredCommand(user)
 	out, err := r.Run(ctx, user, host, command)
 	if err == nil {
-		return pass("remote", SudoPasswordCheckName, trim(out))
+		return pass("remote", SudoPasswordCheckName, out)
 	}
 	if !passwordlessSudoEvidence(out, err) {
 		result := fail("remote", SudoPasswordCheckName, err.Error(), SudoPasswordAuthRemediation)
@@ -41,7 +41,7 @@ func fixPasswordlessSudo(ctx context.Context, r remote.Runner, user, host, evide
 	if err != nil {
 		return fail("remote", SudoPasswordCheckName, err.Error(), "fix applied but check still failed")
 	}
-	return pass("remote", SudoPasswordCheckName, "fixed: "+trim(out))
+	return pass("remote", SudoPasswordCheckName, "fixed: "+out)
 }
 
 func passwordlessSudoEvidence(out string, err error) bool {

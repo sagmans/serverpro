@@ -15,6 +15,18 @@ func TestRedactorMasksSecrets(t *testing.T) {
 	}
 }
 
+func TestRedactorMasksNestedSecretsRegardlessOfInputOrder(t *testing.T) {
+	const shortSecret = "fixture-token"
+	const longSecret = shortSecret + "-private-suffix"
+	const evidence = longSecret + " " + shortSecret + " " + longSecret
+	const want = Mask + " " + Mask + " " + Mask
+	for _, secrets := range [][]string{{shortSecret, longSecret}, {longSecret, shortSecret}} {
+		if got := New(secrets...).String(evidence); got != want {
+			t.Fatalf("nested credential suffix survived redaction: %q", got)
+		}
+	}
+}
+
 func TestRedactorErrorMasksMessage(t *testing.T) {
 	r := New("tskey-auth-secret")
 	err := r.Error(errors.New("failed: token=tskey-auth-secret"))

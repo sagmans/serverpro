@@ -53,5 +53,5 @@ func publicSSHProbeError(ip string, err error) Result {
 	if errors.As(err, &netErr) && netErr.Timeout() {
 		return pass("network", "public ssh", ip+" tcp/22 filtered (timeout)")
 	}
-	return warn("network", "public ssh", ip+" tcp/22 probe inconclusive: "+trim(err.Error()))
+	return warn("network", "public ssh", ip+" tcp/22 probe inconclusive: "+err.Error())
 }

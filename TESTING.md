@@ -33,6 +33,21 @@ job. Run both commands for complete non-live local parity. Live dogfood remains
 opt-in so CI and local contributors do not create
 paid infrastructure by accident.
 
+## Doctor output coverage
+
+Doctor and create tests verify non-pass summary results, status counts,
+`--full` compatibility, and complete report persistence. Filesystem cases
+cover private permissions, unsafe paths, retention, and storage-failure
+fallback without losing diagnostics. Redaction and the 4 KiB failure evidence
+limit apply to both the saved report and stdout.
+
+Compiled full-chain journeys exercise the real CLI command paths with local
+provider fixtures and isolated temporary directories. They inspect saved
+reports as well as stdout; no production server or credential is required.
+The Python validator and live harness self-test accept valid summaries,
+including empty result lists for successful checks, but reject contradictory
+status/count data and failures disguised as success.
+
 ## Command surface matrix
 
 | Command | Capability | Unit/integration proof | Smoke/e2e proof | Dogfood proof |

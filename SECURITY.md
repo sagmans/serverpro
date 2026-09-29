@@ -154,6 +154,18 @@ The CLI redacts known configured and runtime credentials before failure
 evidence truncation. JSON reports limit each failure excerpt to 4 KiB and
 preserve UTF-8 boundaries. Raw failure output is not written to a separate log.
 
+Server doctor and create save the complete redacted report in the system
+temporary directory, including when `--full` is selected. Check evidence
+retains the same size limits as stdout. Reports use
+`0600` files beneath private `0700` directories. Predictable per-user names
+are not a security boundary: persistence rejects untrusted ownership, unsafe
+directory permissions, symlinked managed paths, and target path traversal.
+Retention attempts to keep the newest 5 reports per server and leaves
+unrelated files intact. Operating-system cleanup can remove these files.
+Reports still contain infrastructure metadata; treat them as private when
+copying or sharing them. A storage failure produces a redacted stderr warning
+and preserves the complete report on stdout.
+
 Provider API calls never follow redirects that leave the credential's trust
 boundary. The shared provider HTTP client refuses redirect chains after five
 hops, rejects plaintext and cross-host targets outright (subdomains and other
