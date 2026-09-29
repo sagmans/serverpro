@@ -1,6 +1,9 @@
 package redact
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 const Mask = "[REDACTED]"
 
@@ -25,6 +28,8 @@ func New(secrets ...string) Redactor {
 		seen[s] = true
 		keep = append(keep, s)
 	}
+	// A shorter credential must not expose the suffix of a longer credential.
+	slices.SortStableFunc(keep, func(a, b string) int { return len(b) - len(a) })
 	return Redactor{secrets: keep}
 }
 
