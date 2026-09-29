@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/redact"
 	"github.com/sagmans/serverpro/internal/state"
 )
@@ -86,6 +87,9 @@ func (a *app) setupGitDevIdentity(ctx context.Context, cfg config.Config, st sta
 	if err := a.setupRequiredGitHubCLI(ctx, cfg, st, sudoPassword, pat); err != nil {
 		return err
 	}
+	if err := a.persistGitHubPAT(cfg, pat); err != nil {
+		return err
+	}
 	_, err = fmt.Fprintln(a.promptWriter(), "GitHub development access configured")
 	return err
 }
@@ -106,17 +110,45 @@ func (a *app) promptGitDevIntent(cfg config.Config) (config.Config, string, erro
 	if err != nil {
 		return cfg, "", err
 	}
-	pat, err := a.promptSecret("GitHub fine-grained PAT (Contents, Pull requests, Actions, Workflows: read/write)")
+	pat, err := a.storedOrPromptedGitHubPAT(cfg)
 	if err != nil {
 		return cfg, "", err
-	}
-	if pat == "" {
-		return cfg, "", errors.New("GitHub PAT required for full development access")
 	}
 	cfg.Git.Identity = config.GitIdentity{Name: name, Email: email}
 	cfg.Git.Access = config.GitAccessAccountKey
 	cfg.Git.Signing = signing
 	return cfg, pat, nil
+}
+
+// storedOrPromptedGitHubPAT reuses the persisted PAT across runs so later
+// git-dev setups stop asking for it; a freshly prompted token is returned for
+// immediate use and only persisted once the remote proved it works.
+func (a *app) storedOrPromptedGitHubPAT(cfg config.Config) (string, error) {
+	creds, err := credentials.LoadPartial(cfg)
+	if err != nil {
+		return "", err
+	}
+	if creds.GitHubPAT != "" {
+		return creds.GitHubPAT, nil
+	}
+	pat, err := a.promptSecret("GitHub fine-grained PAT (Contents, Pull requests, Actions, Workflows: read/write)")
+	if err != nil {
+		return "", err
+	}
+	if pat == "" {
+		return "", errors.New("GitHub PAT required for full development access")
+	}
+	return pat, nil
+}
+
+// persistGitHubPAT records the PAT only after the remote accepted it. Storing a
+// rejected token would make every later run reuse it without prompting, leaving
+// the operator no way back to a working credential but editing the file by hand.
+func (a *app) persistGitHubPAT(cfg config.Config, pat string) error {
+	return credentials.Update(cfg, func(current *credentials.Set) error {
+		current.GitHubPAT = pat
+		return nil
+	})
 }
 
 func (a *app) verifyGitHubSSHWithRetry(ctx context.Context, cfg config.Config, st state.State, sudoPassword string) error {

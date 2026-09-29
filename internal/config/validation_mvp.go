@@ -9,9 +9,6 @@ func (c Config) validateMVPConstraints() error {
 	if c.Cloudflare.Tunnel.Enabled && !c.Cloudflare.Tunnel.CreateConnectorOnly {
 		return errors.New("cloudflare.tunnel must be connector-only when enabled")
 	}
-	if c.Admin.StoreConsolePassword {
-		return errors.New("admin.store_console_password is not implemented in MVP")
-	}
 	if c.Access.PublicSSH {
 		return errors.New("access.public_ssh must stay false for MVP")
 	}

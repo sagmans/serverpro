@@ -19,6 +19,15 @@ import (
 
 const importOperationLockProbe = 50 * time.Millisecond
 
+func TestBuildImportConfigStoresOperatorAuthForFreshImports(t *testing.T) {
+	// Fresh imports must inherit the store-by-default admin flag so imported
+	// servers prompt for the sudo password at most once.
+	cfg := buildImportConfig(Candidate{Namespace: "demo", Server: "web"}, ImportOptions{})
+	if !cfg.Admin.StoreConsolePassword {
+		t.Fatal("fresh import config must store the console password")
+	}
+}
+
 func TestImportAllWritesLocalArtifacts(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

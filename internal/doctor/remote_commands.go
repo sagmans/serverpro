@@ -1,9 +1,11 @@
 package doctor
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/lifecycle"
 	"github.com/sagmans/serverpro/internal/shell"
 )
 
@@ -108,6 +110,46 @@ func githubSSHAuthReadCommand(user string) string {
 	return "home=\"$(getent passwd " + quotedUser + " | cut -d: -f6)\"; " +
 		"out=\"$(runuser -u " + quotedUser + " -- env HOME=\"$home\" ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -T git@github.com 2>&1)\"; " +
 		"printf '%s\n' \"$out\"; case \"$out\" in *'successfully authenticated'*) exit 0 ;; esac; exit 1"
+}
+
+const (
+	ghHostsConfigRelativePath = ".config/gh/hosts.yml"
+	ghTokenFingerprintLength  = 12
+	// A credential probe must answer quickly or not at all: an unanswered probe
+	// stays unknown instead of being read as a dead credential.
+	ghTokenProbeConnectTimeoutSeconds = 5
+	ghTokenProbeMaxTimeSeconds        = 20
+)
+
+// ghCredentialReadCommand reports a truncated SHA-256 of the remote gh token
+// plus GitHub's own verdict on that token, never the credential itself, so
+// parity evidence stays safe in logs and failure artifacts even though the
+// token sits in hosts.yml. WHY GitHub instead of the local gh CLI: a missing,
+// broken, or not-yet-installed mise/gh toolchain fails exactly like a rejected
+// credential, and a verdict that cannot tell the two apart used to authorise
+// replacing a working remote token during --fix. The header travels on stdin
+// so the probe never publishes the credential to local process arguments.
+func ghCredentialReadCommand(user string) string {
+	quotedUser := shell.Quote(user)
+	return "set -eu\n" +
+		lifecycle.GHAuthorizationHeaderScript() +
+		"home=\"$(getent passwd " + quotedUser + " | cut -d: -f6)\"\n" +
+		"hosts=\"$home/" + ghHostsConfigRelativePath + "\"\n" +
+		"token=\"\"\n" +
+		"if [ -r \"$hosts\" ]; then\n" +
+		"  token=\"$(awk '/^github\\.com:/{f=1;next} f && /^[[:space:]]*oauth_token:/{sub(/^[[:space:]]*oauth_token:[[:space:]]*/,\"\"); print; exit}' \"$hosts\" 2>/dev/null || true)\"\n" +
+		"fi\n" +
+		"if [ -z \"$token\" ]; then printf 'sha=absent\\nauth=absent\\n'; exit 0; fi\n" +
+		"printf 'sha=%s\\n' \"$(printf '%s' \"$token\" | sha256sum | cut -c1-" + strconv.Itoa(ghTokenFingerprintLength) + ")\"\n" +
+		`case "$token" in` + "\n" +
+		`  *'"'*|*'\'*) printf 'auth=unknown\n'; exit 0 ;;` + "\n" +
+		"esac\n" +
+		`status="$(gh_authorization_header "$token" | curl -sS -o /dev/null -w '%{http_code}' --connect-timeout ` + strconv.Itoa(ghTokenProbeConnectTimeoutSeconds) + ` --max-time ` + strconv.Itoa(ghTokenProbeMaxTimeSeconds) + ` https://api.github.com/user 2>/dev/null || true)"` + "\n" +
+		"case \"$status\" in\n" +
+		"  200) printf 'auth=ok\\n' ;;\n" +
+		"  401) printf 'auth=failed\\n' ;;\n" +
+		"  *) printf 'auth=unknown\\n' ;;\n" +
+		"esac"
 }
 
 func ghAuthReadCommand(user string) string {

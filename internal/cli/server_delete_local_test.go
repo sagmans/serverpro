@@ -18,6 +18,7 @@ import (
 
 const (
 	testConfigLockSuffix          = ".lock"
+	testCredentialLockSuffix      = ".lock"
 	testStateLockSuffix           = ".lock"
 	testServerOperationLockSuffix = ".operation.lock"
 	testImportMarkerSuffix        = ".import.json"
@@ -275,6 +276,7 @@ func canonicalDeleteTestPaths() []string {
 		configPath,
 		configPath + testConfigLockSuffix,
 		credentialPath,
+		credentialPath + testCredentialLockSuffix,
 		statePath,
 		statePath + testStateLockSuffix,
 		statePath + testServerOperationLockSuffix,

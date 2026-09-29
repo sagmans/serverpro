@@ -124,18 +124,44 @@ cat "${key_path}.pub"
 `
 }
 
-// ghTokenScript reads the PAT from stdin (never argv/script text) and stores
+// GHAuthorizationHeaderScript defines the helper that renders curl's stdin
+// config for an authenticated api.github.com request. The PAT must never reach
+// curl through -H: SSH keeps the script text off argv, but an expanded header
+// would still publish the token in /proc/<pid>/cmdline to every local process.
+// Exported so doctor's parity probe quotes the credential by the same rule.
+func GHAuthorizationHeaderScript() string {
+	return `gh_authorization_header() {
+  printf 'header = "Authorization: Bearer %s"\n' "$1"
+}
+`
+}
+
+// GHTokenScript reads the PAT from stdin (never argv/script text) and stores
 // it root-protected; git_protocol ssh keeps gh repo operations on SSH.
-func ghTokenScript(user string) string {
-	return targetUserHomeScript(user) + `
+// Exported so doctor can redeploy the locally stored PAT through the single
+// writer of hosts.yml instead of growing a second credential-handling script.
+// Validation talks to api.github.com with curl on purpose: routing it through
+// `mise exec -- gh` made validation impossible while hosts.yml held a stale
+// token, because mise prefers the gh CLI credential over GH_TOKEN and tries to
+// resolve github-backed tools before running any command.
+func GHTokenScript(user string) string {
+	return targetUserHomeScript(user) + GHAuthorizationHeaderScript() + `
 IFS= read -r GH_PAT
 if [ -z "${GH_PAT}" ]; then
   echo 'GitHub PAT required on stdin' >&2
   exit 1
 fi
-mise_bin="${TARGET_HOME}/.local/bin/mise"
-gh_exec() { runuser -u "${TARGET_USER}" -- env HOME="${TARGET_HOME}" GH_TOKEN="${GH_PAT}" "${mise_bin}" exec -- gh "$@"; }
-login="$(gh_exec api user --jq .login)" || { echo 'GitHub PAT validation failed' >&2; exit 1; }
+case "${GH_PAT}" in
+  *'"'*|*'\'*)
+    echo 'GitHub PAT contains characters that cannot be quoted safely' >&2
+    exit 1
+    ;;
+esac
+login="$(gh_authorization_header "${GH_PAT}" | curl -fsS -K - https://api.github.com/user | jq -r .login)" || { echo 'GitHub PAT validation failed' >&2; exit 1; }
+if [ -z "${login}" ] || [ "${login}" = "null" ]; then
+  echo 'GitHub PAT validation failed' >&2
+  exit 1
+fi
 gh_dir="${TARGET_HOME}/.config/gh"
 install -d -m 0700 -o "${TARGET_USER}" -g "${TARGET_GID}" "${gh_dir}"
 hosts_yml="${gh_dir}/hosts.yml"
@@ -147,7 +173,11 @@ github.com:
 EOF
 chown "${TARGET_USER}:${TARGET_GID}" "${hosts_yml}"
 chmod 0600 "${hosts_yml}"
-gh_exec auth status >/dev/null
+stored="$(awk '/^github\.com:/{f=1;next} f && /^[[:space:]]*oauth_token:/{sub(/^[[:space:]]*oauth_token:[[:space:]]*/,""); print; exit}' "${hosts_yml}")"
+if [ "${stored}" != "${GH_PAT}" ] || ! gh_authorization_header "${stored}" | curl -fsS -K - -o /dev/null https://api.github.com/user; then
+  echo 'stored GitHub PAT verification failed' >&2
+  exit 1
+fi
 printf 'gh authenticated as %s\n' "${login}"
 `
 }

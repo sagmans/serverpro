@@ -1,11 +1,7 @@
 package credentials
 
 import (
-	"context"
-	"fmt"
-
 	"github.com/sagmans/serverpro/internal/config"
-	"github.com/sagmans/serverpro/internal/privatefile"
 )
 
 func Save(cfg config.Config, creds Set) error {
@@ -16,13 +12,16 @@ func SavePartial(cfg config.Config, creds Set) error {
 	return save(cfg, creds, false)
 }
 
+// save publishes a caller-supplied set as the new stored state. Full sets use
+// it after a complete read; partial changes belong in Update so the fields this
+// caller never touched keep whatever a concurrent run wrote.
 func save(cfg config.Config, creds Set, requireComplete bool) error {
-	if err := validateConfigScope(cfg); err != nil {
+	path, err := writeTargetPath(cfg)
+	if err != nil {
 		return err
 	}
 	creds.Namespace = cfg.Namespace
 	creds.Server = cfg.Server
-	var err error
 	if requireComplete {
 		err = creds.ValidateForConfig(cfg)
 	} else {
@@ -31,23 +30,7 @@ func save(cfg config.Config, creds Set, requireComplete bool) error {
 	if err != nil {
 		return err
 	}
-	path := config.Expand(cfg.Credentials.JSONPath)
-	if path == "" {
-		return fmt.Errorf("credentials JSON path required")
-	}
-	path, err = safeCredentialPath(cfg.Namespace, cfg.Server, path, "save")
-	if err != nil {
-		return err
-	}
-	if err := rejectSymlinkInCredentialAbsPath(path, "save"); err != nil {
-		return err
-	}
-	unlockGuard, err := privatefile.LockSharedContext(context.Background(), config.LocalArtifactGuardPath())
-	if err != nil {
-		return err
-	}
-	defer unlockGuard()
-	return privatefile.AtomicWriteJSON(path, creds, privatefile.WriteOptions{TempPattern: ".credentials-*.tmp", Sync: true, BeforeRename: func() error {
-		return rejectSymlinkInCredentialAbsPath(path, "save")
-	}})
+	return withCredentialWriteLock(path, func() error {
+		return writeCredentialSet(path, creds)
+	})
 }

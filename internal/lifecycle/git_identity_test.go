@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -303,15 +304,58 @@ func TestSetupGitHubCLIPassesTokenViaStdinOnly(t *testing.T) {
 	}
 	for _, want := range []string{
 		"IFS= read -r GH_PAT",
-		"GH_TOKEN=\"${GH_PAT}\"",
-		"api user --jq .login",
+		`printf 'header = "Authorization: Bearer %s"\n' "$1"`,
+		`gh_authorization_header "${GH_PAT}" | curl -fsS -K -`,
 		"oauth_token: ${GH_PAT}",
 		"git_protocol: ssh",
 		"chmod 0600 \"${hosts_yml}\"",
-		"auth status",
+		"stored GitHub PAT verification failed",
+		// double-escaped backslashes made the awk host match fail silently
+		"/^github\\.com:/",
 	} {
 		if !strings.Contains(script, want) {
 			t.Fatalf("script missing %q:\n%s", want, script)
+		}
+	}
+	// The header must reach curl through its stdin config: -H would publish the
+	// token in the managed host's process list for the duration of the probe.
+	if strings.Contains(script, `-H "Authorization`) {
+		t.Fatalf("token must not reach curl argv:\n%s", script)
+	}
+	// Validation must stay independent of the gh CLI and its tool manager:
+	// a stale hosts.yml token previously broke the very redeploy meant to
+	// replace it.
+	if strings.Contains(script, ".local/bin/mise") {
+		t.Fatalf("script must not route validation through mise:\n%s", script)
+	}
+}
+
+// TestGeneratedGitIdentityScriptsAreValidShell catches quoting mistakes in the
+// generated snippets, which otherwise surface only as a remote-phase failure.
+func TestGeneratedGitIdentityScriptsAreValidShell(t *testing.T) {
+	cfg, st := gitIdentityFixture()
+	patRemote := &gitInputRemote{gitRemote: gitRemote{out: "gh authenticated as buzz\n"}}
+	if err := SetupGitHubCLI(context.Background(), patRemote, cfg, st, "ghp_secret"); err != nil {
+		t.Fatal(err)
+	}
+	keyRemote := &gitRemote{out: "ssh-ed25519 AAAATEST serverpro key\n"}
+	if _, err := SetupGitAccountKey(context.Background(), keyRemote, cfg, st); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SetupGitSigningKey(context.Background(), keyRemote, cfg, st); err != nil {
+		t.Fatal(err)
+	}
+	scripts := append(append([]string{}, patRemote.scripts...), keyRemote.scripts...)
+	if len(scripts) < 3 {
+		t.Fatalf("expected generated scripts, got %d", len(scripts))
+	}
+	for i, script := range scripts {
+		path := filepath.Join(t.TempDir(), fmt.Sprintf("script-%d.sh", i))
+		if err := os.WriteFile(path, []byte(script), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if out, err := exec.Command("sh", "-n", path).CombinedOutput(); err != nil {
+			t.Fatalf("generated script fails sh -n: %v: %s\n%s", err, out, script)
 		}
 	}
 }

@@ -68,9 +68,12 @@ default.
   from deploy-key to account-key removes only the exact managed repository
   rewrite and marked SSH block before local deploy scope is cleared; malformed
   managed blocks fail closed.
-- The required full-development GitHub PAT enters only through a masked prompt,
-  travels over SSH stdin, and is stored only on the managed host as a `0600` gh
-  `hosts.yml`; it never appears in local config, state, logs, or process lists.
+- The required full-development GitHub PAT enters only through a masked prompt
+  and travels over SSH stdin. It is written as a `0600` gh `hosts.yml` on the
+  managed host and stored locally as plaintext `github_pat` under the
+  stored-operator-auth model below. It never appears in local config, state,
+  logs, or process arguments: remote validation hands it to curl through a
+  stdin config instead of the command line.
   Server-side SSH signing keys live on the host: any process running as the
   admin user can sign commits, an accepted boundary for single-admin servers.
 - Current selectable ingress modes are `none` and `cloudflare-tunnel`.
@@ -89,13 +92,35 @@ default.
 
 ## Credentials and secrets
 
-Provider and service credentials live in server-scoped files:
+Provider and service credentials plus stored operator auth live in server-scoped files:
 
 ```text
 ~/.config/serverpro/namespaces/<namespace>/servers/<server>/credentials.json
 ```
 
 Credential directories must be `0700`; files must be `0600`.
+
+Stored operator auth, plaintext at rest by operator decision: the remote admin
+sudo password (`admin_sudo_password`, gated by `admin.store_console_password`,
+default on, `false` keeps it runtime-only), the GitHub fine-grained PAT
+(`github_pat`, redeployable to a GitHub-rejected remote `gh` credential by
+`serverpro server doctor --fix`), and an optional user-supplied Tailscale auth key
+(`tailscale_auth_key`, refused at provision time). Sudo-password resolution order is: in-process cache,
+`<NAMESPACE>_<SERVER>_SUDOPASS` env var, stored file, prompt; prompted or
+env-supplied values are persisted when the flag is on. Unstamped legacy
+configs migrate their tool-forced `false` to stored on load; `schema_version: 1`
+files keep an explicit `false` as runtime-only. Disk compromise or a
+leaked backup/home copy exposes these secrets — protect the home directory and
+backups accordingly.
+
+`serverpro server doctor` compares the stored `github_pat` with the remote
+`gh` token through truncated SHA-256 fingerprints, so drift is diagnosable
+without either credential ever appearing in evidence or logs. Doctor asks
+GitHub directly about the remote token instead of trusting the remote `gh`
+toolchain, so a missing or unrepaired tool never reads as a dead credential:
+only a token GitHub rejects (or a host with no token at all) is replaced, a
+working but different token is reported for a human decision, and an
+unanswered probe stays unresolved with the egress lead.
 
 This is the early-release credential model. Future hardening should evaluate OS
 keychains, encrypted local databases, explicit lock/unlock flows, and
@@ -111,9 +136,11 @@ sentinel credentials and redacts them from failure artifacts before upload.
 Provider account tokens are marked non-serializable so even request DTO JSON
 omits them. Redacted error messages
 retain wrapped causes for `errors.Is`/`errors.As` decisions while their public
-message stays masked. Remote admin sudo passwords are runtime-only. Direct
-user-supplied Tailscale auth keys are rejected; serverpro creates short-lived
-tagged keys. Doctor remote batching base64-frames command output and reports
+message stays masked. Sudo passwords may now persist in credentials.json per
+the stored-operator-auth model above; every other handling rule is unchanged.
+serverpro always creates short-lived tagged Tailscale keys itself, and a
+stored user-supplied auth key is refused rather than used because its
+namespace scope cannot be verified; the value is never logged or exported. Doctor remote batching base64-frames command output and reports
 nonzero status without copying command text or output into batch errors.
 Per-command, decoded-aggregate, and transport byte ceilings return typed errors
 before hostile output can grow memory without bound. Read commands come from an

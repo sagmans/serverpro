@@ -230,7 +230,7 @@ func (a *app) retryDoctorSudoReport(ctx context.Context, cfg config.Config, st s
 	if a.services.retryDoctorSudoReport != nil {
 		return a.services.retryDoctorSudoReport(ctx, cfg, st, creds, existing, sudoPassword)
 	}
-	return doctor.RetryRemote(ctx, cfg, st, existing, remote.TailscaleSSH{SudoPassword: sudoPassword}, doctor.Options{SudoPassword: sudoPassword}).Redact(a.redactionSecrets(creds)...)
+	return doctor.RetryRemote(ctx, cfg, st, existing, remote.TailscaleSSH{SudoPassword: sudoPassword}, doctor.Options{SudoPassword: sudoPassword, GitHubPAT: creds.GitHubPAT}).Redact(a.redactionSecrets(creds)...)
 }
 
 func (a *app) doctorReport(ctx context.Context, cfg config.Config, st state.State, creds credentials.Set, sudoPassword, adminPasswordHash string) doctor.Report {

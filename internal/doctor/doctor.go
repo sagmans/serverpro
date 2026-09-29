@@ -30,6 +30,8 @@ func RunWithOptions(ctx context.Context, cfg config.Config, st state.State, cred
 	}
 	rs = append(rs, checkTailscaleNode(ctx, cfg, st, creds.Tailscale, clients.Tailscale))
 	rs = append(rs, checkTailscaleDNS(ctx, creds.Tailscale, clients.Tailscale))
+	// Remote gh token parity needs the locally stored PAT for comparison.
+	opt.GitHubPAT = creds.GitHubPAT
 	rs = append(rs, remoteChecksWithOptions(ctx, cfg, clients.Remote, st.Tailscale.Name, opt)...)
 	rs = annotateTailscaleSSHStatus(rs)
 	rs = append(rs, checkCloudflareConnector(ctx, st.Cloudflare.TunnelID, clients.Cloudflare))

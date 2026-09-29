@@ -24,6 +24,9 @@ type Options struct {
 	SudoPassword     string
 	SudoPasswordHash string
 	ComputeAccount   compute.Account
+	// GitHubPAT reaches remote checks so parity can compare the locally
+	// stored copy with remote hosts.yml; only fingerprints ever enter evidence.
+	GitHubPAT string
 }
 
 type InventoryItem struct {

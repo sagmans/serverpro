@@ -2,7 +2,6 @@ package credentials
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -14,16 +13,16 @@ func TestMissingReportsRequiredServiceTokens(t *testing.T) {
 	}
 }
 
-func TestValidateRejectsTailscaleAuthKey(t *testing.T) {
-	err := (Set{ServerProvider: "h", Tailscale: "ts", TSAuthKey: "auth", Cloudflare: "cf"}).Validate()
-	if err == nil || !strings.Contains(err.Error(), "tailscale_auth_key") {
-		t.Fatalf("expected auth key error, got %v", err)
+func TestValidateAcceptsTailscaleAuthKey(t *testing.T) {
+	// Stored operator auth is valid as long as service tokens are complete.
+	if err := (Set{ServerProvider: "h", Tailscale: "ts", TSAuthKey: "auth", Cloudflare: "cf"}).Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestSecretsIncludesServiceSecretValues(t *testing.T) {
-	secrets := (Set{ServerProvider: "h", Tailscale: "ts", TSAuthKey: "auth", Cloudflare: "cf"}).Secrets()
-	want := []string{"h", "ts", "auth", "cf"}
+	secrets := (Set{ServerProvider: "h", Tailscale: "ts", TSAuthKey: "auth", Cloudflare: "cf", AdminSudoPassword: "sudo", GitHubPAT: "pat"}).Secrets()
+	want := []string{"h", "ts", "auth", "cf", "sudo", "pat"}
 	if !reflect.DeepEqual(secrets, want) {
 		t.Fatalf("Secrets() = %#v, want %#v", secrets, want)
 	}

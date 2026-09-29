@@ -13,22 +13,24 @@ import (
 )
 
 const (
-	serverDeleteConfigLockSuffix    = ".lock"
-	serverDeleteStateLockSuffix     = ".lock"
-	serverDeleteOperationLockSuffix = ".operation.lock"
-	serverDeleteImportMarkerSuffix  = ".import.json"
-	serverDeleteLocalCleanupError   = "canonical local cleanup failed"
+	serverDeleteConfigLockSuffix     = ".lock"
+	serverDeleteStateLockSuffix      = ".lock"
+	serverDeleteCredentialLockSuffix = ".lock"
+	serverDeleteOperationLockSuffix  = ".operation.lock"
+	serverDeleteImportMarkerSuffix   = ".import.json"
+	serverDeleteLocalCleanupError    = "canonical local cleanup failed"
 )
 
 type serverDeleteLocalArtifacts struct {
-	StatePath         string
-	ConfigPath        string
-	ConfigLockPath    string
-	CredentialsPath   string
-	CredentialsDir    string
-	StateLockPath     string
-	OperationLockPath string
-	ImportMarkerPath  string
+	StatePath          string
+	ConfigPath         string
+	ConfigLockPath     string
+	CredentialsPath    string
+	CredentialLockPath string
+	CredentialsDir     string
+	StateLockPath      string
+	OperationLockPath  string
+	ImportMarkerPath   string
 }
 
 func canonicalServerDeleteLocalArtifacts(st state.State) serverDeleteLocalArtifacts {
@@ -36,19 +38,20 @@ func canonicalServerDeleteLocalArtifacts(st state.State) serverDeleteLocalArtifa
 	credentialsPath := config.ServerCredentialsPath(st.Namespace, st.Server)
 	statePath := config.ServerStatePath(st.Namespace, st.Server)
 	return serverDeleteLocalArtifacts{
-		StatePath:         statePath,
-		ConfigPath:        configPath,
-		ConfigLockPath:    configPath + serverDeleteConfigLockSuffix,
-		CredentialsPath:   credentialsPath,
-		CredentialsDir:    filepath.Dir(credentialsPath),
-		StateLockPath:     statePath + serverDeleteStateLockSuffix,
-		OperationLockPath: statePath + serverDeleteOperationLockSuffix,
-		ImportMarkerPath:  statePath + serverDeleteImportMarkerSuffix,
+		StatePath:          statePath,
+		ConfigPath:         configPath,
+		ConfigLockPath:     configPath + serverDeleteConfigLockSuffix,
+		CredentialsPath:    credentialsPath,
+		CredentialLockPath: credentialsPath + serverDeleteCredentialLockSuffix,
+		CredentialsDir:     filepath.Dir(credentialsPath),
+		StateLockPath:      statePath + serverDeleteStateLockSuffix,
+		OperationLockPath:  statePath + serverDeleteOperationLockSuffix,
+		ImportMarkerPath:   statePath + serverDeleteImportMarkerSuffix,
 	}
 }
 
 func (a serverDeleteLocalArtifacts) preview() []string {
-	paths := []string{a.ConfigPath, a.ConfigLockPath, a.CredentialsPath, a.CredentialsDir, a.StatePath}
+	paths := []string{a.ConfigPath, a.ConfigLockPath, a.CredentialsPath, a.CredentialLockPath, a.CredentialsDir, a.StatePath}
 	for _, path := range []string{a.StateLockPath, a.OperationLockPath, a.ImportMarkerPath} {
 		if path != "" {
 			paths = append(paths, path)
@@ -93,6 +96,9 @@ func removeCanonicalServerDeleteLocalArtifacts(artifacts serverDeleteLocalArtifa
 	}
 	if err := privatefile.RemoveDurably(artifacts.CredentialsPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("%s: remove %s: %w", serverDeleteLocalCleanupError, artifacts.CredentialsPath, err)
+	}
+	if err := privatefile.RemoveDurably(artifacts.CredentialLockPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("%s: remove %s: %w", serverDeleteLocalCleanupError, artifacts.CredentialLockPath, err)
 	}
 	if err := privatefile.RemoveDurably(artifacts.CredentialsDir); err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.ENOTEMPTY) {
 		return fmt.Errorf("%s: remove %s: %w", serverDeleteLocalCleanupError, artifacts.CredentialsDir, err)

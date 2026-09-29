@@ -33,9 +33,6 @@ func (s Set) validate(namespace, server string, requireNamespace bool, missing [
 	if len(missing) > 0 {
 		return fmt.Errorf("missing credentials: %v", missing)
 	}
-	if s.TSAuthKey != "" {
-		return fmt.Errorf("tailscale_auth_key cannot be verified as namespace-scoped; use tailscale_token")
-	}
 	return nil
 }
 
@@ -68,5 +65,5 @@ func (s Set) MissingForConfig(cfg config.Config) []string {
 }
 
 func (s Set) Secrets() []string {
-	return []string{s.ServerProvider, s.Tailscale, s.TSAuthKey, s.Cloudflare}
+	return []string{s.ServerProvider, s.Tailscale, s.TSAuthKey, s.Cloudflare, s.AdminSudoPassword, s.GitHubPAT}
 }

@@ -1,15 +1,18 @@
 package config
 
 type Config struct {
-	Namespace   string      `yaml:"namespace" json:"namespace"`
-	Server      string      `yaml:"server,omitempty" json:"server,omitempty"`
-	Credentials Credentials `yaml:"credentials" json:"credentials"`
-	Compute     Compute     `yaml:"compute" json:"compute"`
-	Admin       Admin       `yaml:"admin" json:"admin"`
-	Network     Network     `yaml:"network" json:"network"`
-	Access      Access      `yaml:"access" json:"access"`
-	Cloudflare  Cloudflare  `yaml:"cloudflare" json:"cloudflare"`
-	Hardening   Hardening   `yaml:"hardening" json:"hardening"`
+	// SchemaVersion stamps the writing build so legacy files with tool-forced
+	// field values can be migrated without guessing operator intent.
+	SchemaVersion int         `yaml:"schema_version,omitempty" json:"schema_version,omitempty"`
+	Namespace     string      `yaml:"namespace" json:"namespace"`
+	Server        string      `yaml:"server,omitempty" json:"server,omitempty"`
+	Credentials   Credentials `yaml:"credentials" json:"credentials"`
+	Compute       Compute     `yaml:"compute" json:"compute"`
+	Admin         Admin       `yaml:"admin" json:"admin"`
+	Network       Network     `yaml:"network" json:"network"`
+	Access        Access      `yaml:"access" json:"access"`
+	Cloudflare    Cloudflare  `yaml:"cloudflare" json:"cloudflare"`
+	Hardening     Hardening   `yaml:"hardening" json:"hardening"`
 	// Git is optional: an omitted section keeps git/GitHub untouched on the host.
 	Git Git `yaml:"git,omitempty" json:"git,omitempty"`
 }

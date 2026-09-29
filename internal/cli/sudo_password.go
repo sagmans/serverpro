@@ -28,6 +28,14 @@ func (a *app) resolveSudoPasswordWithLabel(cfg config.Config, label string) (str
 		}
 	}
 	if password := os.Getenv(envName); password != "" {
+		if err := a.storeSudoPassword(cfg, password); err != nil {
+			return "", err
+		}
+		return a.cacheSudoPassword(key, password)
+	}
+	if password, ok, err := a.storedSudoPassword(cfg); err != nil {
+		return "", err
+	} else if ok {
 		return a.cacheSudoPassword(key, password)
 	}
 	if a.nonInteractive {
@@ -37,7 +45,43 @@ func (a *app) resolveSudoPasswordWithLabel(cfg config.Config, label string) (str
 	if err != nil {
 		return "", err
 	}
+	if err := a.storeSudoPassword(cfg, password); err != nil {
+		return "", err
+	}
 	return a.cacheSudoPassword(key, password)
+}
+
+// storedSudoPassword reads the durable copy so re-runs and non-interactive
+// commands no longer depend on an env var or a fresh prompt.
+func (a *app) storedSudoPassword(cfg config.Config) (string, bool, error) {
+	if !cfg.Admin.StoreConsolePassword {
+		return "", false, nil
+	}
+	creds, err := credentials.LoadPartial(cfg)
+	if err != nil {
+		return "", false, err
+	}
+	return creds.AdminSudoPassword, creds.AdminSudoPassword != "", nil
+}
+
+// storeSudoPassword keeps the validated password beside the service tokens;
+// admin.store_console_password: false leaves it runtime-only. The write merges
+// under the credential writer lock, so a rotation another run just stored is
+// never rolled back to the snapshot this run happened to load.
+func (a *app) storeSudoPassword(cfg config.Config, password string) error {
+	if !cfg.Admin.StoreConsolePassword {
+		return nil
+	}
+	if err := validateSudoPassword(password); err != nil {
+		return err
+	}
+	return credentials.Update(cfg, func(current *credentials.Set) error {
+		if current.AdminSudoPassword == password {
+			return nil
+		}
+		current.AdminSudoPassword = password
+		return nil
+	})
 }
 
 func sudoPasswordEnvSet(cfg config.Config) (bool, error) {
