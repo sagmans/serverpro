@@ -137,7 +137,7 @@ func (a *app) runServerDoctor(ctx context.Context, name string) error {
 		}
 		report = a.retryDoctorSudoReport(doctorCtx, cfg, st, creds, report, sudoPassword)
 	}
-	if err := report.Write(a.stdout); err != nil {
+	if err := a.writeDoctorReport(cfg, creds, report); err != nil {
 		return redact.New(a.redactionSecrets(creds)...).Error(err)
 	}
 	if !report.Passed() {

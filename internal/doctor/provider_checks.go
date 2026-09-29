@@ -108,7 +108,7 @@ func checkCloudflareConnector(ctx context.Context, tunnelID string, client Cloud
 	cancel()
 	if err != nil {
 		if providerProbeTimedOut(err) {
-			return warn("provider", "cloudflare tunnel", "probe timed out: "+trim(err.Error()))
+			return warn("provider", "cloudflare tunnel", "probe timed out: "+err.Error())
 		}
 		return fail("provider", "cloudflare tunnel", err.Error(), "check token/account/tunnel")
 	}

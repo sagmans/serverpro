@@ -129,6 +129,7 @@ func (a *app) storedOrPromptedGitHubPAT(cfg config.Config) (string, error) {
 		return "", err
 	}
 	if creds.GitHubPAT != "" {
+		a.addRuntimeSecret(creds.GitHubPAT)
 		return creds.GitHubPAT, nil
 	}
 	pat, err := a.promptSecret("GitHub fine-grained PAT (Contents, Pull requests, Actions, Workflows: read/write)")
@@ -138,6 +139,8 @@ func (a *app) storedOrPromptedGitHubPAT(cfg config.Config) (string, error) {
 	if pat == "" {
 		return "", errors.New("GitHub PAT required for full development access")
 	}
+	// Create's credential snapshot can predate this token; later diagnostics must mask it.
+	a.addRuntimeSecret(pat)
 	return pat, nil
 }
 

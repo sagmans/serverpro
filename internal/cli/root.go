@@ -28,6 +28,7 @@ type app struct {
 	timeoutCancel     context.CancelFunc
 	yes               bool
 	doctorFix         bool
+	doctorFull        bool
 	create            createOverrides
 	stdin             io.Reader
 	stdout            io.Writer

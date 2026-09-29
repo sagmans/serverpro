@@ -1,15 +1,25 @@
 package doctor
 
+import (
+	"strings"
+	"unicode/utf8"
+)
+
+const (
+	maxSummaryEvidenceBytes   = 160
+	summaryEvidenceTruncation = "..."
+)
+
 func pass(scope, name, evidence string) Result {
-	return Result{Name: name, Scope: scope, Status: Pass, Evidence: trim(evidence)}
+	return Result{Name: name, Scope: scope, Status: Pass, Evidence: evidence}
 }
 
 func warn(scope, name, evidence string) Result {
-	return Result{Name: name, Scope: scope, Status: Warn, Evidence: trim(evidence)}
+	return Result{Name: name, Scope: scope, Status: Warn, Evidence: evidence}
 }
 
 func skip(scope, name, evidence string) Result {
-	return Result{Name: name, Scope: scope, Status: Skip, Evidence: trim(evidence)}
+	return Result{Name: name, Scope: scope, Status: Skip, Evidence: evidence}
 }
 
 func fail(scope, name, evidence, fix string) Result {
@@ -18,8 +28,13 @@ func fail(scope, name, evidence, fix string) Result {
 }
 
 func trim(s string) string {
-	if len(s) > 160 {
-		return s[:160] + "..."
+	s = strings.ToValidUTF8(s, string(utf8.RuneError))
+	if len(s) <= maxSummaryEvidenceBytes {
+		return s
 	}
-	return s
+	end := maxSummaryEvidenceBytes
+	for !utf8.RuneStart(s[end]) {
+		end--
+	}
+	return s[:end] + summaryEvidenceTruncation
 }

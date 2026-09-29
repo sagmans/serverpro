@@ -4,12 +4,30 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"os"
 	"runtime/debug"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
+
+// TestMain isolates persisted reports without mutating environment during parallel tests.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "serverpro-cli-tests-")
+	if err != nil {
+		panic(err)
+	}
+	if err := os.Setenv("TMPDIR", dir); err != nil {
+		_ = os.RemoveAll(dir)
+		panic(err)
+	}
+	code := m.Run()
+	if err := os.RemoveAll(dir); err != nil {
+		panic(err)
+	}
+	os.Exit(code)
+}
 
 func TestRootHelpShowsResourceFirstSurface(t *testing.T) {
 	var out bytes.Buffer

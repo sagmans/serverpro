@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Unit tests for live dogfood JSON output contracts."""
 
+import copy
 import json
 import os
 import subprocess
@@ -15,6 +16,14 @@ import dogfood_validate
 PROVIDER = "hetzner"
 NAMESPACE = "spdogfood"
 SERVER = "web"
+VALID_SUMMARY = {
+    "namespace": NAMESPACE,
+    "server": SERVER,
+    "status": "pass",
+    "counts": {"pass": 2, "warn": 0, "fail": 0, "skip": 0, "total": 2},
+    "results": [],
+    "report_path": "/tmp/doctor-report.json",
+}
 VALID_CANDIDATE = {
     "provider": PROVIDER,
     "id": "123",
@@ -218,6 +227,85 @@ class ValidateOutputTests(unittest.TestCase):
                 with self.assertRaises(dogfood_validate.ValidationError):
                     dogfood_validate.validate_output(
                         kind, value, PROVIDER, NAMESPACE, SERVER
+                    )
+
+    def test_accepts_summary_with_omitted_pass_results(self):
+        # Empty details prove success only when counts account for completed checks.
+        for passing, statuses, expected in (
+            (2, [], "pass"),
+            (2, ["skip"], "pass"),
+            (0, ["skip"], "pass"),
+            (2, ["skip", "warn", "skip"], "warn"),
+        ):
+            with self.subTest(statuses=statuses):
+                value = copy.deepcopy(VALID_SUMMARY)
+                value["status"] = expected
+                value["counts"]["pass"] = passing
+                value["counts"]["total"] = passing
+                value["results"] = [{"status": status} for status in statuses]
+                for status in statuses:
+                    value["counts"][status] += 1
+                    value["counts"]["total"] += 1
+                dogfood_validate.validate_output(
+                    "doctor-report", value, PROVIDER, NAMESPACE, SERVER
+                )
+
+    def test_rejects_malformed_or_failing_summaries(self):
+        invalid = []
+        for field in VALID_SUMMARY:
+            value = copy.deepcopy(VALID_SUMMARY)
+            del value[field]
+            invalid.append((f"missing {field}", value))
+        for field, replacement in (
+            ("namespace", "wrong"), ("server", "wrong"),
+            ("status", "warn"), ("status", "fail"), ("status", "skip"),
+            ("status", []), ("report_path", ""), ("report_path", "  "),
+            ("report_path", None), ("counts", None), ("results", None),
+        ):
+            value = copy.deepcopy(VALID_SUMMARY)
+            value[field] = replacement
+            invalid.append((f"invalid {field}: {replacement!r}", value))
+        for field in VALID_SUMMARY["counts"]:
+            value = copy.deepcopy(VALID_SUMMARY)
+            del value["counts"][field]
+            invalid.append((f"missing count {field}", value))
+            for count in (-1, True, "2", 2.0, None):
+                value = copy.deepcopy(VALID_SUMMARY)
+                value["counts"][field] = count
+                invalid.append((f"invalid count {field}: {count!r}", value))
+        for counts in (
+            {"pass": 0, "warn": 0, "fail": 0, "skip": 0, "total": 0},
+            {"pass": 2, "warn": 0, "fail": 0, "skip": 0, "total": 3},
+            {"pass": 2, "warn": 1, "fail": 0, "skip": 0, "total": 3},
+            {"pass": 2, "warn": 0, "fail": 0, "skip": 1, "total": 3},
+            {"pass": 2, "warn": 0, "fail": 1, "skip": 0, "total": 3},
+        ):
+            value = copy.deepcopy(VALID_SUMMARY)
+            value["counts"] = counts
+            invalid.append((f"unproven counts {counts}", value))
+        for result in ({"status": "pass"}, {"status": "warn"},
+                       {"status": "skip"}, {"status": "fail"},
+                       {"status": "unknown"}, {"status": []}, {}, None):
+            value = copy.deepcopy(VALID_SUMMARY)
+            value["results"] = [result]
+            invalid.append((f"invalid result {result}", value))
+        value = copy.deepcopy(VALID_SUMMARY)
+        value["results"] = [{"status": "warn"}]
+        value["counts"].update(warn=1, total=3)
+        invalid.append(("hidden warning", value))
+        # A coherent failing report still cannot prove a successful dogfood run.
+        value = copy.deepcopy(VALID_SUMMARY)
+        value.update(status="fail", results=[{"status": "fail"}])
+        value["counts"].update(fail=1, total=3)
+        invalid.append(("honest failure", value))
+        value = copy.deepcopy(value)
+        value["status"] = "pass"
+        invalid.append(("hidden failure", value))
+        for label, value in invalid:
+            with self.subTest(label=label):
+                with self.assertRaises(dogfood_validate.ValidationError):
+                    dogfood_validate.validate_output(
+                        "doctor-report", value, PROVIDER, NAMESPACE, SERVER
                     )
 
     def test_rejects_unknown_validator(self):

@@ -18,7 +18,7 @@ func remoteInventory(ctx context.Context, r remote.Runner, user, host string) []
 	if err != nil {
 		return nil
 	}
-	return []InventoryItem{{Scope: "remote", Name: "host", Value: trim(out)}}
+	return []InventoryItem{{Scope: remoteInventoryScope, Name: remoteInventoryName, Value: out}}
 }
 
 func remoteInventoryCommand() string {
@@ -30,6 +30,8 @@ printf 'os=%s kernel=%s cpu=%s ram_kib=%s' "$os" "$kernel" "$cpu" "$ram_kib"`
 }
 
 const (
+	remoteInventoryScope = "remote"
+	remoteInventoryName  = "host"
 	cloudInitWaitCommand = "cloud-init status --wait"
 	cloudInitLongCommand = "cloud-init status --long"
 )
@@ -52,11 +54,11 @@ func remoteCloudInitCheck(ctx context.Context, r remote.Runner, user, host, logP
 					remediation += "; failed to save full status: " + err.Error()
 				}
 			}
-			evidence = "status: done with recoverable cloud-init warnings; " + trim(detail)
+			evidence = "status: done with recoverable cloud-init warnings; " + detail
 		} else {
 			evidence = "status: done with recoverable cloud-init warnings"
 		}
-		return Result{Name: "cloud-init", Scope: "remote", Status: Warn, Evidence: trim(evidence), Remediation: remediation}
+		return Result{Name: "cloud-init", Scope: "remote", Status: Warn, Evidence: evidence, Remediation: remediation}
 	}
 	return fail("remote", "cloud-init", evidence, "inspect remote command")
 }

@@ -100,7 +100,7 @@ func TestServerDoctorSudoRetryRefreshesOnlyRemoteReport(t *testing.T) {
 		},
 	}}
 	cmd := a.serverDoctorCmd()
-	cmd.SetArgs([]string{"web"})
+	cmd.SetArgs([]string{"web", "--full"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}

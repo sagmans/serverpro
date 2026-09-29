@@ -62,7 +62,7 @@ func TestCompiledFullChainJourneys(t *testing.T) {
 				"--location", provider.location, "--size", provider.size, "--image", provider.image,
 				"--ingress", "none", "--non-interactive", "--yes")
 			artifacts.record("create", create)
-			requireSuccessJSON(t, create)
+			requireDoctorSummary(t, create, home, namespace)
 
 			status := runCommand(binary, env, "server", "status", testServer,
 				"--namespace", namespace, "--provider", provider.name, "--non-interactive")
@@ -75,7 +75,7 @@ func TestCompiledFullChainJourneys(t *testing.T) {
 			doctor := runCommand(binary, env, "server", "doctor", testServer,
 				"--namespace", namespace, "--provider", provider.name, "--non-interactive")
 			artifacts.record("doctor", doctor)
-			requireDoctorChecks(t, requireSuccessJSON(t, doctor))
+			requireDoctorSummary(t, doctor, home, namespace)
 
 			remove := runCommand(binary, env, "server", "delete", testServer,
 				"--namespace", namespace, "--provider", provider.name, "--non-interactive", "--yes")
@@ -317,6 +317,7 @@ func writeCredentials(t *testing.T, home, namespace string) {
 func journeyEnv(home, fakeBin, apiURL, namespace string) []string {
 	return append(os.Environ(),
 		"HOME="+home,
+		"TMPDIR="+home,
 		"PATH="+fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"SERVERPRO_E2E_API_URL="+apiURL,
 		strings.ToUpper(strings.ReplaceAll(namespace, "-", "_X2D_"))+"_WEB_SUDOPASS="+testSudoPassword,
@@ -343,6 +344,64 @@ func requireSuccessJSON(t *testing.T, result commandResult) map[string]any {
 		t.Fatalf("stdout is not one JSON object: %v\n%s", err, result.stdout)
 	}
 	return value
+}
+
+// requireDoctorSummary checks the compiled command's stdout and durable report together.
+func requireDoctorSummary(t *testing.T, result commandResult, home, namespace string) {
+	t.Helper()
+	summary := requireSuccessJSON(t, result)
+	if summary["namespace"] != namespace || summary["server"] != testServer || summary["status"] != "warn" {
+		t.Fatalf("unexpected doctor summary: %s", result.stdout)
+	}
+	if _, ok := summary["inventory"]; ok {
+		t.Fatal("summary exposes full inventory")
+	}
+	results, ok := summary["results"].([]any)
+	if !ok {
+		t.Fatalf("summary results must be an array: %s", result.stdout)
+	}
+	for _, raw := range results {
+		check, ok := raw.(map[string]any)
+		if !ok || check["status"] == "pass" {
+			t.Fatalf("summary contains invalid or passing result: %+v", raw)
+		}
+	}
+	path, ok := summary["report_path"].(string)
+	if !ok || !filepath.IsAbs(path) {
+		t.Fatalf("summary report path missing: %s", result.stdout)
+	}
+	canonicalHome, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel, err := filepath.Rel(canonicalHome, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		t.Fatalf("report escaped fixture home: %q", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report map[string]any
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("persisted report is not JSON: %v", err)
+	}
+	requireDoctorChecks(t, report)
+	counts, ok := summary["counts"].(map[string]any)
+	if !ok {
+		t.Fatalf("summary lacks counts: %s", result.stdout)
+	}
+	wantCounts := map[string]float64{"pass": 0, "warn": 0, "fail": 0, "skip": 0, "total": 0}
+	for _, raw := range report["results"].([]any) {
+		check := raw.(map[string]any)
+		wantCounts[check["status"].(string)]++
+		wantCounts["total"]++
+	}
+	for status, want := range wantCounts {
+		if counts[status] != want {
+			t.Errorf("summary %s count = %v, persisted report has %v", status, counts[status], want)
+		}
+	}
 }
 
 func requireDoctorChecks(t *testing.T, report map[string]any) {

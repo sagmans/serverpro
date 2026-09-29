@@ -434,7 +434,7 @@ func TestCreateCommandRunsSetupProvisionDoctor(t *testing.T) {
 		},
 	}}
 	cmd := a.serverCreateCmd()
-	cmd.SetArgs([]string{"web"})
+	cmd.SetArgs([]string{"web", "--full"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
