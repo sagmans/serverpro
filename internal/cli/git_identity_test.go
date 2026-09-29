@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/state"
 )
 
@@ -288,6 +289,44 @@ func TestGitHubAccessFailureDoesNotAbortBootstrap(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "GitHub development setup incomplete") {
 		t.Fatalf("missing warning:\n%s", out.String())
+	}
+}
+
+// TestGitHubPATPersistedOnlyAfterRemoteAccepts pins the retry contract: a token
+// that the remote rejected must not become the stored value, otherwise every
+// later run reuses it without prompting and the operator cannot supply another.
+func TestGitHubPATPersistedOnlyAfterRemoteAccepts(t *testing.T) {
+	cfgPath := createTestConfig(t)
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rejected := &gitIdentityHooks{failAt: "setupGitHubCLI"}
+	a := &app{configPath: cfgPath, stdin: strings.NewReader("buzz\nbuzz@example.com\nn\nghp_rejected\ny\n"), stdout: &bytes.Buffer{}, services: rejected.hooks(t)}
+	if err := a.setupGitDevIdentity(context.Background(), cfg, gitIdentityState(), "sudo", nil); err == nil {
+		t.Fatal("expected injected setupGitHubCLI failure")
+	}
+	creds, err := credentials.LoadPartial(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if creds.GitHubPAT != "" {
+		t.Fatalf("rejected PAT was stored: %q", creds.GitHubPAT)
+	}
+	accepted := &gitIdentityHooks{}
+	a = &app{configPath: cfgPath, stdin: strings.NewReader("buzz\nbuzz@example.com\nn\nghp_accepted\ny\n"), stdout: &bytes.Buffer{}, services: accepted.hooks(t)}
+	if err := a.setupGitDevIdentity(context.Background(), cfg, gitIdentityState(), "sudo", nil); err != nil {
+		t.Fatal(err)
+	}
+	if accepted.pat != "ghp_accepted" {
+		t.Fatalf("retry reused a rejected PAT: %q", accepted.pat)
+	}
+	creds, err = credentials.LoadPartial(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if creds.GitHubPAT != "ghp_accepted" {
+		t.Fatalf("accepted PAT was not stored: %q", creds.GitHubPAT)
 	}
 }
 

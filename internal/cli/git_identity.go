@@ -87,6 +87,9 @@ func (a *app) setupGitDevIdentity(ctx context.Context, cfg config.Config, st sta
 	if err := a.setupRequiredGitHubCLI(ctx, cfg, st, sudoPassword, pat); err != nil {
 		return err
 	}
+	if err := a.persistGitHubPAT(cfg, pat); err != nil {
+		return err
+	}
 	_, err = fmt.Fprintln(a.promptWriter(), "GitHub development access configured")
 	return err
 }
@@ -117,8 +120,9 @@ func (a *app) promptGitDevIntent(cfg config.Config) (config.Config, string, erro
 	return cfg, pat, nil
 }
 
-// storedOrPromptedGitHubPAT reuses the persisted PAT across runs and stores a
-// freshly prompted one so later git-dev setups stop asking for it.
+// storedOrPromptedGitHubPAT reuses the persisted PAT across runs so later
+// git-dev setups stop asking for it; a freshly prompted token is returned for
+// immediate use and only persisted once the remote proved it works.
 func (a *app) storedOrPromptedGitHubPAT(cfg config.Config) (string, error) {
 	creds, err := credentials.LoadPartial(cfg)
 	if err != nil {
@@ -134,11 +138,17 @@ func (a *app) storedOrPromptedGitHubPAT(cfg config.Config) (string, error) {
 	if pat == "" {
 		return "", errors.New("GitHub PAT required for full development access")
 	}
-	creds.GitHubPAT = pat
-	if err := credentials.SavePartial(cfg, creds); err != nil {
-		return "", err
-	}
 	return pat, nil
+}
+
+// persistGitHubPAT records the PAT only after the remote accepted it. Storing a
+// rejected token would make every later run reuse it without prompting, leaving
+// the operator no way back to a working credential but editing the file by hand.
+func (a *app) persistGitHubPAT(cfg config.Config, pat string) error {
+	return credentials.Update(cfg, func(current *credentials.Set) error {
+		current.GitHubPAT = pat
+		return nil
+	})
 }
 
 func (a *app) verifyGitHubSSHWithRetry(ctx context.Context, cfg config.Config, st state.State, sudoPassword string) error {
