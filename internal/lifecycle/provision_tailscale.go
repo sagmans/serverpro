@@ -31,9 +31,13 @@ func ensureTailscalePolicy(ctx context.Context, st *state.State, stPath string, 
 	return save(stPath, *st)
 }
 
+// tailscaleAuthKey mints the one-off bootstrap key through the Tailscale API.
+// A stored user-supplied key is refused even when an API token is present: its
+// namespace scope cannot be verified from here, and honouring it conditionally
+// would let one credentials file behave two different ways.
 func tailscaleAuthKey(ctx context.Context, c TailscaleClient, creds credentials.Set, cfg config.Config) (key string, id string, err error) {
-	if creds.TSAuthKey != "" && creds.Tailscale == "" {
-		return "", "", fmt.Errorf("tailscale API token required; provided auth keys cannot be verified as namespace-scoped")
+	if creds.TSAuthKey != "" {
+		return "", "", fmt.Errorf("user-supplied tailscale_auth_key cannot be verified as namespace-scoped; remove it and provision with a Tailscale API token")
 	}
 	if creds.Tailscale == "" {
 		return "", "", fmt.Errorf("tailscale API token required")
