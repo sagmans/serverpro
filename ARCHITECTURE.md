@@ -136,8 +136,10 @@ access paths for app-owned deployment flows.
     baseline evidence strictly, and delegate only planned fixes and rechecks.
     The ungated `gh token parity` check runs before the managed tool apply
     because github-backed tool installs cannot converge while remote `gh`
-    auth is dead; it redeploys the stored PAT under `--fix` and recommends
-    rotation once both copies are proven stale.
+    auth is dead. It asks GitHub about the remote token instead of the remote
+    toolchain, so a missing or unrepaired tool never reads as a dead
+    credential; only a rejected remote token is redeployed under `--fix`, and
+    rotation is recommended once the stored PAT is proven stale too.
     Managed-package diagnostics verify package floors and use cached apt
     candidates without mutating; ingress-enabled diagnostics also verify the
     cloudflared floor and service. A first, blocking platform check disables
@@ -400,7 +402,8 @@ never replaced.
   repairs pre-existing hosts missing the rule.
 - GitHub access levels are explicit operator choices: `none`, read-only
   `deploy-key`, or full-development `account-key`. Full development requires a
-  PAT. Secrets (PAT, private keys) never persist in config or state; the
+  PAT. Secrets (PAT, private keys) never persist in config or state, though the
+  PAT does persist as stored operator auth in the server-scoped credential file; the
   non-secret `git` section records exact identity, signing, access, and deploy
   repository scope needed for diagnosis and safe access-mode reconciliation.
 - Compute provider, location, size, and image are explicit operator choices.
@@ -418,7 +421,7 @@ never replaced.
   when request DTOs are marshaled; account names/scopes remain serializable.
 - Redacted error messages preserve their wrapped cause so cancellation,
   sentinel, and typed error handling remain reliable without exposing secrets.
-- Runtime sudo passwords and bootstrap data are secrets and are never persisted.
+- Sudo passwords and bootstrap data are secrets: bootstrap data is never persisted, and the admin sudo password reaches disk only while `admin.store_console_password` is enabled (default on).
 - Lifecycle progress uses fixed phase names only; tokens, passwords, hashes,
   bootstrap data, and target identifiers never enter progress events.
 - Delete and power operations use state-known IDs and identity checks.

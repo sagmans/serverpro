@@ -224,11 +224,13 @@ usernames and multiple PAT resource-owner profiles are not managed.
 `serverpro server doctor` also reports `gh token parity` between the stored
 `github_pat` and the remote `gh` credential (`~/.config/gh/hosts.yml`) using
 truncated SHA-256 fingerprints only. Different fingerprints are a warning,
-never an automatic overwrite: either copy can be the stale one. When remote
-`gh auth` is provably dead and a local PAT is stored, `doctor --fix` redeploys
-the local copy before the managed tool apply; a rejected deploy means both
-copies are dead and the report says to rotate the PAT and rerun
-`serverpro server bootstrap NAME git`.
+never an automatic overwrite: either copy can be the stale one. The verdict
+comes from GitHub itself, not from the remote `gh` toolchain, so a missing or
+unrepaired tool never reads as a dead credential. Only a token GitHub rejects,
+or a host whose hosts.yml holds none, is replaced: `doctor --fix` then
+redeploys the local PAT before the managed tool apply, rechecks the result,
+and reports that both copies are dead (rotate the PAT) when the deployed copy
+is rejected as well.
 
 Legacy config files containing only `project` still load, but every save rewrites
 that identity as `namespace`. Files containing both fields must use the same
@@ -697,11 +699,13 @@ remaining servers intact so the operation can be retried.
 credentials.json holds service tokens (`server_provider_token`,
 `tailscale_token`, `cloudflare_token`) and stored operator auth
 (`admin_sudo_password`, `github_pat`, optional `tailscale_auth_key`) as
-plaintext `0600`. The sudo password resolves from in-process cache, then the
+plaintext `0600`; a stored `tailscale_auth_key` is never used, because
+serverpro always mints its own short-lived tagged bootstrap key. The sudo password resolves from in-process cache, then the
 `<NAMESPACE>_<SERVER>_SUDOPASS` env var, then credentials.json, then a prompt;
 prompted or env values are stored unless `admin.store_console_password: false`.
-The GitHub PAT prompted during full development access setup is stored and
-reused on later runs. Configs written before schema stamping carry a tool-forced
+The GitHub PAT prompted during full development access setup is stored only
+after the remote accepted it, then reused on later runs; a rejected PAT is not
+recorded, so the next run asks for a working one instead of retrying it. Configs written before schema stamping carry a tool-forced
 `store_console_password: false`; loading one migrates it to stored, and any
 later config save records `schema_version: 1`. A stamped explicit `false` stays
 runtime-only.
