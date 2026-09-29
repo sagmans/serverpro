@@ -19,10 +19,10 @@ func Default() Config {
 		Compute:     Compute{Location: "fsn1", Size: "cx23", Image: "ubuntu-24.04", Labels: map[string]string{"managed-by": "serverpro"}},
 		// StoreConsolePassword defaults on so re-runs stay non-interactive;
 		// an explicit false in server YAML still opts out.
-		Admin:       Admin{Username: "deploy", StoreConsolePassword: true},
-		Network:     Network{Ingress: "none", Egress: Egress{Mode: "restricted", PhaseLockdownAfterBootstrap: true}},
-		Access:      Access{Tailscale: Tailscale{Enabled: true, SSH: true, Tailnet: TokenDefaultTailnet, Tags: []string{"tag:serverpro-server"}, RootPolicy: "check-or-disabled"}},
-		Cloudflare:  Cloudflare{},
-		Hardening:   Hardening{Profile: "strict", UnattendedUpgrades: true, AppArmor: true, UFW: true, JournaldPersistent: true},
+		Admin:      Admin{Username: "deploy", StoreConsolePassword: true},
+		Network:    Network{Ingress: "none", Egress: Egress{Mode: "restricted", PhaseLockdownAfterBootstrap: true}},
+		Access:     Access{Tailscale: Tailscale{Enabled: true, SSH: true, Tailnet: TokenDefaultTailnet, Tags: []string{"tag:serverpro-server"}, RootPolicy: "check-or-disabled"}},
+		Cloudflare: Cloudflare{},
+		Hardening:  Hardening{Profile: "strict", UnattendedUpgrades: true, AppArmor: true, UFW: true, JournaldPersistent: true},
 	}
 }

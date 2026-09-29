@@ -10,5 +10,5 @@ type Set struct {
 	// AdminSudoPassword and GitHubPAT are operator auth, not service tokens,
 	// but share the same private-file lifetime and redaction path.
 	AdminSudoPassword string `json:"admin_sudo_password,omitempty"`
-	GitHubPAT          string `json:"github_pat,omitempty"`
+	GitHubPAT         string `json:"github_pat,omitempty"`
 }
