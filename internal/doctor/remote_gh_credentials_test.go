@@ -15,11 +15,27 @@ import (
 
 const testGHPAT = "ghp_doctor_parity_fixture"
 
+// curlStub proves the probe shape rather than the answer: the credential must
+// arrive as a stdin config line and never as an argument, because argv is world
+// readable on the managed host while the probe runs.
+const curlStub = `#!/bin/sh
+config="$(cat)"
+case "$*" in
+  *"$CURL_STUB_TOKEN"*) echo 'token reached argv' >&2; exit 4 ;;
+esac
+case "$config" in
+  *"Authorization: Bearer $CURL_STUB_TOKEN"*) ;;
+  *) echo 'missing header on stdin' >&2; exit 3 ;;
+esac
+printf '%s' "${CURL_STUB_CODE:-}"
+`
+
 func TestGHTokenParityMatrix(t *testing.T) {
 	readCommand := ghCredentialReadCommand("deploy")
 	deployScript := lifecycle.GHTokenScript("deploy")
 	localFingerprint := credentialFingerprint(testGHPAT)
 	dead := "sha=" + localFingerprint + "\nauth=failed"
+	ok := "sha=" + localFingerprint + "\nauth=ok"
 	cases := []struct {
 		name            string
 		reads           []remoteCall
@@ -31,15 +47,20 @@ func TestGHTokenParityMatrix(t *testing.T) {
 		wantRemediation string
 		wantDeploy      bool
 	}{
-		{name: "match", reads: []remoteCall{{out: "sha=" + localFingerprint + "\nauth=ok"}}, pat: testGHPAT, wantStatus: Pass, wantEvidence: "local=remote sha=" + localFingerprint},
+		{name: "match", reads: []remoteCall{{out: ok}}, pat: testGHPAT, wantStatus: Pass, wantEvidence: "local=remote sha=" + localFingerprint},
 		{name: "drift with local copy", reads: []remoteCall{{out: "sha=0123456789ab\nauth=ok"}}, pat: testGHPAT, wantStatus: Warn, wantEvidence: "differs from remote sha=0123456789ab", wantRemediation: ghTokenParityConvergeRemediation},
 		{name: "drift without local copy", reads: []remoteCall{{out: "sha=0123456789ab\nauth=ok"}}, wantStatus: Warn, wantEvidence: "no PAT stored locally", wantRemediation: ghTokenParityConvergeRemediation},
 		{name: "dead remote without fix", reads: []remoteCall{{out: dead}}, pat: testGHPAT, wantStatus: Warn, wantEvidence: "local sha=" + localFingerprint + " is available", wantRemediation: ghTokenParityDeployHint},
-		{name: "dead remote deploys under fix", reads: []remoteCall{{out: dead}, {out: "sha=" + localFingerprint + "\nauth=ok"}}, deploy: []remoteCall{{out: "gh authenticated as buzz"}}, pat: testGHPAT, fix: true, wantStatus: Pass, wantEvidence: "fixed: deployed local sha=" + localFingerprint, wantDeploy: true},
+		{name: "dead remote deploys under fix", reads: []remoteCall{{out: dead}, {out: ok}}, deploy: []remoteCall{{out: "gh authenticated as buzz"}}, pat: testGHPAT, fix: true, wantStatus: Pass, wantEvidence: "fixed: deployed local sha=" + localFingerprint, wantDeploy: true},
+		{name: "unanswered probe never deploys", reads: []remoteCall{{out: "sha=0123456789ab\nauth=unknown"}}, pat: testGHPAT, fix: true, wantStatus: Warn, wantEvidence: "GitHub did not answer the credential probe", wantRemediation: ghTokenParityUnverifiedRemediation},
+		{name: "unanswered probe leaves matching token alone", reads: []remoteCall{{out: "sha=" + localFingerprint + "\nauth=unknown"}}, pat: testGHPAT, fix: true, wantStatus: Warn, wantEvidence: "local sha=" + localFingerprint, wantRemediation: ghTokenParityUnverifiedRemediation},
+		{name: "silent probe never deploys", reads: []remoteCall{{out: "sha=0123456789ab"}}, pat: testGHPAT, fix: true, wantStatus: Warn, wantEvidence: "remote sha=0123456789ab", wantRemediation: ghTokenParityUnverifiedRemediation},
 		{name: "rejected deploy recommends rotation", reads: []remoteCall{{out: dead}}, deploy: []remoteCall{{err: errors.New("GitHub PAT validation failed")}}, pat: testGHPAT, fix: true, wantStatus: Fail, wantEvidence: "deploying the stored PAT failed", wantRemediation: ghTokenParityRotateRemediation, wantDeploy: true},
-		{name: "recheck still failing recommends rotation", reads: []remoteCall{{out: dead}, {out: "sha=0123456789ab\nauth=failed"}}, deploy: []remoteCall{{out: "gh authenticated as buzz"}}, pat: testGHPAT, fix: true, wantStatus: Fail, wantEvidence: "remote gh auth still fails", wantRemediation: ghTokenParityRotateRemediation, wantDeploy: true},
+		{name: "recheck rejects deployed copy", reads: []remoteCall{{out: dead}, {out: dead}}, deploy: []remoteCall{{out: "gh authenticated as buzz"}}, pat: testGHPAT, fix: true, wantStatus: Fail, wantEvidence: "GitHub rejected the stored PAT that was just deployed", wantRemediation: ghTokenParityRotateRemediation, wantDeploy: true},
+		{name: "recheck lost the deployed copy", reads: []remoteCall{{out: dead}, {out: "sha=0123456789ab\nauth=failed"}}, deploy: []remoteCall{{out: "gh authenticated as buzz"}}, pat: testGHPAT, fix: true, wantStatus: Fail, wantEvidence: "remote hosts.yml does not hold it", wantRemediation: ghTokenParityRetryRemediation, wantDeploy: true},
+		{name: "recheck unanswered", reads: []remoteCall{{out: dead}, {out: "sha=" + localFingerprint + "\nauth=unknown"}}, deploy: []remoteCall{{out: "gh authenticated as buzz"}}, pat: testGHPAT, fix: true, wantStatus: Fail, wantEvidence: "GitHub did not answer the recheck", wantRemediation: ghTokenParityRetryRemediation, wantDeploy: true},
 		{name: "dead remote without local copy", reads: []remoteCall{{out: "sha=0123456789ab\nauth=failed"}}, wantStatus: Warn, wantEvidence: "no PAT is stored locally", wantRemediation: ghTokenParityRotateRemediation},
-		{name: "nothing stored anywhere", reads: []remoteCall{{out: "absent\nauth=failed"}}, wantStatus: Skip, wantEvidence: "no github PAT stored"},
+		{name: "nothing stored anywhere", reads: []remoteCall{{out: "sha=absent\nauth=absent"}}, wantStatus: Skip, wantEvidence: "no github PAT stored"},
 		{name: "read failure", reads: []remoteCall{{err: errors.New("ssh: connection lost")}}, pat: testGHPAT, wantStatus: Fail, wantEvidence: "ssh: connection lost", wantRemediation: "inspect remote command"},
 	}
 	for _, tc := range cases {
@@ -102,47 +123,62 @@ func TestGHTokenParityPrecedesToolApplyUngated(t *testing.T) {
 	}
 }
 
-func TestGHCredentialReadCommandFingerprintAndLiveness(t *testing.T) {
+// TestGHCredentialReadCommandFingerprintAndVerdict pins the remote protocol:
+// GitHub's answer decides the credential verdict, the toolchain never does, and
+// an answer that never arrives stays unknown instead of unproven.
+func TestGHCredentialReadCommandFingerprintAndVerdict(t *testing.T) {
 	fixture := newDoctorGitCommandFixture(t)
 	fixture.writeExecutable(t, "sha256sum", "#!/bin/sh\nh=\"$(openssl dgst -sha256 -r | cut -d' ' -f1)\"\nprintf '%s  -\\n' \"$h\"\n")
-	fixture.writeExecutable(t, "gh", "#!/bin/sh\n[ \"${GH_STUB_FAIL:-0}\" = 1 ] && exit 1\nexit 0\n")
-	miseDir := filepath.Join(fixture.home, ".local", "bin")
-	if err := os.MkdirAll(miseDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	mise := "#!/bin/sh\n[ \"$1\" = exec ] && shift\n[ \"$1\" = -- ] && shift\nexec \"$@\"\n"
-	if err := os.WriteFile(filepath.Join(miseDir, "mise"), []byte(mise), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	fixture.writeExecutable(t, "curl", curlStub)
 	token := "ghp_fixture_hosts_token"
 	hosts := filepath.Join(fixture.home, filepath.FromSlash(ghHostsConfigRelativePath))
-	writeHosts := func() {
+	writeHosts := func(t *testing.T, value string) {
 		t.Helper()
 		if err := os.MkdirAll(filepath.Dir(hosts), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		body := "github.com:\n    user: buzz\n    oauth_token: " + token + "\n    git_protocol: ssh\n"
+		body := "github.com:\n    user: buzz\n    oauth_token: " + value + "\n    git_protocol: ssh\n"
 		if err := os.WriteFile(hosts, []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 	command := ghCredentialReadCommand("deploy")
-	wantSHA := "sha=" + credentialFingerprint(token)
-	writeHosts()
-	t.Setenv("GH_STUB_FAIL", "0")
-	if got := fixture.runOutput(t, command); got != wantSHA+"\nauth=ok\n" {
-		t.Fatalf("healthy credential read = %q, want %q", got, wantSHA+"\nauth=ok\n")
+	wantSHA := "sha=" + credentialFingerprint(token) + "\n"
+	t.Setenv("CURL_STUB_TOKEN", token)
+	writeHosts(t, token)
+	for _, tc := range []struct {
+		name string
+		code string
+		want string
+	}{
+		{name: "GitHub accepts", code: "200", want: wantSHA + "auth=ok\n"},
+		{name: "GitHub rejects", code: "401", want: wantSHA + "auth=failed\n"},
+		{name: "probe unanswered", code: "503", want: wantSHA + "auth=unknown\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("CURL_STUB_CODE", tc.code)
+			if got := fixture.runOutput(t, command); got != tc.want {
+				t.Fatalf("read = %q, want %q", got, tc.want)
+			}
+		})
 	}
-	t.Setenv("GH_STUB_FAIL", "1")
-	if got := fixture.runOutput(t, command); got != wantSHA+"\nauth=failed\n" {
-		t.Fatalf("dead token read = %q", got)
-	}
-	if err := os.Remove(hosts); err != nil {
-		t.Fatal(err)
-	}
-	if got := fixture.runOutput(t, command); got != "absent\nauth=failed\n" {
-		t.Fatalf("absent hosts read = %q", got)
-	}
+	t.Run("unquotable token stays unproven", func(t *testing.T) {
+		value := token + `"`
+		writeHosts(t, value)
+		t.Setenv("CURL_STUB_CODE", "200")
+		want := "sha=" + credentialFingerprint(value) + "\nauth=unknown\n"
+		if got := fixture.runOutput(t, command); got != want {
+			t.Fatalf("read = %q, want %q", got, want)
+		}
+	})
+	t.Run("no remote token", func(t *testing.T) {
+		if err := os.Remove(hosts); err != nil {
+			t.Fatal(err)
+		}
+		if got := fixture.runOutput(t, command); got != "sha=absent\nauth=absent\n" {
+			t.Fatalf("read = %q", got)
+		}
+	})
 }
 
 func (f doctorGitCommandFixture) runOutput(t *testing.T, script string) string {
