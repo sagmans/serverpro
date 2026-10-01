@@ -3,6 +3,8 @@ package doctor
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +21,13 @@ const testGHPAT = "ghp_doctor_parity_fixture"
 // arrive as a stdin config line and never as an argument, because argv is world
 // readable on the managed host while the probe runs.
 const curlStub = `#!/bin/sh
+stdin_config=false
+previous=""
+for argument do
+  if [ "$previous" = "-K" ] && [ "$argument" = "-" ]; then stdin_config=true; fi
+  previous="$argument"
+done
+if [ "$stdin_config" != true ]; then printf '401'; exit 0; fi
 config="$(cat)"
 case "$*" in
   *"$CURL_STUB_TOKEN"*) echo 'token reached argv' >&2; exit 4 ;;
@@ -179,6 +188,68 @@ func TestGHCredentialReadCommandFingerprintAndVerdict(t *testing.T) {
 			t.Fatalf("read = %q", got)
 		}
 	})
+}
+
+// curlLoopbackWrapper isolates GitHub traffic while preserving real curl argument and stdin handling.
+const curlLoopbackWrapper = `#!/bin/sh
+for argument do
+  shift
+  case "$argument" in
+    *"$CURL_STUB_TOKEN"*) echo 'token reached argv' >&2; exit 4 ;;
+  esac
+  case "$argument" in
+    https://api.github.com/user) set -- "$@" "$CURL_TEST_URL" ;;
+    *) set -- "$@" "$argument" ;;
+  esac
+done
+exec "$CURL_TEST_BINARY" --noproxy '*' "$@"
+`
+
+// TestGHCredentialReadCommandRealCurl prevents permissive stubs from hiding unauthenticated requests.
+func TestGHCredentialReadCommandRealCurl(t *testing.T) {
+	curl, err := exec.LookPath("curl")
+	if err != nil {
+		t.Skip("curl unavailable for local HTTP regression")
+	}
+	const token = "ghp_loopback_fixture_token"
+	headers := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		header := r.Header.Get("Authorization")
+		headers <- header
+		if header != "Bearer "+token {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	fixture := newDoctorGitCommandFixture(t)
+	fixture.writeExecutable(t, "sha256sum", "#!/bin/sh\nh=\"$(openssl dgst -sha256 -r | cut -d' ' -f1)\"\nprintf '%s  -\\n' \"$h\"\n")
+	fixture.writeExecutable(t, "curl", curlLoopbackWrapper)
+	hosts := filepath.Join(fixture.home, filepath.FromSlash(ghHostsConfigRelativePath))
+	if err := os.MkdirAll(filepath.Dir(hosts), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := "github.com:\n    user: fixture\n    oauth_token: " + token + "\n    git_protocol: ssh\n"
+	if err := os.WriteFile(hosts, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CURL_STUB_TOKEN", token)
+	t.Setenv("CURL_TEST_BINARY", curl)
+	t.Setenv("CURL_TEST_URL", server.URL)
+	got := fixture.runOutput(t, ghCredentialReadCommand("deploy"))
+	want := "sha=" + credentialFingerprint(token) + "\nauth=ok\n"
+	if got != want {
+		t.Fatalf("read = %q, want %q", got, want)
+	}
+	select {
+	case header := <-headers:
+		if header != "Bearer "+token {
+			t.Fatal("local endpoint did not receive the expected Authorization header")
+		}
+	default:
+		t.Fatal("credential probe did not reach the local endpoint")
+	}
 }
 
 func (f doctorGitCommandFixture) runOutput(t *testing.T, script string) string {

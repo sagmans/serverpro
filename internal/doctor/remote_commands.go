@@ -144,7 +144,7 @@ func ghCredentialReadCommand(user string) string {
 		`case "$token" in` + "\n" +
 		`  *'"'*|*'\'*) printf 'auth=unknown\n'; exit 0 ;;` + "\n" +
 		"esac\n" +
-		`status="$(gh_authorization_header "$token" | curl -sS -o /dev/null -w '%{http_code}' --connect-timeout ` + strconv.Itoa(ghTokenProbeConnectTimeoutSeconds) + ` --max-time ` + strconv.Itoa(ghTokenProbeMaxTimeSeconds) + ` https://api.github.com/user 2>/dev/null || true)"` + "\n" +
+		`status="$(gh_authorization_header "$token" | curl -sS -K - -o /dev/null -w '%{http_code}' --connect-timeout ` + strconv.Itoa(ghTokenProbeConnectTimeoutSeconds) + ` --max-time ` + strconv.Itoa(ghTokenProbeMaxTimeSeconds) + ` https://api.github.com/user 2>/dev/null || true)"` + "\n" +
 		"case \"$status\" in\n" +
 		"  200) printf 'auth=ok\\n' ;;\n" +
 		"  401) printf 'auth=failed\\n' ;;\n" +
