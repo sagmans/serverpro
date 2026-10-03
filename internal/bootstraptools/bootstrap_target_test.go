@@ -104,7 +104,7 @@ func TestManagedVersionManifestPinsApprovedReleases(t *testing.T) {
 		"node":     "24.21.0",
 		"npm":      "11.19.0",
 		"pi":       "0.87.1",
-		"uv":       "0.12.18",
+		"uv":       "0.12.19",
 		"rust":     "1.98.1",
 		"tmux":     "3.7c",
 		"gh":       "2.102.0",
@@ -133,7 +133,7 @@ func TestManagedVersionManifestPinsApprovedReleases(t *testing.T) {
 			t.Fatalf("%s version = %q, want %q", tool, got[tool], version)
 		}
 	}
-	for _, pin := range []string{"SERVERPRO_BOOTSTRAP_NPM_VERSION='11.19.0'", "SERVERPRO_BOOTSTRAP_UV_VERSION='0.12.18'", "SERVERPRO_BOOTSTRAP_RUST_VERSION='1.98.1'", "SERVERPRO_BOOTSTRAP_AST_GREP_VERSION='0.45.3'", "SERVERPRO_BOOTSTRAP_SEM_VERSION='0.25.0'", "SERVERPRO_BOOTSTRAP_INSPECT_VERSION='0.1.1'"} {
+	for _, pin := range []string{"SERVERPRO_BOOTSTRAP_NPM_VERSION='11.19.0'", "SERVERPRO_BOOTSTRAP_UV_VERSION='0.12.19'", "SERVERPRO_BOOTSTRAP_RUST_VERSION='1.98.1'", "SERVERPRO_BOOTSTRAP_AST_GREP_VERSION='0.45.3'", "SERVERPRO_BOOTSTRAP_SEM_VERSION='0.25.0'", "SERVERPRO_BOOTSTRAP_INSPECT_VERSION='0.1.1'"} {
 		if !contains(InstallScriptForUser("deploy"), pin) {
 			t.Fatalf("managed version manifest missing %q", pin)
 		}
@@ -335,12 +335,12 @@ func TestPiManifestPinsRequiredVersion(t *testing.T) {
 }
 
 func TestMiseReleaseManifestPinsRequiredVersion(t *testing.T) {
-	if MinimumMiseVersion != "2026.9.18" {
-		t.Fatalf("mise version = %q, want 2026.9.18", MinimumMiseVersion)
+	if MinimumMiseVersion != "2026.10.0" {
+		t.Fatalf("mise version = %q, want 2026.10.0", MinimumMiseVersion)
 	}
 	want := map[string]string{
-		"linux-x64":   "4312f8fd72a8d6a869cd2aca7444929e2a0ef6f45d2c6f2866a1eacc5bdc2e84",
-		"linux-arm64": "4a06b8cc295390e606b9103a29a3b49a1efba75092b05c8aca56b8367f636b37",
+		"linux-x64":   "6ae3d2bda39cca86713501317edf623b59b75cd8afa2e31c20b1ee6500b4b739",
+		"linux-arm64": "107c5e46693cdfeb1fdec91717078b298d6fcc9ebbd14f8333917cfe37965138",
 	}
 	got := map[string]string{
 		"linux-x64":   MiseLinuxX64TarGzSHA256,

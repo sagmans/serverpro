@@ -12,16 +12,16 @@ import (
 )
 
 const (
-	MinimumMiseVersion                = "2026.9.18"
-	MiseLinuxX64TarGzSHA256           = "4312f8fd72a8d6a869cd2aca7444929e2a0ef6f45d2c6f2866a1eacc5bdc2e84"
-	MiseLinuxArm64TarGzSHA256         = "4a06b8cc295390e606b9103a29a3b49a1efba75092b05c8aca56b8367f636b37"
+	MinimumMiseVersion                = "2026.10.0"
+	MiseLinuxX64TarGzSHA256           = "6ae3d2bda39cca86713501317edf623b59b75cd8afa2e31c20b1ee6500b4b739"
+	MiseLinuxArm64TarGzSHA256         = "107c5e46693cdfeb1fdec91717078b298d6fcc9ebbd14f8333917cfe37965138"
 	NodeVersion                       = "24.21.0"
 	NPMVersion                        = "11.19.0"
 	PiVersion                         = "0.87.1"
 	PiBraceExpansionVersion           = "5.0.12"
 	PiBraceExpansionIntegrity         = "sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ=="
 	PiDependencyMinimumReleaseAgeDays = "7"
-	UVVersion                         = "0.12.18"
+	UVVersion                         = "0.12.19"
 	UVMiseBackend                     = "aqua:astral-sh/uv"
 	RustVersion                       = "1.98.1"
 	RustMiseBackend                   = "core:rust"

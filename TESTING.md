@@ -50,6 +50,13 @@ the production local repair, Pi help, idempotence, and rejection of dependency d
 Repair restored `5.0.12` and the reviewed integrity; the runtime audit found zero vulnerabilities.
 Regression tests reject old versions, changed lock metadata, wrong integrity,
 and a missing shrinkwrap without executing dependency code.
+The 2026-10-03 refresh repeated the complete managed user-tool installation
+with mise `2026.10.0` and uv `0.12.19` in disposable Ubuntu arm64.
+Canonical readiness and idempotence passed; Pi’s runtime audit remained clean.
+Real uv created a working Python virtual environment. A controlled untrusted
+`.tool-versions` fixture triggered mise’s trust gate; its local HTTP sink
+received zero requests. The probe used only a synthetic token and no
+`MISE_SAFE` override. No live systems or credentials were used.
 See `WEB_SOURCES.md` for the public evidence.
 
 Release fixtures need isolated HOME/XDG_CONFIG_HOME when operator-wide Git

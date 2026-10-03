@@ -177,13 +177,16 @@ without one get this secure default.
 
 ## Supply-chain verification
 
-The 2026-10-01 managed-tool review selects stable releases at least seven days
+The 2026-10-03 managed-tool review selects stable releases at least seven days
 old, except explicitly approved fixes for disclosed vulnerabilities. Docker
-Engine `29.8.2`, containerd `2.3.6`, Buildx `0.37.2`, mise `2026.9.18`, and gh
+Engine `29.8.2`, Buildx `0.37.2`, mise `2026.10.0`, and gh
 `2.102.0` use those exceptions; `WEB_SOURCES.md` records the evidence. The age
 threshold governs release selection. Signed apt candidates can be newer.
 Pi installation and local dependency repair also enforce seven days through
-npm’s `--min-release-age` option.
+npm’s `--min-release-age` option. containerd `2.3.6` now meets seven days.
+The mise exception fixes `GHSA-wcqh-j26q-g44x`: untrusted inline
+`.tool-versions` options can disclose `GITHUB_TOKEN` on releases through `2026.9.18`.
+`MISE_SAFE=1` skips mise’s trust check; never use it to inspect untrusted projects.
 
 Buildx `0.37.2` was absent from Docker’s Noble apt repository for both supported
 architectures at review time. Fresh Docker bootstrap fails closed until a
@@ -205,10 +208,10 @@ Managed host tools install through integrity-checked sources, not
   keyring contains exactly one primary key with fingerprint
   `9DC858229FC7DD38854AE2D88D81803C0EBFCD88`; subkeys are allowed, but missing,
   substituted, or additional primary keys fail before publication.
-- mise `2026.9.18` is fetched as a release tarball and verified against its
+- mise `2026.10.0` is fetched as a release tarball and verified against its
   published SHA-256 checksum before the target user installs it into
   `~/.local/bin`; newer compatible mise releases remain valid.
-- uv `0.12.18` is pinned and installed through mise's explicit
+- uv `0.12.19` is pinned and installed through mise's explicit
   `aqua:astral-sh/uv` backend. That registry entry advertises release SHA-256
   and GitHub-attestation verification; doctor verifies the exact version.
 - Rust `1.98.1` is pinned and installed through mise's `core:rust` backend with

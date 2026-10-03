@@ -738,7 +738,7 @@ var miseVersionCases = []struct {
 }{
 	{"equal", MinimumMiseVersion, true},
 	{"release-date-suffix", MinimumMiseVersion + " (2026-08-03)", true},
-	{"newer", "2026.10.0", true},
+	{"newer", "2026.11.0", true},
 	{"older", "2026.7.17", false},
 }
 
@@ -1042,8 +1042,8 @@ func TestShellVersionAtLeast(t *testing.T) {
 	}{
 		{"equal-minimum", MinimumMiseVersion, true},
 		{"release-date-suffix", MinimumMiseVersion + " (2026-08-03)", true},
-		{"newer-patch", "2026.9.19", true},
-		{"newer-minor", "2026.10.1", true},
+		{"newer-patch", "2026.10.1", true},
+		{"newer-minor", "2026.11.1", true},
 		{"newer-year", "2027.1.1", true},
 		{"older-patch", "2026.7.17", false},
 		{"older-with-release-date", "2026.7.17 (2026-07-30)", false},
@@ -1138,7 +1138,7 @@ func TestShellMiseCheckCommandVersionMatrix(t *testing.T) {
 // fetch_verified_mise_binary runs hermetically; tests override one stage to
 // exercise a specific failure gate.
 const fetchFixtureStubs = `
-bootstrap_min_mise_version() { printf '2026.9.18'; }
+bootstrap_min_mise_version() { printf '2026.10.0'; }
 mise_release_arch() { printf 'x64'; }
 bootstrap_sha256_env() { printf '%064d' 0; }
 mktemp() {
@@ -1158,7 +1158,7 @@ curl() {
   done
   printf 'archive' >"$out"
 }
-sha256sum() { printf 'mise-v2026.9.18-linux-x64.tar.gz: OK\n'; }
+sha256sum() { printf 'mise-v2026.10.0-linux-x64.tar.gz: OK\n'; }
 tar() {
   mkdir -p "$TEST_TMP/download/mise/bin"
   printf 'binary' >"$TEST_TMP/download/mise/bin/mise"

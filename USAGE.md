@@ -548,7 +548,7 @@ rejects incorrect dependency versions or shrinkwrap integrity. No upstream
 release changes. Other dependencies are not fully vendored, so residual npm
 supply-chain risk remains. The `all`
 target also installs Node.js `24.21.0` LTS with bundled npm `11.19.0`, Pi
-`0.87.1`, uv `0.12.18` through mise's explicit `aqua:astral-sh/uv` backend, and
+`0.87.1`, uv `0.12.19` through mise's explicit `aqua:astral-sh/uv` backend, and
 Rust `1.98.1` through `core:rust` with the default rustc, Cargo, rustfmt, Clippy,
 and docs profile. Doctor checks those exact versions and all Rust
 default-profile components. Wrong Node/npm state forces same-version Node

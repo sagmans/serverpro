@@ -1,29 +1,36 @@
 # Web Sources for serverpro
 
-Date: 2026-10-01
+Date: 2026-10-03
 Scope: provider-agnostic serverpro references
 
 Prefer official provider/API docs. If guides conflict with API references, trust
 API references.
 
-## Managed-tool review: 2026-10-01
+## Managed-tool review: 2026-10-03
 
-The normal cutoff is 2026-09-24 20:26:30 UTC: stable releases must be at least
+The normal cutoff is 2026-09-26 09:13:29 UTC: stable releases must be at least
 seven days old. Preserve Ubuntu 24.04 packages and Node.js 24 LTS. Keep npm
 11.19.0 bundled with Node 24.21.0 instead of independently upgrading npm to 12.
 Unchanged pins remain when no eligible compatible update exists.
+The 2026-10-03 refresh changes only uv and the security-fixed mise minimum.
+Newer Tailscale `1.102.5`, Compose `5.6.0`, Rust `1.99.0`, Herdr `0.9.3`,
+sem `0.26.0`, and Pi `1.0.0` remain younger than seven days.
+containerd `2.4.1` is old enough upstream but absent from Docker’s Noble packages;
+retain vendor-compatible `2.3.6`. Do not downgrade approved security floors.
+Mise `2026.10.0` fixes medium-severity `GHSA-wcqh-j26q-g44x`, published 2026-10-02.
+Both mise GNU/Linux archives were downloaded independently and matched published checksums.
 
 | Updated tool | Selected release | Published (UTC) | Selection |
 | --- | --- | --- | --- |
 | Tailscale | 1.102.4 | 2026-09-10 | Normal age gate |
 | Docker Engine / CLI | 29.8.2 | 2026-09-30 | Approved security exception |
-| containerd | 2.3.6 | 2026-09-24 23:13:08 | Approved security exception; preserve Docker's 2.3 package line |
+| containerd | 2.3.6 | 2026-09-24 23:13:08 | Normal age gate; preserve Docker's 2.3 package line |
 | Buildx | 0.37.2 | 2026-09-30 | Approved security exception; apt publication pending |
 | Compose | 5.5.1 | 2026-09-03 | Normal age gate |
-| mise | 2026.9.18 | 2026-09-30 | Approved security exception |
+| mise | 2026.10.0 | 2026-10-02 01:42:32 | Approved security exception; fixes inline-options token exfiltration |
 | Node.js | 24.21.0 LTS | 2026-09-07 | Normal age gate |
 | Pi | 0.87.1 | 2026-09-22 | Normal age gate |
-| uv | 0.12.18 | 2026-09-22 | Normal age gate; fixes wheel extraction traversal |
+| uv | 0.12.19 | 2026-09-25 00:33:02 | Normal age gate; retains the wheel traversal fix |
 | Rust | 1.98.1 | 2026-09-03 | Normal age gate |
 | gh | 2.102.0 | 2026-09-30 | Approved security exception |
 | ast-grep | 0.45.3 | 2026-08-31 | Normal age gate |
@@ -45,9 +52,11 @@ Primary selection and security evidence:
 - https://github.com/docker/buildx/security/advisories/GHSA-gwr2-q96m-6682
 - https://github.com/docker/buildx/security/advisories/GHSA-p54p-jq4x-rc28
 - https://github.com/jdx/mise/security/advisories/GHSA-333c-h2jr-xv83
+- https://github.com/jdx/mise/security/advisories/GHSA-wcqh-j26q-g44x
+- https://github.com/astral-sh/uv/releases/tag/0.12.19
 - https://github.com/cli/cli/releases/tag/v2.102.0
 - https://github.com/astral-sh/uv/security/advisories/GHSA-2cv4-cqwr-gwf7
-- https://github.com/jdx/mise/releases/download/v2026.9.18/SHASUMS256.txt
+- https://github.com/jdx/mise/releases/download/v2026.10.0/SHASUMS256.txt
 - https://github.com/Ataraxy-Labs/sem/releases/download/v0.25.0/checksums.txt
 
 The Docker repository contains Engine 29.8.2 and containerd 2.3.6 on both
@@ -467,16 +476,16 @@ https://mise.jdx.dev/installing-mise.html
 https://mise.jdx.dev/cli/install.html
 https://mise.jdx.dev/cli/unuse.html
 https://mise.jdx.dev/dev-tools/backends/github.html
-https://github.com/jdx/mise/releases/tag/v2026.9.18
-https://api.github.com/repos/jdx/mise/releases/tags/v2026.9.18
+https://github.com/jdx/mise/releases/tag/v2026.10.0
+https://api.github.com/repos/jdx/mise/releases/tags/v2026.10.0
 ```
 
 Use: mise prerequisite, scoped managed-tool installation, legacy managed-tool
-removal, and reviewed minimum version `2026.9.18`. Pinned release artifact
+removal, and reviewed minimum version `2026.10.0`. Pinned release artifact
 SHA-256 values:
 
-- Linux x64: `4312f8fd72a8d6a869cd2aca7444929e2a0ef6f45d2c6f2866a1eacc5bdc2e84`
-- Linux arm64: `4a06b8cc295390e606b9103a29a3b49a1efba75092b05c8aca56b8367f636b37`
+- Linux x64: `6ae3d2bda39cca86713501317edf623b59b75cd8afa2e31c20b1ee6500b4b739`
+- Linux arm64: `107c5e46693cdfeb1fdec91717078b298d6fcc9ebbd14f8333917cfe37965138`
 
 ### mise bootstrap
 
@@ -502,12 +511,14 @@ Use: pinned Node `24.21.0` LTS runtime and bundled npm `11.19.0`; reviewed
 ### uv
 
 ```text
-https://github.com/astral-sh/uv/releases/tag/0.12.18
+https://github.com/astral-sh/uv/releases/tag/0.12.19
 https://docs.astral.sh/uv/getting-started/installation/
 ```
 
-Use: pinned uv `0.12.18` through mise's explicit `aqua:astral-sh/uv` backend;
-reviewed 2026-10-01.
+Use: pinned uv `0.12.19` through mise's explicit `aqua:astral-sh/uv` backend;
+reviewed 2026-10-03. Independently downloaded GNU/Linux assets match their
+published SHA-256 files: x86_64 `23bf5552d220e0842b65c862097b2ebaeba0064b74eda5e565e77fd25969d8c8`;
+aarch64 `0804e9b164c64b6914182d5920c08551958a095986f10a3731056df701126436`.
 
 ### Rust and rustup
 

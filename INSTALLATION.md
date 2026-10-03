@@ -26,8 +26,8 @@ counterpart on DigitalOcean. Confirm current catalog availability before create.
 
 ### Managed tool baseline
 
-Reviewed 2026-10-01. Stable releases normally require seven days of age.
-Docker Engine, containerd, Buildx, mise, and gh use explicitly approved security
+Reviewed 2026-10-03. Stable releases normally require seven days of age.
+Docker Engine, Buildx, mise, and gh use explicitly approved security
 exceptions; `WEB_SOURCES.md` records the release dates and advisories. Node.js
 stays on the supported 24 LTS line with its bundled npm.
 
@@ -46,11 +46,11 @@ package scripts run. Do not lower the floor or substitute an unverified binary.
 | Docker Buildx | 0.37.2 | Minimum vendor package version `0.37.2-1~ubuntu.24.04~noble`. |
 | Docker Compose | 5.5.1 | Minimum vendor package version `5.5.1-1~ubuntu.24.04~noble`. |
 | htop | 3.3.0 | Minimum Ubuntu package version `3.3.0-4build1`. |
-| mise | 2026.9.18 | Minimum release; newer compatible mise remains installed. |
+| mise | 2026.10.0 | Minimum release; newer compatible mise remains installed. |
 | Node.js | 24.21.0 LTS | Exact mise-managed runtime. |
 | npm | 11.19.0 | Exact npm bundled with the managed Node.js release. |
 | Pi | 0.87.1 | Exact global package under managed Node.js. |
-| uv | 0.12.18 | Exact mise-managed release. |
+| uv | 0.12.19 | Exact mise-managed release. |
 | Rust | 1.98.1 | Exact rustup toolchain with default profile. |
 | tmux | 3.7c | Exact mise-managed release. |
 | GitHub CLI (`gh`) | 2.102.0 | Exact mise-managed release. |
