@@ -8,6 +8,8 @@ export LC_ALL=C
 # Deterministic modes for privileged writes; explicit `install -m` still overrides.
 umask 022
 
+PI_BRACE_EXPANSION_TOOL=brace-expansion
+
 # Pinned artifacts are fetched/extracted under root; remove every temp dir on any
 # exit path (error, signal, success) so partial downloads never linger on a host.
 BOOTSTRAP_TMP_DIRS=()
@@ -286,6 +288,26 @@ bootstrap_npm_version() {
 
 bootstrap_pi_version() {
   bootstrap_version_env SERVERPRO_BOOTSTRAP_PI_VERSION
+}
+
+bootstrap_pi_dependency_min_release_age() {
+  local age
+  age=$(required_env SERVERPRO_BOOTSTRAP_PI_DEPENDENCY_MIN_RELEASE_AGE_DAYS)
+  [[ ${age} =~ ^[0-9]+$ ]] || { printf 'invalid Pi minimum release age: %s\n' "${age}" >&2; return 1; }
+  printf '%s' "${age}"
+}
+
+# Pi's CLI version cannot prove that its shrinkwrapped runtime dependency was repaired.
+pi_dependency_check_command() {
+  local node_version="$1" pi_tool brace_version integrity probe probe_quoted
+  pi_tool=$(bootstrap_pi_tool)
+  brace_version=$(bootstrap_version_env SERVERPRO_BOOTSTRAP_PI_BRACE_EXPANSION_VERSION)
+  integrity=$(required_env SERVERPRO_BOOTSTRAP_PI_BRACE_EXPANSION_INTEGRITY)
+  [[ ${integrity} =~ ^sha512-[[:alnum:]/+]{86}==$ ]] || { printf 'invalid Pi brace-expansion integrity\n' >&2; return 1; }
+  probe=$(printf '%s' "$(required_env SERVERPRO_BOOTSTRAP_PI_BRACE_EXPANSION_PROBE_BASE64)" | base64 -d)
+  [[ -n ${probe} ]] || { printf 'empty Pi dependency probe\n' >&2; return 1; }
+  printf -v probe_quoted '%q' "${probe}"
+  printf '%s' "\"\$HOME/.local/bin/mise\" exec -- node -e ${probe_quoted} \"\$HOME/.local/share/mise/installs/node/${node_version}/lib/node_modules/${pi_tool}\" \"${brace_version}\" \"${integrity}\""
 }
 
 bootstrap_herdr_version() {
@@ -618,6 +640,8 @@ validate_bootstrap_env() {
   validate_managed_mise_manifest
   bootstrap_npm_version >/dev/null
   bootstrap_pi_version >/dev/null
+  bootstrap_pi_dependency_min_release_age >/dev/null
+  pi_dependency_check_command "$(bootstrap_node_version)" >/dev/null
   bootstrap_herdr_version >/dev/null
   bootstrap_herdr_backend >/dev/null
   bootstrap_sha256_env SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64 >/dev/null
@@ -1200,7 +1224,9 @@ target_pi_ready() {
   local expected_pi_version="$2"
   local expected_npm_version
   expected_npm_version=$(bootstrap_npm_version)
-  run_as_target "set -euo pipefail; test \"\$(\"\$HOME/.local/bin/mise\" exec -- node --version)\" = \"v${node_version}\"; test \"\$(\"\$HOME/.local/bin/mise\" exec -- npm --version)\" = \"${expected_npm_version}\"; expected_pi=\"\$HOME/.local/share/mise/installs/node/${node_version}/bin/pi\"; actual_pi=\$(\"\$HOME/.local/bin/mise\" exec -- sh -c 'command -v pi'); test \"\${actual_pi}\" = \"\${expected_pi}\" || { printf 'expected pi at %s, got %s\\n' \"\${expected_pi}\" \"\${actual_pi}\" >&2; exit 1; }; pi_version=\$(\"\$HOME/.local/bin/mise\" exec -- pi --version 2>&1) || { status=\$?; printf 'pi --version failed (%s): %s\\n' \"\${status}\" \"\${pi_version}\" >&2; exit \"\${status}\"; }; test \"\${pi_version}\" = \"${expected_pi_version}\" || { printf 'expected pi %s, got %s\\n' \"${expected_pi_version}\" \"\${pi_version}\" >&2; exit 1; }"
+  local dependency_check
+  dependency_check=$(pi_dependency_check_command "${node_version}")
+  run_as_target "set -euo pipefail; test \"\$(\"\$HOME/.local/bin/mise\" exec -- node --version)\" = \"v${node_version}\"; test \"\$(\"\$HOME/.local/bin/mise\" exec -- npm --version)\" = \"${expected_npm_version}\"; expected_pi=\"\$HOME/.local/share/mise/installs/node/${node_version}/bin/pi\"; actual_pi=\$(\"\$HOME/.local/bin/mise\" exec -- sh -c 'command -v pi'); test \"\${actual_pi}\" = \"\${expected_pi}\" || { printf 'expected pi at %s, got %s\\n' \"\${expected_pi}\" \"\${actual_pi}\" >&2; exit 1; }; ${dependency_check}; pi_version=\$(\"\$HOME/.local/bin/mise\" exec -- pi --version 2>&1) || { status=\$?; printf 'pi --version failed (%s): %s\\n' \"\${status}\" \"\${pi_version}\" >&2; exit \"\${status}\"; }; test \"\${pi_version}\" = \"${expected_pi_version}\" || { printf 'expected pi %s, got %s\\n' \"${expected_pi_version}\" \"\${pi_version}\" >&2; exit 1; }"
 }
 
 # herdr_integrity_script builds the target-user probe that resolves the herdr
@@ -1295,7 +1321,15 @@ install_user_tools_for_target() {
     staged+=("mise --yes install --force herdr@${herdr_version}")
   fi
   if [[ ${install_pi} -eq 1 ]]; then
-    staged+=("\"\$HOME/.local/bin/mise\" exec -- npm install -g ${pi_tool}@${pi_version}")
+    local brace_version minimum_age pi_package
+    brace_version=$(bootstrap_version_env SERVERPRO_BOOTSTRAP_PI_BRACE_EXPANSION_VERSION)
+    minimum_age=$(bootstrap_pi_dependency_min_release_age)
+    pi_package="\$HOME/.local/share/mise/installs/node/${node_version}/lib/node_modules/${pi_tool}"
+    staged+=("\"\$HOME/.local/bin/mise\" exec -- npm install -g ${pi_tool}@${pi_version} --min-release-age=${minimum_age}")
+    # Pi's upstream shrinkwrap must not restore the reviewed vulnerable dependency.
+    staged+=("\"\$HOME/.local/bin/mise\" exec -- npm --prefix \"${pi_package}\" install --ignore-scripts --omit=dev --save-exact --min-release-age=${minimum_age} ${PI_BRACE_EXPANSION_TOOL}@${brace_version}")
+    staged+=("$(pi_dependency_check_command "${node_version}")")
+    staged+=("\"\$HOME/.local/bin/mise\" exec -- npm --prefix \"${pi_package}\" audit --omit=dev")
   fi
 
   if [[ ${#staged[@]} -gt 0 ]]; then

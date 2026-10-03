@@ -112,6 +112,12 @@ access paths for app-owned deployment flows.
     checks; readiness and final verification reuse one shell probe builder.
     Node/npm drift forces same-version Node replacement; `pi` and `all` then
     reinstall Pi because replacing Node can remove its global npm package.
+    Pi installation and local dependency repair enforce npm’s seven-day age.
+    The repair replaces vulnerable brace-expansion with a reviewed pin, disables
+    lifecycle scripts, and requires a clean runtime dependency audit. A shared
+    metadata-only probe verifies the resolved version and shrinkwrap integrity
+    for bootstrap and doctor without executing dependency code. Upstream Pi
+    releases remain unchanged.
     Existing active `sg` config migrates through mise's config-aware removal
     before the canonical `ast-grep` identity is configured. Inspect's bare
     release binary is hashed before execution because upstream

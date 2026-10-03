@@ -1,10 +1,79 @@
 # Web Sources for serverpro
 
-Date: 2026-08-27
+Date: 2026-10-01
 Scope: provider-agnostic serverpro references
 
 Prefer official provider/API docs. If guides conflict with API references, trust
 API references.
+
+## Managed-tool review: 2026-10-01
+
+The normal cutoff is 2026-09-24 20:26:30 UTC: stable releases must be at least
+seven days old. Preserve Ubuntu 24.04 packages and Node.js 24 LTS. Keep npm
+11.19.0 bundled with Node 24.21.0 instead of independently upgrading npm to 12.
+Unchanged pins remain when no eligible compatible update exists.
+
+| Updated tool | Selected release | Published (UTC) | Selection |
+| --- | --- | --- | --- |
+| Tailscale | 1.102.4 | 2026-09-10 | Normal age gate |
+| Docker Engine / CLI | 29.8.2 | 2026-09-30 | Approved security exception |
+| containerd | 2.3.6 | 2026-09-24 23:13:08 | Approved security exception; preserve Docker's 2.3 package line |
+| Buildx | 0.37.2 | 2026-09-30 | Approved security exception; apt publication pending |
+| Compose | 5.5.1 | 2026-09-03 | Normal age gate |
+| mise | 2026.9.18 | 2026-09-30 | Approved security exception |
+| Node.js | 24.21.0 LTS | 2026-09-07 | Normal age gate |
+| Pi | 0.87.1 | 2026-09-22 | Normal age gate |
+| uv | 0.12.18 | 2026-09-22 | Normal age gate; fixes wheel extraction traversal |
+| Rust | 1.98.1 | 2026-09-03 | Normal age gate |
+| gh | 2.102.0 | 2026-09-30 | Approved security exception |
+| ast-grep | 0.45.3 | 2026-08-31 | Normal age gate |
+| sem | 0.25.0 | 2026-09-13 | Normal age gate |
+| Herdr | 0.9.1 | 2026-09-16 | Normal age gate |
+| cloudflared | 2026.9.3 | 2026-09-24 16:14:11 | Normal age gate |
+
+Primary selection and security evidence:
+
+- https://nodejs.org/dist/index.json
+- https://registry.npmjs.org/@earendil-works%2Fpi-coding-agent
+- https://api.launchpad.net/1.0/ubuntu/+archive/primary
+- https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-amd64/Packages.gz
+- https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-arm64/Packages.gz
+- https://github.com/moby/moby/releases/tag/docker-v29.8.2
+- https://github.com/containerd/containerd/releases/tag/v2.3.6
+- https://github.com/containerd/containerd/security/advisories/GHSA-pg57-6jwg-q645
+- https://github.com/docker/buildx/releases/tag/v0.37.2
+- https://github.com/docker/buildx/security/advisories/GHSA-gwr2-q96m-6682
+- https://github.com/docker/buildx/security/advisories/GHSA-p54p-jq4x-rc28
+- https://github.com/jdx/mise/security/advisories/GHSA-333c-h2jr-xv83
+- https://github.com/cli/cli/releases/tag/v2.102.0
+- https://github.com/astral-sh/uv/security/advisories/GHSA-2cv4-cqwr-gwf7
+- https://github.com/jdx/mise/releases/download/v2026.9.18/SHASUMS256.txt
+- https://github.com/Ataraxy-Labs/sem/releases/download/v0.25.0/checksums.txt
+
+The Docker repository contains Engine 29.8.2 and containerd 2.3.6 on both
+architectures, but only Buildx 0.37.1. Require the patched Buildx floor and
+reject unavailable candidates rather than install a known-vulnerable release.
+The disposable Ubuntu arm64 installation verified every managed user-tool
+version and the Herdr Pi integration. Pi `0.87.1` then failed npm audit: its
+`npm-shrinkwrap.json` pins `brace-expansion@5.0.9`. Pi `1.0.0` contains the
+same vulnerable dependency. Version `5.0.12` was published 2026-09-14 and fixes
+the reported issues. Its registry SHA-512 and npm signatures were verified.
+Serverpro now repairs its local Pi installation to that exact dependency
+version and verifies the reviewed shrinkwrap integrity before use. A disposable
+Ubuntu arm64 run passed real Pi help, idempotence, vulnerability rejection,
+repair after drift, and the runtime dependency audit with zero vulnerabilities.
+
+- https://github.com/advisories/GHSA-qhr7-859c-m2p7
+- https://github.com/advisories/GHSA-6j4f-fj2g-mc7p
+- https://github.com/advisories/GHSA-q2hr-2g5m-vwhr
+- https://registry.npmjs.org/brace-expansion
+- https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-0.87.1.tgz
+- https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-1.0.0.tgz
+
+These findings are a point-in-time review, not proof that all dependencies or
+artifacts are safe. The local Pi repair passed its runtime dependency audit.
+Buildx availability remains a deployment prerequisite.
+Revalidate signed repository metadata before deployment.
 
 ## Core references
 
@@ -149,16 +218,16 @@ https://tailscale.com/docs/reference/linux-dns
 https://tailscale.com/docs/reference/faq/dns-resolv-conf
 https://tailscale.com/kb/1337/acl-syntax
 https://pkgs.tailscale.com/stable/
-https://github.com/tailscale/tailscale/releases/tag/v1.102.3
+https://github.com/tailscale/tailscale/releases/tag/v1.102.4
 https://github.com/tailscale/tailscale/issues/20067
 ```
 
 Use: devices, keys, policy read, policy validate, policy update, and pinned
-first-boot/live-repair binaries. Reviewed 2026-08-27: stable release `1.102.3`;
+first-boot/live-repair binaries. Reviewed 2026-10-01: stable release `1.102.4`;
 amd64 tarball SHA-256
-`36ddd9b51be57ffc2990cf76323cfa13643bfbb1b8a969f6183fa164741cdef5`;
+`50748df1045e60b5b695f19f4c56b0da36c019948b440fb456b6584a50f0d8b9`;
 arm64 tarball SHA-256
-`a0fa1b154af8c61f862a2259f559f7396d96c0225f4a863eae2333e1546bbe25`.
+`9dd1e6a592a014bbaea0103167ffe299adeda4ba14e078ce9c2895364f6c4c3f`.
 Serverpro supplies `GODEBUG=tlsmlkem=1` to the systemd service independently
 from the artifact build default. Recheck the stable release, checksums,
 advisory state, and binary build setting together when rotating this pin.
@@ -237,11 +306,11 @@ https://pkg.cloudflare.com/index.html
 https://pkg.cloudflare.com/cloudflare-main.gpg
 https://pkg.cloudflare.com/cloudflared/dists/noble/main/binary-amd64/Packages
 https://pkg.cloudflare.com/cloudflared/dists/noble/main/binary-arm64/Packages
-https://github.com/cloudflare/cloudflared/releases/tag/2026.8.2
+https://github.com/cloudflare/cloudflared/releases/tag/2026.9.3
 ```
 
-Use: connector install source, Ubuntu 24.04 package floor `2026.8.2`, and apt
-trust root. Package indexes and release reviewed 2026-08-27. Primary
+Use: connector install source, Ubuntu 24.04 package floor `2026.9.3`, and apt
+trust root. Package indexes and release reviewed 2026-10-01. Primary
 package-signing key fingerprint retrieved and verified 2026-07-23:
 `CC94B39C77AE7342A68B89628A682D308D4E5E73`. Cloudflare announced a 2025 key
 rollover and removal of deprecated keys after 2026-04-30. On future rollover,
@@ -267,12 +336,12 @@ https://packages.ubuntu.com/noble/htop
 ```
 
 Use: Ubuntu 24.04 LTS (`noble`) managed-host support, host hardening, and direct
-package minimums. Reviewed 2026-08-27 for amd64 and arm64: `ca-certificates`
-`20260601~24.04.1`, `curl` `8.5.0-2ubuntu10.13`, `gnupg`
-`2.4.4-2ubuntu17.4`, `ufw` `0.36.2-6`, `apparmor`
-`4.0.1really4.0.1-0ubuntu0.24.04.7`, `unattended-upgrades`
+package minimums. Reviewed 2026-10-01 for amd64 and arm64: `ca-certificates`
+`20260601~24.04.1`, `curl` `8.5.0-2ubuntu10.15`, `gnupg`
+`2.4.4-2ubuntu17.6`, `ufw` `0.36.2-6`, `apparmor`
+`4.0.1really4.0.1-0ubuntu0.24.04.8`, `unattended-upgrades`
 `2.9.1+nmu4ubuntu1`, `jq` `1.7.1-3ubuntu0.24.04.2`, `git`
-`1:2.43.0-1ubuntu7.3`, `openssh-client` `1:9.6p1-3ubuntu13.18`, and `htop`
+`1:2.43.0-1ubuntu7.3`, `openssh-client` `1:9.6p1-3ubuntu13.19`, and `htop`
 `3.3.0-4build1`. These are reviewed floors; signed newer candidates remain
 valid and must not be downgraded. `dpkg-query -W` can retain version data for a
 removed package in `config-files` state, so package-floor checks require
@@ -376,12 +445,12 @@ https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/arm64/
 ```
 
 Use: managed Docker bootstrap. Docker's apt signing key is pinned to fingerprint
-`9DC858229FC7DD38854AE2D88D81803C0EBFCD88`. Reviewed 2026-08-27 floors for
+`9DC858229FC7DD38854AE2D88D81803C0EBFCD88`. Reviewed 2026-10-01 floors for
 Ubuntu 24.04 amd64/arm64: Docker Engine and CLI
-`5:29.7.2-1~ubuntu.24.04~noble`, containerd.io
-`2.3.3-1~ubuntu.24.04~noble`, Buildx
-`0.36.1-1~ubuntu.24.04~noble`, and Compose
-`5.5.0-1~ubuntu.24.04~noble`.
+`5:29.8.2-1~ubuntu.24.04~noble`, containerd.io
+`2.3.6-1~ubuntu.24.04~noble`, Buildx
+`0.37.2-1~ubuntu.24.04~noble`, and Compose
+`5.5.1-1~ubuntu.24.04~noble`.
 
 ### Docker Linux postinstall
 
@@ -398,16 +467,16 @@ https://mise.jdx.dev/installing-mise.html
 https://mise.jdx.dev/cli/install.html
 https://mise.jdx.dev/cli/unuse.html
 https://mise.jdx.dev/dev-tools/backends/github.html
-https://github.com/jdx/mise/releases/tag/v2026.8.14
-https://api.github.com/repos/jdx/mise/releases/tags/v2026.8.14
+https://github.com/jdx/mise/releases/tag/v2026.9.18
+https://api.github.com/repos/jdx/mise/releases/tags/v2026.9.18
 ```
 
 Use: mise prerequisite, scoped managed-tool installation, legacy managed-tool
-removal, and reviewed minimum version `2026.8.14`. Pinned release artifact
+removal, and reviewed minimum version `2026.9.18`. Pinned release artifact
 SHA-256 values:
 
-- Linux x64: `64d5f34aeb7a4e0e327dc1c9be66cd8162e14899a47b11901154a100285a3d61`
-- Linux arm64: `940639580227bd838e3b3ea5b2084ea397399b0db162c2e4dd90b5730850e48e`
+- Linux x64: `4312f8fd72a8d6a869cd2aca7444929e2a0ef6f45d2c6f2866a1eacc5bdc2e84`
+- Linux arm64: `4a06b8cc295390e606b9103a29a3b49a1efba75092b05c8aca56b8367f636b37`
 
 ### mise bootstrap
 
@@ -422,35 +491,35 @@ scoped managed-tool installs through `mise install`.
 ### Node.js
 
 ```text
-https://nodejs.org/en/blog/release/v24.20.0
+https://nodejs.org/en/blog/release/v24.21.0
 https://nodejs.org/en/about/previous-releases
 https://nodejs.org/en/blog/vulnerability/july-2026-security-releases/
 ```
 
-Use: pinned Node `24.20.0` LTS runtime and bundled npm `11.19.0`; reviewed
-2026-08-27 on the supported Node 24 LTS line.
+Use: pinned Node `24.21.0` LTS runtime and bundled npm `11.19.0`; reviewed
+2026-10-01 on the supported Node 24 LTS line.
 
 ### uv
 
 ```text
-https://github.com/astral-sh/uv/releases/tag/0.12.6
+https://github.com/astral-sh/uv/releases/tag/0.12.18
 https://docs.astral.sh/uv/getting-started/installation/
 ```
 
-Use: pinned uv `0.12.6` through mise's explicit `aqua:astral-sh/uv` backend;
-reviewed 2026-08-27.
+Use: pinned uv `0.12.18` through mise's explicit `aqua:astral-sh/uv` backend;
+reviewed 2026-10-01.
 
 ### Rust and rustup
 
 ```text
-https://blog.rust-lang.org/2026/08/27/Rust-1.98.0/
+https://blog.rust-lang.org/2026/09/03/Rust-1.98.1/
 https://doc.rust-lang.org/stable/releases.html
 https://mise.jdx.dev/lang/rust.html
 https://rust-lang.github.io/rustup/security.html
 ```
 
-Use: pinned Rust `1.98.0` through mise's `core:rust` backend and rustup default
-profile. Reviewed 2026-08-27. rustup uses HTTPS for downloads but does not yet
+Use: pinned Rust `1.98.1` through mise's `core:rust` backend and rustup default
+profile. Reviewed 2026-10-01. rustup uses HTTPS for downloads but does not yet
 enforce download signatures.
 
 ### mise npm backend
@@ -460,18 +529,18 @@ https://mise.jdx.dev/dev-tools/backends/npm.html
 ```
 
 Use: reference for npm-backed mise tools. serverpro does NOT use the `npm:`
-backend; it installs Pi `0.84.3` via `npm install -g` under mise-managed Node
-`24.20.0` with lifecycle-script suppression
+backend; it installs Pi `0.87.1` via `npm install -g` under mise-managed Node
+`24.21.0` with lifecycle-script suppression
 (`npm_config_ignore_scripts=true`).
 
 ### Pi quickstart
 
 ```text
 https://pi.dev/docs/latest/quickstart
-https://www.npmjs.com/package/@earendil-works/pi-coding-agent/v/0.84.3
+https://www.npmjs.com/package/@earendil-works/pi-coding-agent/v/0.87.1
 ```
 
-Use: optional pinned Pi `0.84.3` bootstrap; reviewed 2026-08-27.
+Use: optional pinned Pi `0.87.1` bootstrap; reviewed 2026-10-01.
 Authentication remains operator-owned.
 
 ### tmux
@@ -481,32 +550,32 @@ https://github.com/tmux/tmux/releases/tag/3.7c
 https://github.com/tmux/tmux/wiki/Installing
 ```
 
-Use: pinned tmux `3.7c` build/install reference; reviewed 2026-08-27.
+Use: pinned tmux `3.7c` build/install reference; reviewed 2026-10-01.
 
 ### Herdr
 
 ```text
 https://herdr.dev/docs/install/
 https://herdr.dev/docs/integrations/
-https://github.com/herdrdev/herdr/releases/tag/v0.8.2
-https://api.github.com/repos/herdrdev/herdr/releases/tags/v0.8.2
+https://github.com/herdrdev/herdr/releases/tag/v0.9.1
+https://api.github.com/repos/herdrdev/herdr/releases/tags/v0.9.1
 ```
 
-Use: managed Herdr `0.8.2` installation through mise's explicit GitHub backend,
+Use: managed Herdr `0.9.1` installation through mise's explicit GitHub backend,
 package-manager update ownership, and target-user Pi integration status.
-Reviewed 2026-08-27. Pinned release SHA-256 values:
+Reviewed 2026-10-01. Pinned release SHA-256 values:
 
-- Linux x64: `976150a14d490c94b243ea2e1a7eb2dfb67f12e36b182db90936f6728e6aecf4`
-- Linux arm64: `f55610658e1c2e0d2aaef730b4b2ab885f7f8ba00285ab372bfb14f2e3d5b40d`
+- Linux x64: `2a02fed16beb651ef006e1d43f048f652ca4dc58ad053cd2d44450563d5c54b7`
+- Linux arm64: `f4ccf4de745f2cb9a39a983e9ba3703dad50ec2a58dea83026ceab721bbd8d9e`
 
 ### GitHub CLI
 
 ```text
 https://cli.github.com/manual/
-https://github.com/cli/cli/releases/tag/v2.98.0
+https://github.com/cli/cli/releases/tag/v2.102.0
 ```
 
-Use: pinned `gh` `2.98.0` install reference; reviewed 2026-08-27.
+Use: pinned `gh` `2.102.0` install reference; reviewed 2026-10-01.
 Authentication remains operator-owned.
 
 ### ripgrep
@@ -523,35 +592,35 @@ Use: pinned `rg` `15.2.0` tool reference.
 https://github.com/sharkdp/fd/releases/tag/v10.5.0
 ```
 
-Use: pinned `fd` `10.5.0` tool reference; reviewed 2026-08-27.
+Use: pinned `fd` `10.5.0` tool reference; reviewed 2026-10-01.
 
 ### ast-grep
 
 ```text
 https://ast-grep.github.io/
-https://github.com/ast-grep/ast-grep/releases/tag/0.45.2
-https://api.github.com/repos/ast-grep/ast-grep/releases/tags/0.45.2
+https://github.com/ast-grep/ast-grep/releases/tag/0.45.3
+https://api.github.com/repos/ast-grep/ast-grep/releases/tags/0.45.3
 ```
 
-Use: pinned ast-grep `0.45.2` through mise's GitHub backend; reviewed
-2026-08-27. Pinned release SHA-256 values:
+Use: pinned ast-grep `0.45.3` through mise's GitHub backend; reviewed
+2026-10-01. Pinned release SHA-256 values:
 
-- Linux x64: `67aff72dd2994bf152fcc3a8a09cf93b13193abe59f39393095167c729af2015`
-- Linux arm64: `e67ee2f5928b4d77a472114edf6e227d90fefe22fa47e7a78db187c55d206564`
+- Linux x64: `f8ac830881339d1edee6b2652f54798c0f4da5a827f2db38a08ee31117783ce8`
+- Linux arm64: `b39cfbc58da4b869a88b8a4bc57bd5deb0d24541e704cf7c257da7b53ec81c8f`
 
 ### sem
 
 ```text
 https://github.com/Ataraxy-Labs/sem
-https://github.com/Ataraxy-Labs/sem/releases/tag/v0.23.1
-https://api.github.com/repos/Ataraxy-Labs/sem/releases/tags/v0.23.1
+https://github.com/Ataraxy-Labs/sem/releases/tag/v0.25.0
+https://api.github.com/repos/Ataraxy-Labs/sem/releases/tags/v0.25.0
 ```
 
-Use: pinned Ataraxy Labs sem `0.23.1` through mise's GitHub backend; reviewed
-2026-08-27. Pinned release SHA-256 values:
+Use: pinned Ataraxy Labs sem `0.25.0` through mise's GitHub backend; reviewed
+2026-10-01. Pinned release SHA-256 values:
 
-- Linux x64: `c876a8a444415d20f3215136a1cfdf4495b835745dcefe80a6f9dd94ce5e3189`
-- Linux arm64: `23a7d508960583d10765423ffc053070b7cc216f25257e923ab7fa4b2625f480`
+- Linux x64: `7151f577f84eef16b32ab67bbf4336b1878de1f4d7a087583b0a08ee4e0fb4fd`
+- Linux arm64: `ce0ab8f8c7bbacde1c8ed87e5a10b4cd10737870597285da8cd62e905ad3bd8c`
 
 ### inspect
 
@@ -575,7 +644,7 @@ https://htop.dev/
 https://packages.ubuntu.com/noble/htop
 ```
 
-Use: htop `3.3.0-4build1` Ubuntu 24.04 package floor; reviewed 2026-08-27.
+Use: htop `3.3.0-4build1` Ubuntu 24.04 package floor; reviewed 2026-10-01.
 
 ### Twelve-Factor config
 

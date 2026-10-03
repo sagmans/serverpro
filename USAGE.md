@@ -527,7 +527,7 @@ The existing cloud-init detail log remains at
 serverpro-managed apt packages, repairs exact pins, and checksum-verifies a
 stale Tailscale release. Tailscale daemon restart is delayed until the updating
 SSH command returns, then doctor waits and rechecks it. When ingress is enabled, doctor verifies cloudflared is active and at or above
-its reviewed `2026.8.2` package floor. Cloudflared remains conditional ingress
+its reviewed `2026.9.3` package floor. Cloudflared remains conditional ingress
 infrastructure and is not upgraded by generic host-tool repair. Bootstrap reruns managed host-tool setup through Tailscale SSH with
 password-required sudo. The default `all` target
 installs the full managed toolset; run `serverpro server bootstrap --help` for
@@ -540,22 +540,26 @@ exposes optional hosted/API and model authentication that serverpro does not
 configure. Pi is an AI coding agent with arbitrary shell-execution
 capability: installing it on a hardened host widens the admin-user trust
 boundary, so enable the `pi` or `all` target only where that is intended.
-Pi is installed via `npm install -g` under the mise-managed Node; npm
-dependencies resolve at install time and are not checksum-vendored, which is a
-residual supply-chain risk to weigh before enabling the `pi` target. The `all`
-target also installs Node.js `24.20.0` LTS with bundled npm `11.19.0`, Pi
-`0.84.3`, uv `0.12.6` through mise's explicit `aqua:astral-sh/uv` backend, and
-Rust `1.98.0` through `core:rust` with the default rustc, Cargo, rustfmt, Clippy,
+Pi is installed via `npm install -g` under the mise-managed Node. Serverpro
+repairs only that local installation to reviewed `brace-expansion@5.0.12`
+with lifecycle scripts disabled. Installation and repair enforce npm’s seven-day
+minimum age. Bootstrap requires a clean runtime dependency audit; doctor also
+rejects incorrect dependency versions or shrinkwrap integrity. No upstream
+release changes. Other dependencies are not fully vendored, so residual npm
+supply-chain risk remains. The `all`
+target also installs Node.js `24.21.0` LTS with bundled npm `11.19.0`, Pi
+`0.87.1`, uv `0.12.18` through mise's explicit `aqua:astral-sh/uv` backend, and
+Rust `1.98.1` through `core:rust` with the default rustc, Cargo, rustfmt, Clippy,
 and docs profile. Doctor checks those exact versions and all Rust
 default-profile components. Wrong Node/npm state forces same-version Node
 replacement; `pi` and `all` reinstall Pi afterward because its global npm
-package belongs to that Node installation. It also installs tmux `3.7c`, gh `2.98.0`, rg
-`15.2.0`, fd `10.5.0`, ast-grep `0.45.2`, sem `0.23.1`, and inspect `0.1.1`.
+package belongs to that Node installation. It also installs tmux `3.7c`, gh `2.102.0`, rg
+`15.2.0`, fd `10.5.0`, ast-grep `0.45.3`, sem `0.25.0`, and inspect `0.1.1`.
 ast-grep, sem, and inspect use checksum-pinned GitHub release assets; inspect's bare binary
 digest is checked before execution. On existing hosts, `all` removes the active
 deprecated `sg` mise key before managing `ast-grep`; mise prunes the old install
 when unused.
-The same target installs Herdr `0.8.2` through mise's explicit GitHub backend,
+The same target installs Herdr `0.9.1` through mise's explicit GitHub backend,
 verifies the installed Linux release
 binary against its architecture-specific SHA-256 digest, and runs
 `herdr integration install pi` as the admin user; the

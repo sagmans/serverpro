@@ -26,21 +26,21 @@ func TestSupportedRuntimeContract(t *testing.T) {
 func TestReviewedPackageBaselines(t *testing.T) {
 	want := map[string]string{
 		"ca-certificates":       "20260601~24.04.1",
-		"curl":                  "8.5.0-2ubuntu10.13",
-		"gnupg":                 "2.4.4-2ubuntu17.4",
+		"curl":                  "8.5.0-2ubuntu10.15",
+		"gnupg":                 "2.4.4-2ubuntu17.6",
 		"ufw":                   "0.36.2-6",
-		"apparmor":              "4.0.1really4.0.1-0ubuntu0.24.04.7",
+		"apparmor":              "4.0.1really4.0.1-0ubuntu0.24.04.8",
 		"unattended-upgrades":   "2.9.1+nmu4ubuntu1",
 		"jq":                    "1.7.1-3ubuntu0.24.04.2",
 		"git":                   "1:2.43.0-1ubuntu7.3",
-		"openssh-client":        "1:9.6p1-3ubuntu13.18",
+		"openssh-client":        "1:9.6p1-3ubuntu13.19",
 		"htop":                  "3.3.0-4build1",
-		"docker-ce":             "5:29.7.2-1~ubuntu.24.04~noble",
-		"docker-ce-cli":         "5:29.7.2-1~ubuntu.24.04~noble",
-		"containerd.io":         "2.3.3-1~ubuntu.24.04~noble",
-		"docker-buildx-plugin":  "0.36.1-1~ubuntu.24.04~noble",
-		"docker-compose-plugin": "5.5.0-1~ubuntu.24.04~noble",
-		"cloudflared":           "2026.8.2",
+		"docker-ce":             "5:29.8.2-1~ubuntu.24.04~noble",
+		"docker-ce-cli":         "5:29.8.2-1~ubuntu.24.04~noble",
+		"containerd.io":         "2.3.6-1~ubuntu.24.04~noble",
+		"docker-buildx-plugin":  "0.37.2-1~ubuntu.24.04~noble",
+		"docker-compose-plugin": "5.5.1-1~ubuntu.24.04~noble",
+		"cloudflared":           "2026.9.3",
 	}
 	got := make(map[string]string)
 	for _, pkg := range append(BootstrapPackageBaselines(), CloudflaredPackageBaseline()) {
@@ -63,7 +63,7 @@ func TestTailscalePrerequisitesUseReviewedBaseBaselines(t *testing.T) {
 	got := TailscalePrerequisitePackageBaselines()
 	want := []PackageBaseline{
 		{Name: "ca-certificates", MinimumVersion: "20260601~24.04.1"},
-		{Name: "curl", MinimumVersion: "8.5.0-2ubuntu10.13"},
+		{Name: "curl", MinimumVersion: "8.5.0-2ubuntu10.15"},
 		{Name: "jq", MinimumVersion: "1.7.1-3ubuntu0.24.04.2"},
 	}
 	if !slices.Equal(got, want) {
@@ -74,7 +74,7 @@ func TestTailscalePrerequisitesUseReviewedBaseBaselines(t *testing.T) {
 func TestPackageManifestKeepsAPTNamesSeparateFromVersionFloors(t *testing.T) {
 	packages := []PackageBaseline{
 		{Name: "git", MinimumVersion: "1:2.43.0-1ubuntu7.3"},
-		{Name: "curl", MinimumVersion: "8.5.0-2ubuntu10.13"},
+		{Name: "curl", MinimumVersion: "8.5.0-2ubuntu10.15"},
 	}
 	if got := PackageNames(packages); !slices.Equal(got, []string{"git", "curl"}) {
 		t.Fatalf("package names = %v", got)
@@ -82,7 +82,7 @@ func TestPackageManifestKeepsAPTNamesSeparateFromVersionFloors(t *testing.T) {
 	if got := APTTokens(packages); !slices.Equal(got, []string{"apt:git", "apt:curl"}) {
 		t.Fatalf("apt tokens = %v", got)
 	}
-	const wantManifest = "git|1:2.43.0-1ubuntu7.3\ncurl|8.5.0-2ubuntu10.13"
+	const wantManifest = "git|1:2.43.0-1ubuntu7.3\ncurl|8.5.0-2ubuntu10.15"
 	if got := PackageBaselineManifest(packages); got != wantManifest {
 		t.Fatalf("package manifest = %q, want %q", got, wantManifest)
 	}

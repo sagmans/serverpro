@@ -20,8 +20,8 @@ func TestRemoteToolChecksPassWhenInstalled(t *testing.T) {
 		out  string
 	}{
 		{name: "git", out: "git version 2.43.0\nOpenSSH_9.6p1"},
-		{name: "docker engine", out: "Docker version 29.7.2\nactive"},
-		{name: "docker compose", out: "Docker Compose version v5.5.0"},
+		{name: "docker engine", out: "Docker version 29.8.2\nactive"},
+		{name: "docker compose", out: "Docker Compose version v5.5.1"},
 		{name: "htop", out: "htop 3.3.0"},
 		{name: "managed package updates", out: "current"},
 		{name: "mise", out: bootstraptools.MinimumMiseVersion},
