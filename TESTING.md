@@ -33,6 +33,36 @@ job. Run both commands for complete non-live local parity. Live dogfood remains
 opt-in so CI and local contributors do not create
 paid infrastructure by accident.
 
+## Managed-tool upgrade verification
+
+The 2026-10-01 review updated manifest, digest, platform-floor, shell-version,
+cloud-init, doctor, and real CLI help contracts. A disposable Ubuntu 24.04 arm64
+container ran production mise/tool install and readiness helpers with
+container-local `runuser` transport instead of sudo. Every managed user-tool
+version and the Herdr Pi integration passed. No host home or credentials were
+mounted; live Tailscale SSH and systemd services were not verified.
+
+A separate disposable container verified Docker’s pinned signing key and
+refreshed apt metadata. Candidate preflight rejected Buildx `0.37.1` against
+the patched `0.37.2` floor before installation. The initial Pi audit found
+shrinkwrapped `brace-expansion@5.0.9`. A later disposable Ubuntu run exercised
+the production local repair, Pi help, idempotence, and rejection of dependency drift.
+Repair restored `5.0.12` and the reviewed integrity; the runtime audit found zero vulnerabilities.
+Regression tests reject old versions, changed lock metadata, wrong integrity,
+and a missing shrinkwrap without executing dependency code.
+The 2026-10-03 refresh repeated the complete managed user-tool installation
+with mise `2026.10.0` and uv `0.12.19` in disposable Ubuntu arm64.
+Canonical readiness and idempotence passed; Pi’s runtime audit remained clean.
+Real uv created a working Python virtual environment. A controlled untrusted
+`.tool-versions` fixture triggered mise’s trust gate; its local HTTP sink
+received zero requests. The probe used only a synthetic token and no
+`MISE_SAFE` override. No live systems or credentials were used.
+See `WEB_SOURCES.md` for the public evidence.
+
+Release fixtures need isolated HOME/XDG_CONFIG_HOME when operator-wide Git
+hooks enforce commit-message rules on synthetic fixture commits. Keep the
+real repository’s commit hooks and signing configuration unchanged.
+
 ## Doctor output coverage
 
 Doctor and create tests verify non-pass summary results, status counts,

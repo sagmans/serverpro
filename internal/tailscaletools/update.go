@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	Version      = "1.102.3"
-	AMD64SHA256  = "36ddd9b51be57ffc2990cf76323cfa13643bfbb1b8a969f6183fa164741cdef5"
-	ARM64SHA256  = "a0fa1b154af8c61f862a2259f559f7396d96c0225f4a863eae2333e1546bbe25"
+	Version      = "1.102.4"
+	AMD64SHA256  = "50748df1045e60b5b695f19f4c56b0da36c019948b440fb456b6584a50f0d8b9"
+	ARM64SHA256  = "9dd1e6a592a014bbaea0103167ffe299adeda4ba14e078ce9c2895364f6c4c3f"
 	CheckName    = "tailscale " + Version
 	RestartGrace = 5 * time.Second
 	restartDelay = "2s"

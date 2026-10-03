@@ -2,6 +2,7 @@ package bootstraptools
 
 import (
 	_ "embed"
+	"encoding/base64"
 	"fmt"
 	"slices"
 	"strings"
@@ -11,40 +12,43 @@ import (
 )
 
 const (
-	MinimumMiseVersion        = "2026.8.14"
-	MiseLinuxX64TarGzSHA256   = "64d5f34aeb7a4e0e327dc1c9be66cd8162e14899a47b11901154a100285a3d61"
-	MiseLinuxArm64TarGzSHA256 = "940639580227bd838e3b3ea5b2084ea397399b0db162c2e4dd90b5730850e48e"
-	NodeVersion               = "24.20.0"
-	NPMVersion                = "11.19.0"
-	PiVersion                 = "0.84.3"
-	UVVersion                 = "0.12.6"
-	UVMiseBackend             = "aqua:astral-sh/uv"
-	RustVersion               = "1.98.0"
-	RustMiseBackend           = "core:rust"
-	RustProfile               = "default"
-	TmuxVersion               = "3.7c"
-	GitHubCLIVersion          = "2.98.0"
-	RipgrepVersion            = "15.2.0"
-	FdVersion                 = "10.5.0"
-	AstGrepVersion            = "0.45.2"
-	AstGrepMiseBackend        = "github:ast-grep/ast-grep"
-	AstGrepLinuxX64SHA256     = "67aff72dd2994bf152fcc3a8a09cf93b13193abe59f39393095167c729af2015"
-	AstGrepLinuxArm64SHA256   = "e67ee2f5928b4d77a472114edf6e227d90fefe22fa47e7a78db187c55d206564"
-	SemVersion                = "0.23.1"
-	SemMiseBackend            = "github:Ataraxy-Labs/sem"
-	SemLinuxX64SHA256         = "c876a8a444415d20f3215136a1cfdf4495b835745dcefe80a6f9dd94ce5e3189"
-	SemLinuxArm64SHA256       = "23a7d508960583d10765423ffc053070b7cc216f25257e923ab7fa4b2625f480"
-	InspectVersion            = "0.1.1"
-	InspectMiseBackend        = "github:Ataraxy-Labs/inspect"
-	InspectLinuxX64SHA256     = "99cf4ea2a2a1048d8e9369a6a5a11e5f84ee3f3c706e0bde072f9b2bd44e96ba"
-	InspectLinuxArm64SHA256   = "2327c1de10ecf40e5199c15fdc4c4b3c173735640294e779c635f4c15771e4f6"
-	HerdrVersion              = "0.8.2"
-	HerdrLinuxX64SHA256       = "976150a14d490c94b243ea2e1a7eb2dfb67f12e36b182db90936f6728e6aecf4"
-	HerdrLinuxArm64SHA256     = "f55610658e1c2e0d2aaef730b4b2ab885f7f8ba00285ab372bfb14f2e3d5b40d"
-	PiToolName                = "@earendil-works/pi-coding-agent"
-	HerdrMiseBackend          = "github:herdrdev/herdr"
-	ManagedPackageCheckName   = "managed package updates"
-	AuthenticationBoundary    = "Pi authentication remains operator-owned; full GitHub development access requires a PAT, and serverpro stores gh credentials only on the managed remote host"
+	MinimumMiseVersion                = "2026.10.0"
+	MiseLinuxX64TarGzSHA256           = "6ae3d2bda39cca86713501317edf623b59b75cd8afa2e31c20b1ee6500b4b739"
+	MiseLinuxArm64TarGzSHA256         = "107c5e46693cdfeb1fdec91717078b298d6fcc9ebbd14f8333917cfe37965138"
+	NodeVersion                       = "24.21.0"
+	NPMVersion                        = "11.19.0"
+	PiVersion                         = "0.87.1"
+	PiBraceExpansionVersion           = "5.0.12"
+	PiBraceExpansionIntegrity         = "sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ=="
+	PiDependencyMinimumReleaseAgeDays = "7"
+	UVVersion                         = "0.12.19"
+	UVMiseBackend                     = "aqua:astral-sh/uv"
+	RustVersion                       = "1.98.1"
+	RustMiseBackend                   = "core:rust"
+	RustProfile                       = "default"
+	TmuxVersion                       = "3.7c"
+	GitHubCLIVersion                  = "2.102.0"
+	RipgrepVersion                    = "15.2.0"
+	FdVersion                         = "10.5.0"
+	AstGrepVersion                    = "0.45.3"
+	AstGrepMiseBackend                = "github:ast-grep/ast-grep"
+	AstGrepLinuxX64SHA256             = "f8ac830881339d1edee6b2652f54798c0f4da5a827f2db38a08ee31117783ce8"
+	AstGrepLinuxArm64SHA256           = "b39cfbc58da4b869a88b8a4bc57bd5deb0d24541e704cf7c257da7b53ec81c8f"
+	SemVersion                        = "0.25.0"
+	SemMiseBackend                    = "github:Ataraxy-Labs/sem"
+	SemLinuxX64SHA256                 = "7151f577f84eef16b32ab67bbf4336b1878de1f4d7a087583b0a08ee4e0fb4fd"
+	SemLinuxArm64SHA256               = "ce0ab8f8c7bbacde1c8ed87e5a10b4cd10737870597285da8cd62e905ad3bd8c"
+	InspectVersion                    = "0.1.1"
+	InspectMiseBackend                = "github:Ataraxy-Labs/inspect"
+	InspectLinuxX64SHA256             = "99cf4ea2a2a1048d8e9369a6a5a11e5f84ee3f3c706e0bde072f9b2bd44e96ba"
+	InspectLinuxArm64SHA256           = "2327c1de10ecf40e5199c15fdc4c4b3c173735640294e779c635f4c15771e4f6"
+	HerdrVersion                      = "0.9.1"
+	HerdrLinuxX64SHA256               = "2a02fed16beb651ef006e1d43f048f652ca4dc58ad053cd2d44450563d5c54b7"
+	HerdrLinuxArm64SHA256             = "f4ccf4de745f2cb9a39a983e9ba3703dad50ec2a58dea83026ceab721bbd8d9e"
+	PiToolName                        = "@earendil-works/pi-coding-agent"
+	HerdrMiseBackend                  = "github:herdrdev/herdr"
+	ManagedPackageCheckName           = "managed package updates"
+	AuthenticationBoundary            = "Pi authentication remains operator-owned; full GitHub development access requires a PAT, and serverpro stores gh credentials only on the managed remote host"
 )
 
 type Target string
@@ -140,6 +144,10 @@ func manifestEnvPairs() [][2]string {
 	return append(pairs,
 		[2]string{"SERVERPRO_BOOTSTRAP_NPM_VERSION", NPMVersion},
 		[2]string{"SERVERPRO_BOOTSTRAP_PI_VERSION", PiVersion},
+		[2]string{"SERVERPRO_BOOTSTRAP_PI_BRACE_EXPANSION_VERSION", PiBraceExpansionVersion},
+		[2]string{"SERVERPRO_BOOTSTRAP_PI_BRACE_EXPANSION_INTEGRITY", PiBraceExpansionIntegrity},
+		[2]string{"SERVERPRO_BOOTSTRAP_PI_DEPENDENCY_MIN_RELEASE_AGE_DAYS", PiDependencyMinimumReleaseAgeDays},
+		[2]string{"SERVERPRO_BOOTSTRAP_PI_BRACE_EXPANSION_PROBE_BASE64", base64.StdEncoding.EncodeToString([]byte(piBraceExpansionProbe))},
 		[2]string{"SERVERPRO_BOOTSTRAP_HERDR_VERSION", HerdrVersion},
 		[2]string{"SERVERPRO_BOOTSTRAP_HERDR_BACKEND", HerdrMiseBackend},
 		[2]string{"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64", HerdrLinuxX64SHA256},
@@ -220,7 +228,7 @@ func Checks(user string) []Check {
 		if tool.key == "node" {
 			checks = append(checks,
 				Check{Name: "npm " + NPMVersion, Command: userHomeCommand(user, `actual_npm=$("$HOME/.local/bin/mise" exec -- npm --version); test "$actual_npm" = "`+NPMVersion+`" || { printf 'expected npm `+NPMVersion+`, got %s\n' "$actual_npm" >&2; exit 1; }; printf '%s\n' "$actual_npm"`)},
-				Check{Name: "pi " + PiVersion, Command: userHomeCommand(user, `expected_pi="$HOME/.local/share/mise/installs/node/`+NodeVersion+`/bin/pi"; actual_pi=$("$HOME/.local/bin/mise" exec -- sh -c 'command -v pi'); test "$actual_pi" = "$expected_pi" || { printf 'expected pi at %s, got %s\n' "$expected_pi" "$actual_pi" >&2; exit 1; }; pi_version=$("$HOME/.local/bin/mise" exec -- pi --version 2>&1) || { status=$?; printf 'pi --version failed (%s): %s\n' "$status" "$pi_version" >&2; exit "$status"; }; test "$pi_version" = "`+PiVersion+`" || { printf 'expected pi `+PiVersion+`, got %s\n' "$pi_version" >&2; exit 1; }; printf '%s\n' "$pi_version"`)},
+				Check{Name: "pi " + PiVersion, Command: userHomeCommand(user, `expected_pi="$HOME/.local/share/mise/installs/node/`+NodeVersion+`/bin/pi"; actual_pi=$("$HOME/.local/bin/mise" exec -- sh -c 'command -v pi'); test "$actual_pi" = "$expected_pi" || { printf 'expected pi at %s, got %s\n' "$expected_pi" "$actual_pi" >&2; exit 1; }; `+piBraceExpansionCheckCommand()+`; pi_version=$("$HOME/.local/bin/mise" exec -- pi --version 2>&1) || { status=$?; printf 'pi --version failed (%s): %s\n' "$status" "$pi_version" >&2; exit "$status"; }; test "$pi_version" = "`+PiVersion+`" || { printf 'expected pi `+PiVersion+`, got %s\n' "$pi_version" >&2; exit 1; }; printf '%s\n' "$pi_version"`)},
 			)
 		}
 	}

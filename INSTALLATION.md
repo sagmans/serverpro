@@ -26,31 +26,50 @@ counterpart on DigitalOcean. Confirm current catalog availability before create.
 
 ### Managed tool baseline
 
+Reviewed 2026-10-03. Stable releases normally require seven days of age.
+Docker Engine, Buildx, mise, and gh use explicitly approved security
+exceptions; `WEB_SOURCES.md` records the release dates and advisories. Node.js
+stays on the supported 24 LTS line with its bundled npm.
+
+**Docker bootstrap is currently blocked on fresh hosts:** Docker’s signed Noble
+repository did not publish Buildx `0.37.2-1~ubuntu.24.04~noble` for amd64 or
+arm64 at review time. The candidate preflight rejects `0.37.1` before Docker
+package scripts run. Do not lower the floor or substitute an unverified binary.
+
 | Tool | Supported version | Enforcement |
 | --- | --- | --- |
-| Tailscale | 1.102.3 | Exact client/daemon release and architecture-specific archive digest. |
+| Tailscale | 1.102.4 | Exact client/daemon release and architecture-specific archive digest. |
 | Git | 1:2.43.0-1ubuntu7.3 | Minimum Ubuntu package version. |
-| OpenSSH client | 1:9.6p1-3ubuntu13.18 | Minimum Ubuntu package version. |
-| Docker Engine / CLI | 29.7.2 | Minimum vendor package version `5:29.7.2-1~ubuntu.24.04~noble`. |
-| containerd | 2.3.3 | Minimum vendor package version `2.3.3-1~ubuntu.24.04~noble`. |
-| Docker Buildx | 0.36.1 | Minimum vendor package version `0.36.1-1~ubuntu.24.04~noble`. |
-| Docker Compose | 5.5.0 | Minimum vendor package version `5.5.0-1~ubuntu.24.04~noble`. |
+| OpenSSH client | 1:9.6p1-3ubuntu13.19 | Minimum Ubuntu package version. |
+| Docker Engine / CLI | 29.8.2 | Minimum vendor package version `5:29.8.2-1~ubuntu.24.04~noble`. |
+| containerd | 2.3.6 | Minimum vendor package version `2.3.6-1~ubuntu.24.04~noble`. |
+| Docker Buildx | 0.37.2 | Minimum vendor package version `0.37.2-1~ubuntu.24.04~noble`. |
+| Docker Compose | 5.5.1 | Minimum vendor package version `5.5.1-1~ubuntu.24.04~noble`. |
 | htop | 3.3.0 | Minimum Ubuntu package version `3.3.0-4build1`. |
-| mise | 2026.8.14 | Minimum release; newer compatible mise remains installed. |
-| Node.js | 24.20.0 LTS | Exact mise-managed runtime. |
+| mise | 2026.10.0 | Minimum release; newer compatible mise remains installed. |
+| Node.js | 24.21.0 LTS | Exact mise-managed runtime. |
 | npm | 11.19.0 | Exact npm bundled with the managed Node.js release. |
-| Pi | 0.84.3 | Exact global package under managed Node.js. |
-| uv | 0.12.6 | Exact mise-managed release. |
-| Rust | 1.98.0 | Exact rustup toolchain with default profile. |
+| Pi | 0.87.1 | Exact global package under managed Node.js. |
+| uv | 0.12.19 | Exact mise-managed release. |
+| Rust | 1.98.1 | Exact rustup toolchain with default profile. |
 | tmux | 3.7c | Exact mise-managed release. |
-| GitHub CLI (`gh`) | 2.98.0 | Exact mise-managed release. |
+| GitHub CLI (`gh`) | 2.102.0 | Exact mise-managed release. |
 | ripgrep (`rg`) | 15.2.0 | Exact mise-managed release. |
 | fd | 10.5.0 | Exact mise-managed release. |
-| ast-grep | 0.45.2 | Exact release and architecture-specific asset digest. |
-| sem | 0.23.1 | Exact release and architecture-specific asset digest. |
+| ast-grep | 0.45.3 | Exact release and architecture-specific asset digest. |
+| sem | 0.25.0 | Exact release and architecture-specific asset digest. |
 | inspect | 0.1.1 | Exact architecture-specific binary digest. |
-| Herdr | 0.8.2 | Exact release and architecture-specific binary digest. |
-| cloudflared | 2026.8.2 | Minimum Cloudflare apt package version when ingress is enabled. |
+| Herdr | 0.9.1 | Exact release and architecture-specific binary digest. |
+| cloudflared | 2026.9.3 | Minimum Cloudflare apt package version when ingress is enabled. |
+
+Pi `0.87.1` and upstream `1.0.0` contain vulnerable `brace-expansion@5.0.9`
+in their npm shrinkwraps. Serverpro repairs only the local managed Pi graph
+to reviewed `brace-expansion@5.0.12`; it does not modify upstream releases.
+Both Pi installation and dependency repair enforce npm’s seven-day minimum age.
+The repair disables lifecycle scripts and omits development dependencies.
+Bootstrap verifies the resolved dependency version and reviewed shrinkwrap integrity,
+then requires a clean runtime dependency audit before Pi is ready.
+Doctor rejects an unrepaired graph even when Pi’s own version matches.
 
 ### Managed apt package floors
 
@@ -66,21 +85,21 @@ security updates therefore continue normally.
 | Package | Minimum version |
 | --- | --- |
 | `ca-certificates` | `20260601~24.04.1` |
-| `curl` | `8.5.0-2ubuntu10.13` |
-| `gnupg` | `2.4.4-2ubuntu17.4` |
+| `curl` | `8.5.0-2ubuntu10.15` |
+| `gnupg` | `2.4.4-2ubuntu17.6` |
 | `ufw` | `0.36.2-6` |
-| `apparmor` | `4.0.1really4.0.1-0ubuntu0.24.04.7` |
+| `apparmor` | `4.0.1really4.0.1-0ubuntu0.24.04.8` |
 | `unattended-upgrades` | `2.9.1+nmu4ubuntu1` |
 | `jq` | `1.7.1-3ubuntu0.24.04.2` |
 | `git` | `1:2.43.0-1ubuntu7.3` |
-| `openssh-client` | `1:9.6p1-3ubuntu13.18` |
-| `docker-ce` | `5:29.7.2-1~ubuntu.24.04~noble` |
-| `docker-ce-cli` | `5:29.7.2-1~ubuntu.24.04~noble` |
-| `containerd.io` | `2.3.3-1~ubuntu.24.04~noble` |
-| `docker-buildx-plugin` | `0.36.1-1~ubuntu.24.04~noble` |
-| `docker-compose-plugin` | `5.5.0-1~ubuntu.24.04~noble` |
+| `openssh-client` | `1:9.6p1-3ubuntu13.19` |
+| `docker-ce` | `5:29.8.2-1~ubuntu.24.04~noble` |
+| `docker-ce-cli` | `5:29.8.2-1~ubuntu.24.04~noble` |
+| `containerd.io` | `2.3.6-1~ubuntu.24.04~noble` |
+| `docker-buildx-plugin` | `0.37.2-1~ubuntu.24.04~noble` |
+| `docker-compose-plugin` | `5.5.1-1~ubuntu.24.04~noble` |
 | `htop` | `3.3.0-4build1` |
-| `cloudflared` | `2026.8.2` |
+| `cloudflared` | `2026.9.3` |
 
 ## Requirements
 

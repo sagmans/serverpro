@@ -177,6 +177,30 @@ without one get this secure default.
 
 ## Supply-chain verification
 
+The 2026-10-03 managed-tool review selects stable releases at least seven days
+old, except explicitly approved fixes for disclosed vulnerabilities. Docker
+Engine `29.8.2`, Buildx `0.37.2`, mise `2026.10.0`, and gh
+`2.102.0` use those exceptions; `WEB_SOURCES.md` records the evidence. The age
+threshold governs release selection. Signed apt candidates can be newer.
+Pi installation and local dependency repair also enforce seven days through
+npm’s `--min-release-age` option. containerd `2.3.6` now meets seven days.
+The mise exception fixes `GHSA-wcqh-j26q-g44x`: untrusted inline
+`.tool-versions` options can disclose `GITHUB_TOKEN` on releases through `2026.9.18`.
+`MISE_SAFE=1` skips mise’s trust check; never use it to inspect untrusted projects.
+
+Buildx `0.37.2` was absent from Docker’s Noble apt repository for both supported
+architectures at review time. Fresh Docker bootstrap fails closed until a
+signed candidate meets that floor; vulnerable `0.37.1` is not a fallback.
+Release age and checksums do not prove that an artifact or its dependencies
+are uncompromised. Upstream Pi `0.87.1` and `1.0.0` shrinkwrap vulnerable
+`brace-expansion@5.0.9`. Serverpro repairs only its managed local Pi installation
+to reviewed `5.0.12`, with lifecycle scripts disabled and development dependencies omitted.
+Bootstrap and doctor resolve metadata from Pi’s actual minimatch dependency
+without executing dependency code. They require the exact patched version
+and reviewed SHA-512 integrity in the installed shrinkwrap. Bootstrap also
+requires a clean runtime dependency audit after the repair. Audit failure or
+unavailability stops the installer; an exact Pi CLI version alone is insufficient.
+
 Managed host tools install through integrity-checked sources, not
 `curl ... | sh`:
 
@@ -184,18 +208,18 @@ Managed host tools install through integrity-checked sources, not
   keyring contains exactly one primary key with fingerprint
   `9DC858229FC7DD38854AE2D88D81803C0EBFCD88`; subkeys are allowed, but missing,
   substituted, or additional primary keys fail before publication.
-- mise `2026.8.14` is fetched as a release tarball and verified against its
+- mise `2026.10.0` is fetched as a release tarball and verified against its
   published SHA-256 checksum before the target user installs it into
   `~/.local/bin`; newer compatible mise releases remain valid.
-- uv `0.12.6` is pinned and installed through mise's explicit
+- uv `0.12.19` is pinned and installed through mise's explicit
   `aqua:astral-sh/uv` backend. That registry entry advertises release SHA-256
   and GitHub-attestation verification; doctor verifies the exact version.
-- Rust `1.98.0` is pinned and installed through mise's `core:rust` backend with
+- Rust `1.98.1` is pinned and installed through mise's `core:rust` backend with
   the default rustup profile. Doctor verifies rustc, Cargo, rustfmt, Clippy, and Rust
   docs. rustup downloads over HTTPS, but its official security documentation
   states download signatures are not yet enforced; this remains a trust
   boundary despite the exact version pin.
-- ast-grep `0.45.2`, sem `0.23.1`, and inspect `0.1.1` are installed from exact
+- ast-grep `0.45.3`, sem `0.25.0`, and inspect `0.1.1` are installed from exact
   mise GitHub backends and versions. Their x86_64/arm64 release assets are pinned by reviewed
   SHA-256 values; unsupported architectures fail before mutation. Doctor checks
   exact ast-grep and sem version output. Existing active `sg` mise configuration
@@ -203,13 +227,13 @@ Managed host tools install through integrity-checked sources, not
   deprecated binary. Inspect has no upstream version flag, so its bare release
   binary is hashed before any inspect execution and reported with
   sanitized evidence. A failed integrity probe forces same-version replacement.
-- Herdr `0.8.2` is installed for the target user through mise's explicit GitHub
+- Herdr `0.9.1` is installed for the target user through mise's explicit GitHub
   backend; bootstrap and doctor verify the resulting Linux binary
   against the architecture-specific SHA-256 digest published with that GitHub
   release. Bootstrap installs the bundled Pi integration under the target user's
   private Pi agent directory and does not invoke Herdr self-update or session
   lifecycle commands.
-- Tailscale `1.102.3` first-boot and repair binaries are fetched only for
+- Tailscale `1.102.4` first-boot and repair binaries are fetched only for
   reviewed amd64 or arm64 architectures, checked against pinned SHA-256 digests,
   and extracted by exact member name. Unsupported architectures and mismatches
   stop before install. Serverpro explicitly sets `GODEBUG=tlsmlkem=1` for
@@ -220,7 +244,7 @@ Managed host tools install through integrity-checked sources, not
   contain exactly one primary key with fingerprint
   `CC94B39C77AE7342A68B89628A682D308D4E5E73`. Missing, substituted, or additional
   primary keys fail before the key can enter the trusted keyring. The installer
-  uses the explicit noble repository and requires cloudflared `2026.8.2` or
+  uses the explicit noble repository and requires cloudflared `2026.9.3` or
   newer; ingress-enabled doctor runs verify both that floor and service state.
 - Every directly installed Ubuntu, Docker, and Cloudflare apt package has a
   reviewed minimum in `internal/hostplatform`. Installs preflight signed current
@@ -228,11 +252,11 @@ Managed host tools install through integrity-checked sources, not
   force the C locale while parsing apt output, require dpkg state `installed`
   rather than trusting stale `config-files` version metadata, verify installed
   floors, preserve newer versions, and never request a downgrade.
-- Node.js `24.20.0` LTS and bundled npm `11.19.0` are exact. Node/npm drift
+- Node.js `24.21.0` LTS and bundled npm `11.19.0` are exact. Node/npm drift
   forces same-version Node replacement; `pi` and `all` reinstall Pi afterward
-  because replacing Node can remove its global npm package. Pi `0.84.3` is
-  installed with lifecycle scripts disabled, but its npm dependency graph is
-  resolved at install time rather than vendored; enabling Pi retains this
+  because replacing Node can remove its global npm package. Pi `0.87.1` is
+  installed and locally repaired with lifecycle scripts disabled. Its npm
+  dependency graph is not fully vendored; enabling Pi retains this
   residual package-registry trust boundary.
 - The bootstrap script runs as root, including system-package and apt work plus
   managed-artifact download, verification, extraction, and staging. Read-only
