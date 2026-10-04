@@ -76,8 +76,11 @@ No host home, credentials, Docker socket, or privileged mode was used.
 Systemd activation and firewall effects were not verified in these containers.
 A container-local Docker daemon started, and the verified Buildx connected.
 Image construction failed at a bind mount (`err: operation not permitted`)
-under default container capabilities. Actual image builds still require
-separate proof before shipping this change.
+under default container capabilities. An approved isolated rootless worker
+later verified an amd64 OCI export, architecture, content digests, and copied
+file contents. Dependency scanning stopped that worker before the arm64 build.
+No further builds may use the rejected worker. Safe real arm64 image construction
+and review of the builder environment still require separate proof before shipping.
 
 Release fixtures need isolated HOME/XDG_CONFIG_HOME when operator-wide Git
 hooks enforce commit-message rules on synthetic fixture commits. Keep the
