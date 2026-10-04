@@ -67,7 +67,10 @@ A corrupt synthetic download stopped before execution or Docker package
 scripts. The full production package-doctor command passed with the fallback.
 A local package fixture containing the reviewed binary verified safe-package
 migration and return to package-based diagnosis on both architectures. This
-fixture was not a published vendor package.
+fixture was not a published vendor package. Controlled directory-boundary
+and failed-convergence scenarios also passed on both architectures. Ambiguous
+configured directories stopped before plugin execution; failed convergence
+preserved the exact verified alias and did not continue to package upgrade.
 
 No host home, credentials, Docker socket, or privileged mode was used.
 Systemd activation and firewall effects were not verified in these containers.

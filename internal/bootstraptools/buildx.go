@@ -21,9 +21,17 @@ const buildxProbe = `set -e
 buildx_source=
 buildx_package_minimum='__PACKAGE_MINIMUM__'
 buildx_selected=
+if test -z "${DOCKER_CONFIG:-}" && test -z "${HOME:-}"; then
+  printf 'missing HOME for Docker plugin discovery\n' >&2; exit 1
+fi
 buildx_config="${DOCKER_CONFIG:-$HOME/.docker}"
+# Line-delimited discovery must not reinterpret configuration directory names.
+buildx_newline='
+'
+case "$buildx_config" in *"$buildx_newline"*) printf 'unsafe Docker config directory\n' >&2; exit 1 ;; esac
 buildx_extra=
 if test -f "$buildx_config/config.json"; then
+  jq -e '(.cliPluginsExtraDirs // []) | type == "array" and all(.[]; type == "string" and (contains("\n") | not))' "$buildx_config/config.json" >/dev/null || { printf 'unsafe Docker extra plugin directories\n' >&2; exit 1; }
   buildx_extra=$(jq -r '(.cliPluginsExtraDirs // [])[]' "$buildx_config/config.json")
 fi
 while IFS= read -r buildx_dir; do
@@ -77,6 +85,7 @@ printf '%s\n' "$buildx_output"
 `
 
 // buildxCheckCommand binds the same reviewed identity into bootstrap and doctor.
+// Shared identities keep package diagnosis and fallback readiness under one trust policy.
 func buildxCheckCommand() string {
 	minimum := ""
 	for _, pkg := range hostplatform.DockerPackageBaselines() {

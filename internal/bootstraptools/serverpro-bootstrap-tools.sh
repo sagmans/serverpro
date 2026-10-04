@@ -472,13 +472,13 @@ TARGET_PATH=
 apt_update_once() {
   if [[ ${APT_UPDATED} -eq 0 ]]; then
     log 'updating apt package index'
-    apt-get update
+    apt-get update || return 1
     APT_UPDATED=1
   fi
 }
 
 apt_install() {
-  apt_update_once
+  apt_update_once || return 1
   verify_package_candidates "$@" || return 1
   DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@" || return 1
   verify_package_minimums "$@"
@@ -812,13 +812,13 @@ ensure_root_mise() {
   fi
 
   log "installing pinned root mise at ${ROOT_MISE}"
-  apt_install ca-certificates curl
+  apt_install ca-certificates curl || return 1
   local verified_root_mise
-  verified_root_mise=$(fetch_verified_mise_binary)
+  verified_root_mise=$(fetch_verified_mise_binary) || return 1
   # fetch runs under command substitution, so its own register_tmp calls never
   # reach this shell; register the published path here for trap-based cleanup.
   register_tmp "${verified_root_mise}"
-  install -o root -g root -m 0755 "${verified_root_mise}" "${ROOT_MISE}"
+  install -o root -g root -m 0755 "${verified_root_mise}" "${ROOT_MISE}" || return 1
   if ! root_mise_ready; then
     printf 'mise %s or newer with bootstrap support is required at %s. Found: %s\n' "$(bootstrap_min_mise_version)" "${ROOT_MISE}" "$("${ROOT_MISE}" --version 2>/dev/null || printf 'unavailable')" >&2
     exit 1
@@ -929,19 +929,20 @@ ensure_docker_ufw_egress() {
   fi
 }
 
+# Conditional repair callers need explicit failure boundaries before replacing working tools.
 bootstrap_package_set() {
   local label="$1"
   local env_name="$2"
   local -a packages
-  read_package_env "${env_name}" packages
+  read_package_env "${env_name}" packages || return 1
 
-  apt_update_once
-  verify_package_candidates "${packages[@]}"
-  ensure_root_mise
+  apt_update_once || return 1
+  verify_package_candidates "${packages[@]}" || return 1
+  ensure_root_mise || return 1
   local mise_bin=${ROOT_MISE}
   log "converging ${label} packages with mise bootstrap"
-  MISE_EXPERIMENTAL=1 MISE_YES=1 "${mise_bin}" --no-config bootstrap packages apply --yes "${packages[@]}"
-  MISE_EXPERIMENTAL=1 MISE_YES=1 "${mise_bin}" --no-config bootstrap packages upgrade --yes "${packages[@]}"
+  MISE_EXPERIMENTAL=1 MISE_YES=1 "${mise_bin}" --no-config bootstrap packages apply --yes "${packages[@]}" || return 1
+  MISE_EXPERIMENTAL=1 MISE_YES=1 "${mise_bin}" --no-config bootstrap packages upgrade --yes "${packages[@]}" || return 1
   verify_package_minimums "${packages[@]}"
 }
 
@@ -1104,7 +1105,7 @@ install_docker() {
     apt_install "${selected[@]#apt:}" || return 1
     install_verified_buildx_binary || return 1
   else
-    bootstrap_package_set docker SERVERPRO_BOOTSTRAP_DOCKER_PACKAGES
+    bootstrap_package_set docker SERVERPRO_BOOTSTRAP_DOCKER_PACKAGES || return 1
     if [[ -L ${BUILDX_PLUGIN_PATH} ]]; then
       rm -f "${BUILDX_PLUGIN_PATH}"
     fi

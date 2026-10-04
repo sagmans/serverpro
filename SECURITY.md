@@ -196,6 +196,8 @@ the digest before execution and before Docker package scripts. Vulnerable
 
 Managed binaries use a protected root-owned namespace and atomic publication.
 Doctor checks Docker’s plugin search order before execution. It rejects
+configuration-directory entries with line breaks rather than reinterpret their names.
+Failed package convergence leaves the verified fallback alias intact. It rejects
 unrecognized overrides, writable managed ancestors, wrong ownership, altered
 artifacts, and loaded versions below the floor. Repair updates the managed
 artifact; safe apt availability triggers migration without deleting operator
