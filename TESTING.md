@@ -59,6 +59,23 @@ received zero requests. The probe used only a synthetic token and no
 `MISE_SAFE` override. No live systems or credentials were used.
 See `WEB_SOURCES.md` for the public evidence.
 
+The Buildx fallback ran through the production Docker install and shared
+diagnostic probe in disposable Ubuntu 24.04 amd64 and arm64 containers.
+Real Docker CLI and Buildx version checks, repeated convergence, altered-byte
+rejection and repair, and pre-execution rejection of a shadow plugin passed.
+A corrupt synthetic download stopped before execution or Docker package
+scripts. The full production package-doctor command passed with the fallback.
+A local package fixture containing the reviewed binary verified safe-package
+migration and return to package-based diagnosis on both architectures. This
+fixture was not a published vendor package.
+
+No host home, credentials, Docker socket, or privileged mode was used.
+Systemd activation and firewall effects were not verified in these containers.
+A container-local Docker daemon started, and the verified Buildx connected.
+Image construction failed at a bind mount (`err: operation not permitted`)
+under default container capabilities. Actual image builds still require
+separate proof before shipping this change.
+
 Release fixtures need isolated HOME/XDG_CONFIG_HOME when operator-wide Git
 hooks enforce commit-message rules on synthetic fixture commits. Keep the
 real repository’s commit hooks and signing configuration unchanged.

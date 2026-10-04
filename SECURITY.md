@@ -189,8 +189,19 @@ The mise exception fixes `GHSA-wcqh-j26q-g44x`: untrusted inline
 `MISE_SAFE=1` skips mise’s trust check; never use it to inspect untrusted projects.
 
 Buildx `0.37.2` was absent from Docker’s Noble apt repository for both supported
-architectures at review time. Fresh Docker bootstrap fails closed until a
-signed candidate meets that floor; vulnerable `0.37.1` is not a fallback.
+architectures at review time. Bootstrap instead permits only the reviewed
+official binary with a Go-owned architecture-specific SHA-256. It verifies
+the digest before execution and before Docker package scripts. Vulnerable
+`0.37.1` is never installed as the fallback. All other apt preflights remain.
+
+Managed binaries use a protected root-owned namespace and atomic publication.
+Doctor checks Docker’s plugin search order before execution. It rejects
+unrecognized overrides, writable managed ancestors, wrong ownership, altered
+artifacts, and loaded versions below the floor. Repair updates the managed
+artifact; safe apt availability triggers migration without deleting operator
+plugins. Docker warns that manual downloads do not receive automatic security
+updates. Keep ServerPro pins reviewed and run doctor with repair. Checksums
+prove agreement with reviewed bytes, not absence of upstream compromise.
 Release age and checksums do not prove that an artifact or its dependencies
 are uncompromised. Upstream Pi `0.87.1` and `1.0.0` shrinkwrap vulnerable
 `brace-expansion@5.0.9`. Serverpro repairs only its managed local Pi installation

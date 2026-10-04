@@ -31,10 +31,19 @@ Docker Engine, Buildx, mise, and gh use explicitly approved security
 exceptions; `WEB_SOURCES.md` records the release dates and advisories. Node.js
 stays on the supported 24 LTS line with its bundled npm.
 
-**Docker bootstrap is currently blocked on fresh hosts:** Docker’s signed Noble
-repository did not publish Buildx `0.37.2-1~ubuntu.24.04~noble` for amd64 or
-arm64 at review time. The candidate preflight rejects `0.37.1` before Docker
-package scripts run. Do not lower the floor or substitute an unverified binary.
+Docker bootstrap prefers a signed apt Buildx package at or above its security
+floor. If neither the installed package nor candidate meets that floor, it
+uses the reviewed official `0.37.2` binary for amd64 or arm64. SHA-256 and
+version checks run before Docker package scripts. Other package floors remain
+mandatory; an unavailable or corrupt fallback stops installation.
+
+The fallback lives in `/usr/local/lib/serverpro/docker-buildx`; a protected
+symlink exposes it as `/usr/local/lib/docker/cli-plugins/docker-buildx`.
+Bootstrap replaces only ServerPro-owned aliases. Once a safe apt package
+becomes available, doctor requests repair and bootstrap removes that alias.
+Run `serverpro server doctor --fix` to apply this migration. Manual fallback
+binaries do not receive automatic apt security updates. ServerPro owns their
+reviewed pins, integrity checks, and replacement lifecycle.
 
 | Tool | Supported version | Enforcement |
 | --- | --- | --- |
@@ -43,7 +52,7 @@ package scripts run. Do not lower the floor or substitute an unverified binary.
 | OpenSSH client | 1:9.6p1-3ubuntu13.19 | Minimum Ubuntu package version. |
 | Docker Engine / CLI | 29.8.2 | Minimum vendor package version `5:29.8.2-1~ubuntu.24.04~noble`. |
 | containerd | 2.3.6 | Minimum vendor package version `2.3.6-1~ubuntu.24.04~noble`. |
-| Docker Buildx | 0.37.2 | Minimum vendor package version `0.37.2-1~ubuntu.24.04~noble`. |
+| Docker Buildx | 0.37.2 | Minimum vendor package `0.37.2-1~ubuntu.24.04~noble`, or exact checksum-verified official fallback. |
 | Docker Compose | 5.5.1 | Minimum vendor package version `5.5.1-1~ubuntu.24.04~noble`. |
 | htop | 3.3.0 | Minimum Ubuntu package version `3.3.0-4build1`. |
 | mise | 2026.10.0 | Minimum release; newer compatible mise remains installed. |

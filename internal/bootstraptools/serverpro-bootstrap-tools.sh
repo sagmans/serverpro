@@ -10,6 +10,14 @@ umask 022
 
 PI_BRACE_EXPANSION_TOOL=brace-expansion
 
+# ServerPro's reserved namespace distinguishes our updates from operator plugins.
+BUILDX_PACKAGE=docker-buildx-plugin
+BUILDX_RELEASE_BASE=https://github.com/docker/buildx/releases/download
+BUILDX_MANAGED_DIRECTORY=/usr/local/lib/serverpro/docker-buildx
+BUILDX_PLUGIN_PATH=/usr/local/lib/docker/cli-plugins/docker-buildx
+BUILDX_PARENT_DIRECTORIES=(/usr /usr/local /usr/local/lib /usr/local/lib/serverpro /usr/local/lib/serverpro/docker-buildx /usr/local/lib/docker /usr/local/lib/docker/cli-plugins)
+VERIFIED_BUILDX_BINARY=
+
 # Pinned artifacts are fetched/extracted under root; remove every temp dir on any
 # exit path (error, signal, success) so partial downloads never linger on a host.
 BOOTSTRAP_TMP_DIRS=()
@@ -471,8 +479,8 @@ apt_update_once() {
 
 apt_install() {
   apt_update_once
-  verify_package_candidates "$@"
-  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"
+  verify_package_candidates "$@" || return 1
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@" || return 1
   verify_package_minimums "$@"
 }
 
@@ -634,6 +642,13 @@ validate_bootstrap_env() {
     validate_user_token SERVERPRO_BOOTSTRAP_HOST_ARCHITECTURES "${host_arch}"
   done
   validate_package_baseline_manifest
+  bootstrap_version_env SERVERPRO_BOOTSTRAP_BUILDX_VERSION >/dev/null
+  bootstrap_sha256_env SERVERPRO_BOOTSTRAP_BUILDX_SHA256_AMD64 >/dev/null
+  bootstrap_sha256_env SERVERPRO_BOOTSTRAP_BUILDX_SHA256_ARM64 >/dev/null
+  buildx_check_command >/dev/null
+  if [[ ${BOOTSTRAP_TARGET} == all || ${BOOTSTRAP_TARGET} == docker ]]; then
+    buildx_release_arch >/dev/null
+  fi
   bootstrap_min_mise_version >/dev/null
   bootstrap_sha256_env SERVERPRO_BOOTSTRAP_MISE_SHA256_LINUX_X64 >/dev/null
   bootstrap_sha256_env SERVERPRO_BOOTSTRAP_MISE_SHA256_LINUX_ARM64 >/dev/null
@@ -955,15 +970,146 @@ remove_docker_conflicts() {
     >/dev/null 2>&1 || true
 }
 
+
+# Kernel names must select the correct upstream release asset.
+buildx_release_arch() {
+  case "$(uname -m)" in
+    x86_64) printf amd64 ;;
+    aarch64|arm64) printf arm64 ;;
+    *) printf 'unsupported architecture for Buildx release\n' >&2; return 1 ;;
+  esac
+}
+
+# One Go-owned identity prevents differing bootstrap and doctor trust decisions.
+buildx_check_command() {
+  local probe
+  probe=$(printf '%s' "$(required_env SERVERPRO_BOOTSTRAP_BUILDX_PROBE_BASE64)" | base64 -d) || return 1
+  [[ -n ${probe} ]] || { printf 'empty Buildx identity probe\n' >&2; return 1; }
+  printf '%s' "${probe}"
+}
+
+# Root-owned, non-writable ancestors prevent privileged writes through user links.
+ensure_buildx_directories() {
+  local directory mode
+  for directory in "${BUILDX_PARENT_DIRECTORIES[@]}"; do
+    if [[ -L ${directory} || ( -e ${directory} && ! -d ${directory} ) ]]; then
+      printf 'unsafe Buildx directory: %s\n' "${directory}" >&2; return 1
+    fi
+    if [[ -d ${directory} ]]; then
+      mode=$(stat -c %a "${directory}")
+      [[ $(stat -c %u "${directory}") == 0 && $((8#${mode} & 022)) == 0 ]] || { printf 'unsafe Buildx directory ownership: %s\n' "${directory}" >&2; return 1; }
+    else
+      install -d -m 0755 -o root -g root "${directory}" || return 1
+    fi
+  done
+}
+
+# Only namespace-bound aliases may be replaced or removed during apt migration.
+verify_managed_buildx_alias() {
+  local target suffix
+  [[ -e ${BUILDX_PLUGIN_PATH} || -L ${BUILDX_PLUGIN_PATH} ]] || return 0
+  [[ -L ${BUILDX_PLUGIN_PATH} && $(stat -c %u "${BUILDX_PLUGIN_PATH}") == 0 ]] || { printf 'refusing unmanaged Buildx override: %s\n' "${BUILDX_PLUGIN_PATH}" >&2; return 1; }
+  target=$(readlink "${BUILDX_PLUGIN_PATH}")
+  suffix=${target#"${BUILDX_MANAGED_DIRECTORY}/"}
+  [[ ${target} == "${BUILDX_MANAGED_DIRECTORY}/"* && ${suffix} =~ ^[0-9]+\.[0-9]+\.[0-9]+-(amd64|arm64)$ ]] || { printf 'refusing unmanaged Buildx alias target: %s\n' "${target}" >&2; return 1; }
+}
+
+# Integrity and executable identity are proven before any Docker package scripts.
+prepare_verified_buildx_binary() {
+  local version arch checksum artifact tmpdir output
+  version=$(bootstrap_version_env SERVERPRO_BOOTSTRAP_BUILDX_VERSION)
+  arch=$(buildx_release_arch)
+  case "${arch}" in
+    amd64) checksum=$(bootstrap_sha256_env SERVERPRO_BOOTSTRAP_BUILDX_SHA256_AMD64) ;;
+    arm64) checksum=$(bootstrap_sha256_env SERVERPRO_BOOTSTRAP_BUILDX_SHA256_ARM64) ;;
+  esac
+  local minimum
+  minimum=$(package_minimum_version "${BUILDX_PACKAGE}")
+  [[ ${version} == "${minimum%%-*}" ]] || { printf 'Buildx release and package floor disagree\n' >&2; return 1; }
+  ensure_buildx_directories || return 1
+  verify_managed_buildx_alias || return 1
+  artifact="${BUILDX_MANAGED_DIRECTORY}/${version}-${arch}"
+  [[ ! -L ${artifact} && ( ! -e ${artifact} || ( -f ${artifact} && $(stat -c %u "${artifact}") == 0 ) ) ]] || { printf 'unsafe managed Buildx artifact path\n' >&2; return 1; }
+  if [[ -f ${artifact} && $(stat -c %a "${artifact}") == 755 && $(sha256sum "${artifact}" | awk '{print $1}') == "${checksum}" ]]; then
+    VERIFIED_BUILDX_BINARY=${artifact}
+    return 0
+  fi
+  tmpdir=$(mktemp -d)
+  register_tmp "${tmpdir}"
+  chmod 0700 "${tmpdir}"
+  curl --proto '=https' --proto-redir '=https' -fsSL "${BUILDX_RELEASE_BASE}/v${version}/buildx-v${version}.linux-${arch}" -o "${tmpdir}/docker-buildx" || return 1
+  printf '%s  %s\n' "${checksum}" "${tmpdir}/docker-buildx" | sha256sum -c - >&2 || return 1
+  chmod 0755 "${tmpdir}/docker-buildx" || return 1
+  output=$("${tmpdir}/docker-buildx" version) || return 1
+  [[ ${output} == *" v${version} "* ]] || { printf 'unexpected verified Buildx version: %s\n' "${output}" >&2; return 1; }
+  VERIFIED_BUILDX_BINARY=${tmpdir}/docker-buildx
+}
+
+# Same-filesystem publication leaves no partially-written executable or alias.
+install_verified_buildx_binary() {
+  local version arch artifact staged alias
+  version=$(bootstrap_version_env SERVERPRO_BOOTSTRAP_BUILDX_VERSION)
+  arch=$(buildx_release_arch)
+  artifact="${BUILDX_MANAGED_DIRECTORY}/${version}-${arch}"
+  if [[ ${VERIFIED_BUILDX_BINARY} != "${artifact}" ]]; then
+    staged=$(mktemp "${BUILDX_MANAGED_DIRECTORY}/.buildx.XXXXXX") || return 1
+    register_tmp "${staged}"
+    install -m 0755 -o root -g root "${VERIFIED_BUILDX_BINARY}" "${staged}" || return 1
+    mv -Tf "${staged}" "${artifact}" || return 1
+  fi
+  alias=$(mktemp "${BUILDX_PLUGIN_PATH}.XXXXXX") || return 1
+  register_tmp "${alias}"
+  ln -sf "${artifact}" "${alias}" || return 1
+  mv -Tf "${alias}" "${BUILDX_PLUGIN_PATH}" || return 1
+}
+
+verify_buildx() {
+  sh -c "$(buildx_check_command)"
+}
+
 install_docker() {
   log 'converging Docker Engine from Docker apt repository'
   install_docker_repo
   local -a packages
   read_package_env SERVERPRO_BOOTSTRAP_DOCKER_PACKAGES packages
   apt_update_once
-  verify_package_candidates "${packages[@]}"
+  local fallback=0 minimum installed candidate token
+  local -a selected=()
+  minimum=$(package_minimum_version "${BUILDX_PACKAGE}")
+  candidate=$(apt-cache policy "${BUILDX_PACKAGE}" | awk '$1 == "Candidate:" {print $2}')
+  if installed=$(installed_package_version "${BUILDX_PACKAGE}") && dpkg --compare-versions "${installed}" ge "${minimum}"; then
+    :
+  elif [[ -n ${candidate} && ${candidate} != '(none)' ]] && dpkg --compare-versions "${candidate}" ge "${minimum}"; then
+    :
+  else
+    fallback=1
+  fi
+  for token in "${packages[@]}"; do
+    [[ ${fallback} == 1 && ${token#apt:} == "${BUILDX_PACKAGE}" ]] || selected+=("${token}")
+  done
+  packages=("${selected[@]}")
+  verify_package_candidates "${packages[@]}" || return 1
+  if [[ ${fallback} == 1 ]]; then
+    prepare_verified_buildx_binary || return 1
+  else
+    ensure_buildx_directories || return 1
+    verify_managed_buildx_alias || return 1
+  fi
   remove_docker_conflicts
-  bootstrap_package_set docker SERVERPRO_BOOTSTRAP_DOCKER_PACKAGES
+  if [[ ${fallback} == 1 ]]; then
+    if installed=$(installed_package_version "${BUILDX_PACKAGE}"); then
+      DEBIAN_FRONTEND=noninteractive apt-get remove -y "${BUILDX_PACKAGE}" || return 1
+    fi
+    # Optional apt recommendations must not pull the rejected old plugin back in.
+    apt_install "${selected[@]#apt:}" || return 1
+    install_verified_buildx_binary || return 1
+  else
+    bootstrap_package_set docker SERVERPRO_BOOTSTRAP_DOCKER_PACKAGES
+    if [[ -L ${BUILDX_PLUGIN_PATH} ]]; then
+      rm -f "${BUILDX_PLUGIN_PATH}"
+    fi
+  fi
+  verify_buildx || return 1
   ensure_docker_daemon_config
   if [[ ${DOCKER_CONFIG_CHANGED} -eq 1 ]]; then
     dockerd --validate --config-file /etc/docker/daemon.json
@@ -1377,6 +1523,7 @@ verify_git() {
 }
 
 verify_docker() {
+  verify_buildx
   docker --version
   docker compose version
   systemctl is-active docker

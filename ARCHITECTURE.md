@@ -124,7 +124,14 @@ access paths for app-owned deployment flows.
     exposes no version flag. The focused `git` path converges target-user mise
     and gh as account-access prerequisites. Pi and digest-verified Herdr retain
     purpose-built flows. mise downloads are checksum-verified and the Docker
-    repository key is GPG-pinned.
+    repository key is GPG-pinned. Docker package preflight remains mandatory.
+    Buildx alone can use a Go-pinned official binary when apt cannot meet its
+    security floor. Root-owned versioned artifacts and an atomic namespace-bound
+    alias prevent operator-plugin replacement. A shared pre-execution probe
+    enforces Docker plugin selection, ownership, SHA-256, and loaded version.
+    The managed-package check recognizes this source and requests migration
+    once a safe apt candidate appears. Fallback apt installation disables
+    recommendations so the rejected old plugin cannot return.
 - Remote: `internal/remote`
   - Tailscale SSH execution with password-aware sudo. Operation wrappers pass
     context deadlines to every runner; Tailscale adds its fallback only when
