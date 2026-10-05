@@ -79,8 +79,31 @@ Image construction failed at a bind mount (`err: operation not permitted`)
 under default container capabilities. An approved isolated rootless worker
 later verified an amd64 OCI export, architecture, content digests, and copied
 file contents. Dependency scanning stopped that worker before the arm64 build.
-No further builds may use the rejected worker. Safe real arm64 image construction
-and review of the builder environment still require separate proof before shipping.
+No further builds may use the rejected worker. These historical results do not
+define the current image-build acceptance scope below.
+
+### Local Buildx acceptance
+
+Keep provisioning and image-build verification separate. Disposable Ubuntu
+24.04 amd64 and arm64 containers verify fallback installation, checksum and
+plugin selection, package preflight, doctor, and lifecycle safety.
+
+A normal `docker build` on macOS, using the existing local Docker daemon, is
+sufficient for the real image-build smoke check. Use a small `FROM scratch`
+and `COPY` fixture; inspect the built image and verify its copied file contents.
+Record the command, Docker and Buildx versions, image architecture, and result.
+Do not claim this smoke check passed until its actual result is recorded.
+
+The macOS smoke check does not prove Linux Buildx-to-daemon integration or
+native amd64 and arm64 builder execution. Those checks are outside this
+accepted delivery scope; Ubuntu container checks provide provisioning evidence.
+No nested Docker daemon, standalone BuildKit worker, manually managed VM, CI
+runner, separate daemon endpoint, or TLS setup is required for this acceptance.
+Do not mount host sockets, home directories, or credentials into test containers.
+Use only disposable test artifacts; do not access live servers or publish images.
+
+Validation stays local. Existing local gates remain in force; this documentation
+change does not add or configure commit or push hooks.
 
 Release fixtures need isolated HOME/XDG_CONFIG_HOME when operator-wide Git
 hooks enforce commit-message rules on synthetic fixture commits. Keep the
