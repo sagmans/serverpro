@@ -94,6 +94,20 @@ and `COPY` fixture; inspect the built image and verify its copied file contents.
 Record the command, Docker and Buildx versions, image architecture, and result.
 Do not claim this smoke check passed until its actual result is recorded.
 
+The 2026-10-05 macOS arm64 smoke passed with Docker CLI `29.4.0`, local Docker
+Engine `29.2.0`, Buildx `0.31.1-desktop.1`, and embedded BuildKit `0.27.0`.
+The scratch/COPY build produced a Linux arm64 image. Image identity, the saved
+OCI manifest/config digest chain, root filesystem layer digests, and the exact
+62-byte copied fixture all matched. The sentinel SHA-256 was
+`8bbd833947a6f2e9ade246e61ef6a3eaa715a04abda92efa2bba63075bd1fba8`.
+The first archive verifier rejected a valid build because it treated the
+containerd image ID as a legacy config digest. The corrected verifier checked
+the actual OCI identity chain; the final build and all eleven Docker commands
+passed. Owned images and temporary files were removed; shared build cache was
+not pruned. No runtime upgrade, image execution, networked build step, external
+frontend, image pull, or publication was needed. These existing local runtime
+versions do not establish the managed Linux Buildx `0.37.2` security baseline.
+
 The macOS smoke check does not prove Linux Buildx-to-daemon integration or
 native amd64 and arm64 builder execution. Those checks are outside this
 accepted delivery scope; Ubuntu container checks provide provisioning evidence.
