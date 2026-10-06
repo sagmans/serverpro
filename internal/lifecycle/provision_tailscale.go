@@ -45,13 +45,21 @@ func tailscaleAuthKey(ctx context.Context, c TailscaleClient, creds credentials.
 	return c.CreateAuthKey(ctx, cfg.Access.Tailscale.Tags, 30*time.Minute)
 }
 
-// authKeyCreatedAt reads the control-plane mint time. A missing or unparsable
-// value yields zero, which leaves device selection on its uniqueness-only rule
-// rather than trusting the local clock, which may be skewed.
-func authKeyCreatedAt(key mesh.AuthKey) time.Time {
+// authKeyClockSkewMargin widens the local-clock fallback for the enrolment
+// window. Devices enrolled earlier than this before the key was minted cannot
+// be the new server; a controller clock running further ahead only makes create
+// time out, which fails closed.
+const authKeyClockSkewMargin = 5 * time.Minute
+
+// authKeyCreatedAt returns the earliest time the new server's device can have
+// enrolled. The control-plane mint time is preferred because device creation
+// times use the same clock. Without it, the local clock minus a skew margin
+// still keeps long-lived same-name devices out; a zero window would leave a
+// stale online device as the only match before the new node joins.
+func authKeyCreatedAt(key mesh.AuthKey, now time.Time) time.Time {
 	created, err := time.Parse(time.RFC3339, key.Created)
 	if err != nil {
-		return time.Time{}
+		return now.Add(-authKeyClockSkewMargin).UTC()
 	}
 	return created.UTC()
 }

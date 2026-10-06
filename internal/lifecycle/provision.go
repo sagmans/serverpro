@@ -60,12 +60,14 @@ func Run(ctx context.Context, opt Options) (state.State, error) {
 		if err != nil {
 			return st, newProvisionError(ProvisionPhaseTailscaleAuthKey, st, err)
 		}
+		// Recorded before the key ID checkpoint so the enrolment window is open
+		// even if the control plane returned no key ID.
+		st.Tailscale.AuthKeyCreatedAt = authKeyCreatedAt(minted, opt.now())
 		if keyID != "" {
 			// Fresh bootstrap keys are compensated on every early return. A key for
 			// checkpointed compute remains until that server reaches device readiness.
 			defer func() { _ = cleanupProvisionAuthKey(&st, opt.StatePath, opt.Clients.Tailscale, keyID, save) }()
 			st.Tailscale.AuthKeyID = keyID
-			st.Tailscale.AuthKeyCreatedAt = authKeyCreatedAt(minted)
 			if err := save(opt.StatePath, st); err != nil {
 				return st, newProvisionError(ProvisionPhaseTailscaleAuthKey, st, err)
 			}

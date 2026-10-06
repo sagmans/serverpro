@@ -98,6 +98,20 @@ func TestRunFreshComputeIgnoresLeftoverRecordedDevice(t *testing.T) {
 	}
 }
 
+// A key without a usable control-plane time must still open a bounded window;
+// an unbounded one would let a stale online twin win before the node joins.
+func TestAuthKeyCreatedAtFallsBackToBoundedLocalWindow(t *testing.T) {
+	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	if got := authKeyCreatedAt(tailscale.AuthKey{Created: "2026-10-07T11:59:00Z"}, now); !got.Equal(now.Add(-time.Minute)) {
+		t.Fatalf("control-plane time = %s", got)
+	}
+	for _, created := range []string{"", "not-a-time"} {
+		if got := authKeyCreatedAt(tailscale.AuthKey{Created: created}, now); !got.Equal(now.Add(-authKeyClockSkewMargin)) {
+			t.Fatalf("fallback for %q = %s", created, got)
+		}
+	}
+}
+
 func TestBestDeviceIDPrefersNodeID(t *testing.T) {
 	if got := bestDeviceID(tailscale.Device{ID: "393735751060", NodeID: "n1"}); got != "n1" {
 		t.Fatalf("bestDeviceID() = %q", got)
