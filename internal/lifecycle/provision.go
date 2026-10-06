@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/sagmans/serverpro/internal/mesh"
 	"github.com/sagmans/serverpro/internal/provider/httpjson"
 	"github.com/sagmans/serverpro/internal/state"
 )
@@ -53,7 +54,9 @@ func Run(ctx context.Context, opt Options) (state.State, error) {
 		if err := cleanupProvisionAuthKey(&st, opt.StatePath, opt.Clients.Tailscale, keyID, save); err != nil {
 			return st, newProvisionError(ProvisionPhaseTailscaleAuthKey, st, err)
 		}
-		key, keyID, err = tailscaleAuthKey(ctx, opt.Clients.Tailscale, opt.Creds, cfg)
+		var minted mesh.AuthKey
+		minted, err = tailscaleAuthKey(ctx, opt.Clients.Tailscale, opt.Creds, cfg)
+		key, keyID = minted.Key, minted.ID
 		if err != nil {
 			return st, newProvisionError(ProvisionPhaseTailscaleAuthKey, st, err)
 		}
@@ -62,6 +65,7 @@ func Run(ctx context.Context, opt Options) (state.State, error) {
 			// checkpointed compute remains until that server reaches device readiness.
 			defer func() { _ = cleanupProvisionAuthKey(&st, opt.StatePath, opt.Clients.Tailscale, keyID, save) }()
 			st.Tailscale.AuthKeyID = keyID
+			st.Tailscale.AuthKeyCreatedAt = authKeyCreatedAt(minted)
 			if err := save(opt.StatePath, st); err != nil {
 				return st, newProvisionError(ProvisionPhaseTailscaleAuthKey, st, err)
 			}

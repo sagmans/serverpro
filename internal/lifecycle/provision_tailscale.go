@@ -35,18 +35,25 @@ func ensureTailscalePolicy(ctx context.Context, st *state.State, stPath string, 
 // A stored user-supplied key is refused even when an API token is present: its
 // namespace scope cannot be verified from here, and honouring it conditionally
 // would let one credentials file behave two different ways.
-func tailscaleAuthKey(ctx context.Context, c TailscaleClient, creds credentials.Set, cfg config.Config) (key string, id string, err error) {
+func tailscaleAuthKey(ctx context.Context, c TailscaleClient, creds credentials.Set, cfg config.Config) (mesh.AuthKey, error) {
 	if creds.TSAuthKey != "" {
-		return "", "", fmt.Errorf("user-supplied tailscale_auth_key cannot be verified as namespace-scoped; remove it and provision with a Tailscale API token")
+		return mesh.AuthKey{}, fmt.Errorf("user-supplied tailscale_auth_key cannot be verified as namespace-scoped; remove it and provision with a Tailscale API token")
 	}
 	if creds.Tailscale == "" {
-		return "", "", fmt.Errorf("tailscale API token required")
+		return mesh.AuthKey{}, fmt.Errorf("tailscale API token required")
 	}
-	created, err := c.CreateAuthKey(ctx, cfg.Access.Tailscale.Tags, 30*time.Minute)
+	return c.CreateAuthKey(ctx, cfg.Access.Tailscale.Tags, 30*time.Minute)
+}
+
+// authKeyCreatedAt reads the control-plane mint time. A missing or unparsable
+// value yields zero, which leaves device selection on its uniqueness-only rule
+// rather than trusting the local clock, which may be skewed.
+func authKeyCreatedAt(key mesh.AuthKey) time.Time {
+	created, err := time.Parse(time.RFC3339, key.Created)
 	if err != nil {
-		return "", "", err
+		return time.Time{}
 	}
-	return created.Key, created.ID, nil
+	return created.UTC()
 }
 
 func validateTailscaleSSHPolicy(ctx context.Context, c TailscaleClient, creds credentials.Set, cfg config.Config) error {
@@ -56,11 +63,20 @@ func validateTailscaleSSHPolicy(ctx context.Context, c TailscaleClient, creds cr
 	return c.ValidateSSHPolicy(ctx, cfg.Access.Tailscale.Tags, cfg.Admin.Username, cfg.Access.Tailscale.RootPolicy)
 }
 
+// waitTailscaleDevice binds create to the device this run enrolled. Bootstrap
+// secrets later travel to the recorded name, so a rerun keeps the recorded
+// device instead of searching again, and a first bind ignores devices that
+// predate the single-use bootstrap key.
 func waitTailscaleDevice(ctx context.Context, st *state.State, stPath string, creds credentials.Set, cfg config.Config, c TailscaleClient, save provisionStateSaver) error {
 	if creds.Tailscale == "" {
 		return nil
 	}
-	dev, err := c.WaitDevice(ctx, mesh.DeviceQuery{Hostname: cfg.Compute.Name, Tags: cfg.Access.Tailscale.Tags})
+	dev, err := c.WaitDevice(ctx, mesh.DeviceQuery{
+		Hostname:         cfg.Compute.Name,
+		Tags:             cfg.Access.Tailscale.Tags,
+		NodeID:           st.Tailscale.NodeID,
+		CreatedNotBefore: st.Tailscale.AuthKeyCreatedAt,
+	})
 	if err != nil {
 		return err
 	}
@@ -68,6 +84,7 @@ func waitTailscaleDevice(ctx context.Context, st *state.State, stPath string, cr
 	st.Tailscale.Name = bestName(dev)
 	st.Tailscale.IPs = dev.Addresses
 	st.Tailscale.Tags = dev.Tags
+	st.Tailscale.AuthKeyCreatedAt = time.Time{}
 	return save(stPath, *st)
 }
 

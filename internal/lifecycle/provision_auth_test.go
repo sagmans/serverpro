@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
@@ -44,6 +45,36 @@ func TestRunRejectsProvidedAuthKeyWithAPIToken(t *testing.T) {
 	}
 	if h.userData != "" {
 		t.Fatal("should not render cloud-init with a user-supplied auth key")
+	}
+}
+
+// TestRunBindsDeviceToBootstrapKeyThenRecordedID pins how create chooses the
+// node that receives bootstrap secrets: the first bind only accepts devices
+// enrolled after the single-use key, and a rerun keeps the recorded device.
+func TestRunBindsDeviceToBootstrapKeyThenRecordedID(t *testing.T) {
+	cfg := config.Example("prod")
+	cfg.Cloudflare.AccountID = "acc"
+	ts := &fakeTailscale{keyCreated: "2026-10-07T10:00:00Z"}
+	path := provisionStatePath(t)
+	opt := Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api-token", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}}
+
+	st, err := Run(context.Background(), opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 10, 7, 10, 0, 0, 0, time.UTC)
+	if len(ts.waitQueries) != 1 || !ts.waitQueries[0].CreatedNotBefore.Equal(want) || ts.waitQueries[0].NodeID != "" {
+		t.Fatalf("first bind query = %+v", ts.waitQueries)
+	}
+	if st.Tailscale.NodeID != "d1" || !st.Tailscale.AuthKeyCreatedAt.IsZero() {
+		t.Fatalf("bound state = %+v", st.Tailscale)
+	}
+
+	if _, err := Run(context.Background(), opt); err != nil {
+		t.Fatal(err)
+	}
+	if len(ts.waitQueries) != 2 || ts.waitQueries[1].NodeID != "d1" {
+		t.Fatalf("rerun query = %+v", ts.waitQueries)
 	}
 }
 

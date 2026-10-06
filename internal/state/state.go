@@ -42,15 +42,20 @@ type ComputeState struct {
 }
 
 type TailscaleState struct {
-	Tailnet         string   `json:"tailnet,omitempty"`
-	NodeID          string   `json:"node_id,omitempty"`
-	AuthKeyID       string   `json:"auth_key_id,omitempty"`
-	Name            string   `json:"name,omitempty"`
-	IPs             []string `json:"ips,omitempty"`
-	Tags            []string `json:"tags,omitempty"`
-	PolicyTagOwners []string `json:"policy_tag_owners,omitempty"`
-	PolicySSHRule   bool     `json:"policy_ssh_rule,omitempty"`
-	PolicySSHTags   []string `json:"policy_ssh_tags,omitempty"`
+	Tailnet   string `json:"tailnet,omitempty"`
+	NodeID    string `json:"node_id,omitempty"`
+	AuthKeyID string `json:"auth_key_id,omitempty"`
+	// AuthKeyCreatedAt is the control-plane mint time of the bootstrap key. It
+	// marks the earliest moment the managed device can have enrolled, so create
+	// reruns can still ignore older devices that share the hostname. Cleared
+	// once NodeID binds the device.
+	AuthKeyCreatedAt time.Time `json:"auth_key_created_at,omitzero"`
+	Name             string    `json:"name,omitempty"`
+	IPs              []string  `json:"ips,omitempty"`
+	Tags             []string  `json:"tags,omitempty"`
+	PolicyTagOwners  []string  `json:"policy_tag_owners,omitempty"`
+	PolicySSHRule    bool      `json:"policy_ssh_rule,omitempty"`
+	PolicySSHTags    []string  `json:"policy_ssh_tags,omitempty"`
 }
 
 type CloudflareTunnelProvenance string

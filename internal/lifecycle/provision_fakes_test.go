@@ -66,6 +66,8 @@ type fakeTailscale struct {
 	deletedKeyIDs []string
 	policyErr     error
 	policyChange  tailscale.ServerproPolicyChange
+	keyCreated    string
+	waitQueries   []mesh.DeviceQuery
 }
 
 func (f *fakeTailscale) CreateAuthKey(context.Context, []string, time.Duration) (tailscale.AuthKey, error) {
@@ -74,7 +76,7 @@ func (f *fakeTailscale) CreateAuthKey(context.Context, []string, time.Duration) 
 	if f.keyErr != nil {
 		return tailscale.AuthKey{}, f.keyErr
 	}
-	return tailscale.AuthKey{ID: "k1", Key: "tskey-auth-created"}, nil
+	return tailscale.AuthKey{ID: "k1", Key: "tskey-auth-created", Created: f.keyCreated}, nil
 }
 
 func (f *fakeTailscale) DeleteAuthKey(_ context.Context, keyID string) error {
@@ -99,8 +101,9 @@ func (f *fakeTailscale) ValidateSSHPolicy(context.Context, []string, string, str
 	return nil
 }
 
-func (f *fakeTailscale) WaitDevice(context.Context, mesh.DeviceQuery) (tailscale.Device, error) {
+func (f *fakeTailscale) WaitDevice(_ context.Context, q mesh.DeviceQuery) (tailscale.Device, error) {
 	f.calls = append(f.calls, "wait-device")
+	f.waitQueries = append(f.waitQueries, q)
 	return tailscale.Device{ID: "device-d1", NodeID: "d1", Name: "prod-01", Tags: []string{"tag:serverpro-server"}, Online: true}, nil
 }
 
