@@ -254,9 +254,11 @@ flowchart LR
 8. Create compute through the lifecycle-owned `ComputeCreator.Create` boundary,
    then wait for and checkpoint its Tailscale device. The first bind accepts
    only one device that matches the name and tags and enrolled at or after the
-   auth key's control-plane creation time; reruns re-check the recorded device
+   auth key's control-plane creation time (or the local clock minus a 5-minute
+   skew margin when that time is absent); reruns re-check the recorded device
    ID and never search by name again. More than one candidate, or a missing or
-   changed recorded device, fails before any remote step. Every mutation failure
+   changed recorded device, fails before any remote step. Doctor applies the
+   same check and skips every remote command when it fails. Every mutation failure
    returns a typed lifecycle phase plus non-secret resource IDs, including IDs
    whose checkpoint failed.
 9. Wait for Tailscale SSH and converge the managed host tools through the

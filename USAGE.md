@@ -291,7 +291,8 @@ enrolled after its bootstrap key, or when a rerun finds the recorded device
 missing or renamed; the error lists the device IDs. Older devices with the same
 name are ignored. Remove the unexpected devices in the Tailscale admin console,
 then rerun create. Doctor reports the same conflicts on the `tailscale node`
-check with code `tailscale_device_identity`. A definitive checkpoint
+check with code `tailscale_device_identity` and skips all remote checks and
+repairs, including `--fix`, until the conflict is resolved. A definitive checkpoint
 failure deletes only the tunnel created by that attempt, never an adopted one.
 Durable state records whether each tunnel was created, adopted, or imported;
 delete removes only tunnels proven created by serverpro. Legacy state without
