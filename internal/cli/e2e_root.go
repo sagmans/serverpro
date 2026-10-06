@@ -57,6 +57,16 @@ const (
 	e2eDoctorEvidenceHeadBytes       = 1024
 	e2eDoctorPadding                 = "."
 	e2eDoctorPackageFailureStatus    = 1
+	// e2eTailnetTwinEnv adds devices that share the managed hostname and tags,
+	// so journeys prove create binds the enrolled node and fails closed on
+	// ambiguity before any remote step.
+	e2eTailnetTwinEnv       = "SERVERPRO_E2E_TAILNET_TWIN"
+	e2eTailnetTwinStale     = "stale"
+	e2eTailnetTwinAmbiguous = "ambiguous"
+	e2eStaleDeviceID        = "e2e-stale-device"
+	e2eTwinDeviceID         = "e2e-twin-device"
+	e2eStaleDeviceAge       = 24 * time.Hour
+	e2eEnrolDelay           = time.Minute
 )
 
 var e2eNow = time.Date(2026, time.July, 23, 12, 0, 0, 0, time.UTC)
@@ -146,7 +156,7 @@ func (e2eTailscale) Policy(context.Context) (mesh.Policy, error) {
 }
 
 func (e2eTailscale) CreateAuthKey(context.Context, []string, time.Duration) (mesh.AuthKey, error) {
-	return mesh.AuthKey{ID: e2eAuthKeyID, Key: e2eAuthKey}, nil
+	return mesh.AuthKey{ID: e2eAuthKeyID, Key: e2eAuthKey, Created: e2eNow.Format(time.RFC3339)}, nil
 }
 
 func (e2eTailscale) DeleteAuthKey(context.Context, string) error { return nil }
@@ -157,8 +167,20 @@ func (e2eTailscale) EnsureServerproPolicy(context.Context, []string, string, str
 
 func (e2eTailscale) ValidateSSHPolicy(context.Context, []string, string, string) error { return nil }
 
+// WaitDevice runs the production selector over a synthetic tailnet listing so
+// e2e journeys exercise the same identity rule as a real control plane.
 func (e2eTailscale) WaitDevice(_ context.Context, q mesh.DeviceQuery) (mesh.Device, error) {
-	return mesh.Device{NodeID: e2eDeviceID, Name: q.Hostname, Hostname: q.Hostname, Addresses: []string{e2eDeviceIP}, Tags: append([]string(nil), q.Tags...), Online: true}, nil
+	device := func(id string, created time.Time) mesh.Device {
+		return mesh.Device{NodeID: id, Name: q.Hostname, Hostname: q.Hostname, Addresses: []string{e2eDeviceIP}, Tags: append([]string(nil), q.Tags...), Online: true, Created: created.Format(time.RFC3339)}
+	}
+	devices := []mesh.Device{device(e2eDeviceID, e2eNow.Add(e2eEnrolDelay))}
+	switch os.Getenv(e2eTailnetTwinEnv) {
+	case e2eTailnetTwinStale:
+		devices = append([]mesh.Device{device(e2eStaleDeviceID, e2eNow.Add(-e2eStaleDeviceAge))}, devices...)
+	case e2eTailnetTwinAmbiguous:
+		devices = append(devices, device(e2eTwinDeviceID, e2eNow.Add(2*e2eEnrolDelay)))
+	}
+	return mesh.SelectDevice(devices, q)
 }
 
 type e2eDoctorRemote struct {
