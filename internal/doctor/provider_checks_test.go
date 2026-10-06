@@ -45,6 +45,36 @@ func TestProviderInventoryUsesBoundedTailscaleLookup(t *testing.T) {
 	}
 }
 
+type identityTailscale struct {
+	query mesh.DeviceQuery
+	err   error
+}
+
+func (c *identityTailscale) WaitDevice(_ context.Context, q mesh.DeviceQuery) (mesh.Device, error) {
+	c.query = q
+	return mesh.Device{}, c.err
+}
+
+// Doctor must check the recorded device, and an identity conflict needs its
+// own code so automation does not treat it as an ordinary offline node.
+func TestTailscaleNodeCheckBindsRecordedDeviceAndCodesIdentityConflicts(t *testing.T) {
+	cfg := config.Example("prod")
+	st := state.State{Tailscale: state.TailscaleState{Name: "prod-01.example.ts.net", NodeID: "n-recorded"}}
+	client := &identityTailscale{err: mesh.ErrBoundDeviceMissing}
+	res := checkTailscaleNode(context.Background(), cfg, st, "ts-token-long", client)
+	if client.query.NodeID != "n-recorded" {
+		t.Fatalf("query = %+v, want recorded node id", client.query)
+	}
+	if res.Status != Fail || res.Code != TailscaleDeviceIdentityCode {
+		t.Fatalf("result = %+v", res)
+	}
+
+	client.err = context.DeadlineExceeded
+	if res := checkTailscaleNode(context.Background(), cfg, st, "ts-token-long", client); res.Status != Fail || res.Code != "" {
+		t.Fatalf("offline result = %+v, want uncoded failure", res)
+	}
+}
+
 func TestCloudflareInventoryRequiresClient(t *testing.T) {
 	items := cloudflareInventory(context.Background(), state.State{Cloudflare: state.CloudflareState{TunnelID: "tun1", Name: "from-state"}}, nil)
 	if len(items) != 0 {

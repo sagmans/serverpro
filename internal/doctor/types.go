@@ -17,6 +17,10 @@ const (
 	SudoPasswordCheckName       = "sudo password required"
 	SudoPasswordAuthRemediation = "inspect remote sudo password authentication"
 	SudoPasswordAuthFailureCode = ResultCode("sudo_password_auth_failure")
+	// TailscaleDeviceIdentityCode marks a tailnet node check that found the
+	// recorded device missing or changed, or several devices claiming the
+	// server's identity. Automation can tell it apart from a plain offline node.
+	TailscaleDeviceIdentityCode = ResultCode("tailscale_device_identity")
 )
 
 type Options struct {

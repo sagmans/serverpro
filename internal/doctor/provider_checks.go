@@ -79,12 +79,30 @@ func checkTailscaleNode(ctx context.Context, cfg config.Config, st state.State, 
 		return fail("provider", "tailscale node", "no tailscale client", "configure provider")
 	}
 	tsCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	dev, err := client.WaitDevice(tsCtx, mesh.DeviceQuery{Hostname: tailscaleLookupName(cfg, st), Tags: cfg.Access.Tailscale.Tags})
+	dev, err := client.WaitDevice(tsCtx, tailscaleDeviceQuery(cfg, st))
 	cancel()
+	if isDeviceIdentityError(err) {
+		result := fail("provider", "tailscale node", err.Error(), "confirm which tailnet device is this server; remove stale or unexpected devices with the same name before running commands that reach the host")
+		result.Code = TailscaleDeviceIdentityCode
+		return result
+	}
 	if err != nil {
 		return fail("provider", "tailscale node", err.Error(), "check auth key, tags, ACL/device approval")
 	}
 	return pass("provider", "tailscale node", fmt.Sprintf("%s api_reported_online=%t control_connected=%t", dev.Name, dev.Online, dev.ConnectedToControl))
+}
+
+// tailscaleDeviceQuery checks the device recorded at create or import when
+// one exists. A name-only lookup could report a different node with the same
+// name as healthy.
+func tailscaleDeviceQuery(cfg config.Config, st state.State) mesh.DeviceQuery {
+	return mesh.DeviceQuery{Hostname: tailscaleLookupName(cfg, st), Tags: cfg.Access.Tailscale.Tags, NodeID: st.Tailscale.NodeID}
+}
+
+// isDeviceIdentityError separates identity conflicts, which need an operator
+// decision, from reachability failures that a retry or restart can clear.
+func isDeviceIdentityError(err error) bool {
+	return errors.Is(err, mesh.ErrDeviceAmbiguous) || errors.Is(err, mesh.ErrBoundDeviceMissing) || errors.Is(err, mesh.ErrBoundDeviceMismatch)
 }
 
 func tailscaleLookupName(cfg config.Config, st state.State) string {
