@@ -9,6 +9,7 @@ import (
 	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
+	"github.com/sagmans/serverpro/internal/mesh"
 	"github.com/sagmans/serverpro/internal/state"
 )
 
@@ -42,7 +43,7 @@ func tailscaleInventory(ctx context.Context, cfg config.Config, st state.State, 
 	}
 	tsCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	dev, err := client.WaitDevice(tsCtx, tailscaleLookupName(cfg, st), cfg.Access.Tailscale.Tags)
+	dev, err := client.WaitDevice(tsCtx, mesh.DeviceQuery{Hostname: tailscaleLookupName(cfg, st), Tags: cfg.Access.Tailscale.Tags})
 	if err != nil {
 		return nil
 	}

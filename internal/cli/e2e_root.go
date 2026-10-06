@@ -157,8 +157,8 @@ func (e2eTailscale) EnsureServerproPolicy(context.Context, []string, string, str
 
 func (e2eTailscale) ValidateSSHPolicy(context.Context, []string, string, string) error { return nil }
 
-func (e2eTailscale) WaitDevice(_ context.Context, name string, tags []string) (mesh.Device, error) {
-	return mesh.Device{NodeID: e2eDeviceID, Name: name, Hostname: name, Addresses: []string{e2eDeviceIP}, Tags: append([]string(nil), tags...), Online: true}, nil
+func (e2eTailscale) WaitDevice(_ context.Context, q mesh.DeviceQuery) (mesh.Device, error) {
+	return mesh.Device{NodeID: e2eDeviceID, Name: q.Hostname, Hostname: q.Hostname, Addresses: []string{e2eDeviceIP}, Tags: append([]string(nil), q.Tags...), Online: true}, nil
 }
 
 type e2eDoctorRemote struct {

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/mesh"
 	"github.com/sagmans/serverpro/internal/provider/cloudflare"
 	"github.com/sagmans/serverpro/internal/provider/tailscale"
 )
@@ -98,7 +99,7 @@ func (f *fakeTailscale) ValidateSSHPolicy(context.Context, []string, string, str
 	return nil
 }
 
-func (f *fakeTailscale) WaitDevice(context.Context, string, []string) (tailscale.Device, error) {
+func (f *fakeTailscale) WaitDevice(context.Context, mesh.DeviceQuery) (tailscale.Device, error) {
 	f.calls = append(f.calls, "wait-device")
 	return tailscale.Device{ID: "device-d1", NodeID: "d1", Name: "prod-01", Tags: []string{"tag:serverpro-server"}, Online: true}, nil
 }

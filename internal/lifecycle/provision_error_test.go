@@ -9,6 +9,7 @@ import (
 	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
+	"github.com/sagmans/serverpro/internal/mesh"
 	"github.com/sagmans/serverpro/internal/provider/tailscale"
 	"github.com/sagmans/serverpro/internal/state"
 )
@@ -168,6 +169,6 @@ type deviceFailTailscale struct {
 	err error
 }
 
-func (f *deviceFailTailscale) WaitDevice(context.Context, string, []string) (tailscale.Device, error) {
+func (f *deviceFailTailscale) WaitDevice(context.Context, mesh.DeviceQuery) (tailscale.Device, error) {
 	return tailscale.Device{}, f.err
 }

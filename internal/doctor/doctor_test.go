@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/mesh"
 	"github.com/sagmans/serverpro/internal/provider/cloudflare"
 	"github.com/sagmans/serverpro/internal/provider/tailscale"
 )
@@ -54,7 +55,7 @@ func (f fakeCompute) Status(_ context.Context, ref compute.ServerRef) (compute.S
 
 type fakeTailscale struct{}
 
-func (fakeTailscale) WaitDevice(context.Context, string, []string) (tailscale.Device, error) {
+func (fakeTailscale) WaitDevice(context.Context, mesh.DeviceQuery) (tailscale.Device, error) {
 	return tailscale.Device{Name: "prod-01.tailnet.ts.net", Hostname: "prod-01", Addresses: []string{"100.64.0.1"}, Tags: []string{"tag:serverpro-server"}, Online: false, ConnectedToControl: true}, nil
 }
 

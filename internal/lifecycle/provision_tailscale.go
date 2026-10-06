@@ -60,7 +60,7 @@ func waitTailscaleDevice(ctx context.Context, st *state.State, stPath string, cr
 	if creds.Tailscale == "" {
 		return nil
 	}
-	dev, err := c.WaitDevice(ctx, cfg.Compute.Name, cfg.Access.Tailscale.Tags)
+	dev, err := c.WaitDevice(ctx, mesh.DeviceQuery{Hostname: cfg.Compute.Name, Tags: cfg.Access.Tailscale.Tags})
 	if err != nil {
 		return err
 	}

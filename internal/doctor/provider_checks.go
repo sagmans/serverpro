@@ -9,6 +9,7 @@ import (
 
 	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/mesh"
 	"github.com/sagmans/serverpro/internal/ownership"
 	"github.com/sagmans/serverpro/internal/state"
 )
@@ -78,7 +79,7 @@ func checkTailscaleNode(ctx context.Context, cfg config.Config, st state.State, 
 		return fail("provider", "tailscale node", "no tailscale client", "configure provider")
 	}
 	tsCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	dev, err := client.WaitDevice(tsCtx, tailscaleLookupName(cfg, st), cfg.Access.Tailscale.Tags)
+	dev, err := client.WaitDevice(tsCtx, mesh.DeviceQuery{Hostname: tailscaleLookupName(cfg, st), Tags: cfg.Access.Tailscale.Tags})
 	cancel()
 	if err != nil {
 		return fail("provider", "tailscale node", err.Error(), "check auth key, tags, ACL/device approval")

@@ -131,9 +131,9 @@ type countingTailscaleClient struct {
 	calls int
 }
 
-func (c *countingTailscaleClient) WaitDevice(ctx context.Context, name string, tags []string) (mesh.Device, error) {
+func (c *countingTailscaleClient) WaitDevice(ctx context.Context, q mesh.DeviceQuery) (mesh.Device, error) {
 	c.calls++
-	return fakeTailscale{}.WaitDevice(ctx, name, tags)
+	return fakeTailscale{}.WaitDevice(ctx, q)
 }
 
 type countingCloudflareClient struct {

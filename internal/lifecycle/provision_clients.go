@@ -21,7 +21,7 @@ type TailscaleClient interface {
 	DeleteAuthKey(context.Context, string) error
 	EnsureServerproPolicy(context.Context, []string, string, string) (mesh.PolicyChange, error)
 	ValidateSSHPolicy(context.Context, []string, string, string) error
-	WaitDevice(context.Context, string, []string) (mesh.Device, error)
+	WaitDevice(context.Context, mesh.DeviceQuery) (mesh.Device, error)
 }
 
 type CloudflareClient interface {

@@ -8,6 +8,7 @@ import (
 	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/ingress"
+	"github.com/sagmans/serverpro/internal/mesh"
 	"github.com/sagmans/serverpro/internal/provider/tailscale"
 	"github.com/sagmans/serverpro/internal/state"
 )
@@ -27,9 +28,9 @@ func (timedOutCloudflare) GetTunnel(context.Context, string) (ingress.Tunnel, er
 	return ingress.Tunnel{}, context.DeadlineExceeded
 }
 
-func (d *deadlineCheckingTailscale) WaitDevice(ctx context.Context, name string, tags []string) (tailscale.Device, error) {
+func (d *deadlineCheckingTailscale) WaitDevice(ctx context.Context, q mesh.DeviceQuery) (tailscale.Device, error) {
 	_, d.deadlineSeen = ctx.Deadline()
-	return tailscale.Device{Name: name, Online: true, ConnectedToControl: true}, nil
+	return tailscale.Device{Name: q.Hostname, Online: true, ConnectedToControl: true}, nil
 }
 
 func TestProviderInventoryUsesBoundedTailscaleLookup(t *testing.T) {
