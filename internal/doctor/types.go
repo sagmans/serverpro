@@ -21,6 +21,10 @@ const (
 	// recorded device missing or changed, or several devices claiming the
 	// server's identity. Automation can tell it apart from a plain offline node.
 	TailscaleDeviceIdentityCode = ResultCode("tailscale_device_identity")
+	// remoteChecksBlocked* report that doctor sent nothing to the host because
+	// the tailnet device identity check failed.
+	remoteChecksBlockedName     = "remote checks"
+	remoteChecksBlockedEvidence = "skipped: tailnet device identity is unresolved, so no command or credential was sent to the host"
 )
 
 type Options struct {

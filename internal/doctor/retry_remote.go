@@ -12,6 +12,13 @@ import (
 // RetryRemote refreshes only host-scoped evidence after sudo authentication;
 // provider snapshots from the original run remain authoritative for that run.
 func RetryRemote(ctx context.Context, cfg config.Config, st state.State, existing Report, runner remote.Runner, opt Options) Report {
+	// The retry carries the sudo password, so it inherits the original run's
+	// identity verdict instead of reaching a host that run refused to trust.
+	for _, result := range existing.Results {
+		if result.Code == TailscaleDeviceIdentityCode {
+			return existing
+		}
+	}
 	inventory := replaceRemoteInventory(existing.Inventory, remoteInventory(ctx, runner, cfg.Admin.Username, st.Tailscale.Name))
 	results := replaceRemoteResults(existing.Results, remoteChecksWithOptions(ctx, cfg, runner, st.Tailscale.Name, opt))
 	for i := range results {
