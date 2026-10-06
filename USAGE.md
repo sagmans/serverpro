@@ -525,7 +525,11 @@ The existing cloud-init detail log remains at
 
 `serverpro server doctor NAME --fix` refreshes package repositories, upgrades
 serverpro-managed apt packages, repairs exact pins, and checksum-verifies a
-stale Tailscale release. Tailscale daemon restart is delayed until the updating
+stale Tailscale release. Docker checks also reject altered managed Buildx
+artifacts and unrecognized plugin overrides before execution. Repair retains
+the reviewed binary when apt is below its floor, then returns to a safe apt
+package once available. Operator-owned overrides require operator action;
+repair does not delete them. Tailscale daemon restart is delayed until the updating
 SSH command returns, then doctor waits and rechecks it. When ingress is enabled, doctor verifies cloudflared is active and at or above
 its reviewed `2026.9.3` package floor. Cloudflared remains conditional ingress
 infrastructure and is not upgraded by generic host-tool repair. Bootstrap reruns managed host-tool setup through Tailscale SSH with

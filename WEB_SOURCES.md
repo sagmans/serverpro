@@ -25,7 +25,7 @@ Both mise GNU/Linux archives were downloaded independently and matched published
 | Tailscale | 1.102.4 | 2026-09-10 | Normal age gate |
 | Docker Engine / CLI | 29.8.2 | 2026-09-30 | Approved security exception |
 | containerd | 2.3.6 | 2026-09-24 23:13:08 | Normal age gate; preserve Docker's 2.3 package line |
-| Buildx | 0.37.2 | 2026-09-30 | Approved security exception; apt publication pending |
+| Buildx | 0.37.2 | 2026-09-30 | Approved security exception; reviewed official binary fallback |
 | Compose | 5.5.1 | 2026-09-03 | Normal age gate |
 | mise | 2026.10.0 | 2026-10-02 01:42:32 | Approved security exception; fixes inline-options token exfiltration |
 | Node.js | 24.21.0 LTS | 2026-09-07 | Normal age gate |
@@ -60,8 +60,20 @@ Primary selection and security evidence:
 - https://github.com/Ataraxy-Labs/sem/releases/download/v0.25.0/checksums.txt
 
 The Docker repository contains Engine 29.8.2 and containerd 2.3.6 on both
-architectures, but only Buildx 0.37.1. Require the patched Buildx floor and
-reject unavailable candidates rather than install a known-vulnerable release.
+architectures, but only Buildx 0.37.1. Keep the patched floor; use the reviewed
+official binary when apt cannot satisfy it. Both Linux binaries were independently
+downloaded and matched `checksums.txt` and GitHub release asset digests.
+
+- amd64 SHA-256: `982ca20490b45ed1ec8d99795974d3d874a358f75938c9c237305010e6b7e548`
+- arm64 SHA-256: `efa38cb7aa7db2dbb9ad049b00b0a9737f66f033626177b5a4e845184ad7ab29`
+- https://github.com/docker/buildx/releases/tag/v0.37.2
+- https://github.com/docker/buildx/releases/download/v0.37.2/checksums.txt
+- https://github.com/docker/buildx#manual-download
+- https://github.com/docker/cli/blob/master/cli-plugins/manager/manager.go
+
+Docker documents system-wide manual plugin installation but discourages
+unmanaged production downloads because automatic security updates are absent.
+ServerPro therefore owns fallback integrity, replacement, and return to apt.
 The disposable Ubuntu arm64 installation verified every managed user-tool
 version and the Herdr Pi integration. Pi `0.87.1` then failed npm audit: its
 `npm-shrinkwrap.json` pins `brace-expansion@5.0.9`. Pi `1.0.0` contains the
@@ -81,7 +93,7 @@ repair after drift, and the runtime dependency audit with zero vulnerabilities.
 
 These findings are a point-in-time review, not proof that all dependencies or
 artifacts are safe. The local Pi repair passed its runtime dependency audit.
-Buildx availability remains a deployment prerequisite.
+A safe Buildx apt package or the reviewed official binary is required.
 Revalidate signed repository metadata before deployment.
 
 ## Core references

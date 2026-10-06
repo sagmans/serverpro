@@ -137,6 +137,10 @@ func manifestEnvPairs() [][2]string {
 		{"SERVERPRO_BOOTSTRAP_HOST_ARCHITECTURES", strings.Join(hostplatform.ManagedHostKernelArchitectures(), " ")},
 		{"SERVERPRO_BOOTSTRAP_PACKAGE_BASELINES", hostplatform.PackageBaselineManifest(hostplatform.BootstrapPackageBaselines())},
 		{"SERVERPRO_BOOTSTRAP_MIN_MISE_VERSION", MinimumMiseVersion},
+		{"SERVERPRO_BOOTSTRAP_BUILDX_VERSION", BuildxVersion},
+		{"SERVERPRO_BOOTSTRAP_BUILDX_SHA256_AMD64", BuildxLinuxAMD64SHA256},
+		{"SERVERPRO_BOOTSTRAP_BUILDX_SHA256_ARM64", BuildxLinuxARM64SHA256},
+		{"SERVERPRO_BOOTSTRAP_BUILDX_PROBE_BASE64", base64.StdEncoding.EncodeToString([]byte(buildxCheckCommand()))},
 		{"SERVERPRO_BOOTSTRAP_MISE_SHA256_LINUX_X64", MiseLinuxX64TarGzSHA256},
 		{"SERVERPRO_BOOTSTRAP_MISE_SHA256_LINUX_ARM64", MiseLinuxArm64TarGzSHA256},
 	}
@@ -217,7 +221,7 @@ type Check struct {
 func Checks(user string) []Check {
 	checks := []Check{
 		{Name: "git", Command: userHomeCommand(user, "command -v git >/dev/null && git --version && command -v ssh >/dev/null && ssh -V 2>&1")},
-		{Name: "docker engine", Command: "command -v docker >/dev/null && docker --version && systemctl is-active docker"},
+		{Name: "docker engine", Command: "command -v docker >/dev/null && docker --version && systemctl is-active docker || exit 1; " + buildxCheckCommand()},
 		{Name: "docker compose", Command: "docker compose version"},
 		{Name: "htop", Command: "command -v htop >/dev/null && htop --version | head -n1"},
 		{Name: ManagedPackageCheckName, Command: managedPackageUpdatesCommand()},
@@ -245,16 +249,27 @@ func ManagedPackageRefreshCommand() string {
 
 func managedPackageUpdatesCommand() string {
 	packages := hostplatform.BootstrapPackageBaselines()
-	quoted := make([]string, len(packages))
+	quoted := make([]string, 0, len(packages))
 	var baselineChecks strings.Builder
 	baselineChecks.WriteString(`export LC_ALL=C; installed_package_version() { package_record=$(dpkg-query -W -f='${db:Status-Status}|${Version}' "$1" 2>/dev/null) || return 1; case "$package_record" in installed'|'*) printf '%s' "${package_record#installed|}" ;; *) return 1 ;; esac; }; `)
-	for i, pkg := range packages {
+	// Only the managed namespace substitutes for an otherwise mandatory apt floor.
+	baselineChecks.WriteString("buildx_source=apt; if test -L " + shell.Quote(BuildxPluginPath) + "; then " + buildxCheckCommand() + "; fi; ")
+	for _, pkg := range packages {
 		name := shell.Quote(pkg.Name)
 		minimum := shell.Quote(pkg.MinimumVersion)
-		quoted[i] = name
+		if pkg.Name == BuildxPackage {
+			baselineChecks.WriteString(`if test "$buildx_source" = apt; then `)
+		} else {
+			quoted = append(quoted, name)
+		}
 		fmt.Fprintf(&baselineChecks, `installed=$(installed_package_version %s) || { printf 'managed package missing: %s\n' >&2; exit 1; }; dpkg --compare-versions "$installed" ge %s || { printf 'managed package below baseline: %s %%s < %s\n' "$installed" >&2; exit 1; }; `, name, pkg.Name, minimum, pkg.Name, pkg.MinimumVersion)
+		if pkg.Name == BuildxPackage {
+			baselineChecks.WriteString("fi; ")
+		}
 	}
-	return baselineChecks.String() + "set -- " + strings.Join(quoted, " ") + `; out=$(apt-get -s -o Debug::NoLocking=1 --no-install-recommends install "$@" 2>&1) || { printf '%s\n' "$out" >&2; exit 1; }; if printf '%s\n' "$out" | grep -q '^Inst '; then printf 'managed package updates available\n' >&2; exit 1; fi; printf 'current\n'`
+	// A newly-safe apt candidate must displace the managed fallback on repair.
+	baselineChecks.WriteString(`if test "$buildx_source" = managed; then candidate=$(apt-cache policy ` + BuildxPackage + ` | awk '$1 == "Candidate:" {print $2}'); if test -n "$candidate" && test "$candidate" != '(none)' && dpkg --compare-versions "$candidate" ge "$buildx_package_minimum"; then printf 'Buildx apt migration available\n' >&2; exit 1; fi; fi; `)
+	return baselineChecks.String() + "set -- " + strings.Join(quoted, " ") + `; if test "$buildx_source" = apt; then set -- "$@" ` + shell.Quote(BuildxPackage) + `; fi; out=$(apt-get -s -o Debug::NoLocking=1 --no-install-recommends install "$@" 2>&1) || { printf '%s\n' "$out" >&2; exit 1; }; if printf '%s\n' "$out" | grep -q '^Inst '; then printf 'managed package updates available\n' >&2; exit 1; fi; printf 'current\n'`
 }
 
 func herdrVerifiedCommand() string {

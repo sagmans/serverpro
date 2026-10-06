@@ -59,6 +59,66 @@ received zero requests. The probe used only a synthetic token and no
 `MISE_SAFE` override. No live systems or credentials were used.
 See `WEB_SOURCES.md` for the public evidence.
 
+The Buildx fallback ran through the production Docker install and shared
+diagnostic probe in disposable Ubuntu 24.04 amd64 and arm64 containers.
+Real Docker CLI and Buildx version checks, repeated convergence, altered-byte
+rejection and repair, and pre-execution rejection of a shadow plugin passed.
+A corrupt synthetic download stopped before execution or Docker package
+scripts. The full production package-doctor command passed with the fallback.
+A local package fixture containing the reviewed binary verified safe-package
+migration and return to package-based diagnosis on both architectures. This
+fixture was not a published vendor package. Controlled directory-boundary
+and failed-convergence scenarios also passed on both architectures. Ambiguous
+configured directories stopped before plugin execution; failed convergence
+preserved the exact verified alias and did not continue to package upgrade.
+
+No host home, credentials, Docker socket, or privileged mode was used.
+Systemd activation and firewall effects were not verified in these containers.
+A container-local Docker daemon started, and the verified Buildx connected.
+Image construction failed at a bind mount (`err: operation not permitted`)
+under default container capabilities. An approved isolated rootless worker
+later verified an amd64 OCI export, architecture, content digests, and copied
+file contents. Dependency scanning stopped that worker before the arm64 build.
+No further builds may use the rejected worker. These historical results do not
+define the current image-build acceptance scope below.
+
+### Local Buildx acceptance
+
+Keep provisioning and image-build verification separate. Disposable Ubuntu
+24.04 amd64 and arm64 containers verify fallback installation, checksum and
+plugin selection, package preflight, doctor, and lifecycle safety.
+
+A normal `docker build` on macOS, using the existing local Docker daemon, is
+sufficient for the real image-build smoke check. Use a small `FROM scratch`
+and `COPY` fixture; inspect the built image and verify its copied file contents.
+Record the command, Docker and Buildx versions, image architecture, and result.
+Do not claim this smoke check passed until its actual result is recorded.
+
+The 2026-10-05 macOS arm64 smoke passed with Docker CLI `29.4.0`, local Docker
+Engine `29.2.0`, Buildx `0.31.1-desktop.1`, and embedded BuildKit `0.27.0`.
+The scratch/COPY build produced a Linux arm64 image. Image identity, the saved
+OCI manifest/config digest chain, root filesystem layer digests, and the exact
+62-byte copied fixture all matched. The sentinel SHA-256 was
+`8bbd833947a6f2e9ade246e61ef6a3eaa715a04abda92efa2bba63075bd1fba8`.
+The first archive verifier rejected a valid build because it treated the
+containerd image ID as a legacy config digest. The corrected verifier checked
+the actual OCI identity chain; the final build and all eleven Docker commands
+passed. Owned images and temporary files were removed; shared build cache was
+not pruned. No runtime upgrade, image execution, networked build step, external
+frontend, image pull, or publication was needed. These existing local runtime
+versions do not establish the managed Linux Buildx `0.37.2` security baseline.
+
+The macOS smoke check does not prove Linux Buildx-to-daemon integration or
+native amd64 and arm64 builder execution. Those checks are outside this
+accepted delivery scope; Ubuntu container checks provide provisioning evidence.
+No nested Docker daemon, standalone BuildKit worker, manually managed VM, CI
+runner, separate daemon endpoint, or TLS setup is required for this acceptance.
+Do not mount host sockets, home directories, or credentials into test containers.
+Use only disposable test artifacts; do not access live servers or publish images.
+
+Validation stays local. Existing local gates remain in force; this documentation
+change does not add or configure commit or push hooks.
+
 Release fixtures need isolated HOME/XDG_CONFIG_HOME when operator-wide Git
 hooks enforce commit-message rules on synthetic fixture commits. Keep the
 real repository’s commit hooks and signing configuration unchanged.
