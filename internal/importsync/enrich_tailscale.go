@@ -2,6 +2,7 @@ package importsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -25,27 +26,14 @@ func MatchTailscaleDevice(ctx context.Context, client meshDeviceLister, candidat
 		wantHost = strings.TrimSuffix(cfg.Compute.Name, ".")
 	}
 	tags := cfg.Access.Tailscale.Tags
-	var matches []mesh.Device
-	for _, device := range devices {
-		if mesh.DeviceMatches(device, wantHost, tags) {
-			matches = append(matches, device)
-		}
-	}
-	if len(matches) == 0 {
+	device, err := mesh.SelectDevice(devices, mesh.DeviceQuery{Hostname: wantHost, Tags: tags})
+	if errors.Is(err, mesh.ErrDeviceNotFound) {
 		// Fall back to hostname-only when tags drifted but name still matches uniquely.
-		for _, device := range devices {
-			if mesh.DeviceMatches(device, wantHost, nil) {
-				matches = append(matches, device)
-			}
-		}
+		device, err = mesh.SelectDevice(devices, mesh.DeviceQuery{Hostname: wantHost})
 	}
-	if len(matches) == 0 {
-		return state.TailscaleState{}, fmt.Errorf("tailscale device %q not found", wantHost)
+	if err != nil {
+		return state.TailscaleState{}, fmt.Errorf("tailscale device lookup failed: %w", err)
 	}
-	if len(matches) > 1 {
-		return state.TailscaleState{}, fmt.Errorf("tailscale device %q is ambiguous", wantHost)
-	}
-	device := matches[0]
 	return state.TailscaleState{
 		Tailnet: cfg.Access.Tailscale.Tailnet,
 		NodeID:  device.NodeID,
