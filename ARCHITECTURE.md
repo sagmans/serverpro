@@ -172,7 +172,8 @@ access paths for app-owned deployment flows.
 - Polling: `internal/poll`
   - Shared context-aware wait policy used by provider and lifecycle polling.
 - Mesh facade: `internal/mesh`
-  - Provider-neutral device/auth-key/policy types and canonical identity matching.
+  - Provider-neutral device/auth-key/policy types, canonical identity matching,
+    and the shared fail-closed device selector used by create, doctor, and import.
 - Tailscale adapter: `internal/provider/tailscale`
   - Mesh API operations and explicit tailnet-global policy reconciliation.
 - Provider utilities: `internal/provider/providerutil`
@@ -251,7 +252,11 @@ flowchart LR
 7. Create and checkpoint the one-off Tailscale auth key, then render cloud-init
    with the shared pinned, checksum-verified Tailscale-first bootstrap.
 8. Create compute through the lifecycle-owned `ComputeCreator.Create` boundary,
-   then wait for and checkpoint its Tailscale device. Every mutation failure
+   then wait for and checkpoint its Tailscale device. The first bind accepts
+   only one device that matches the name and tags and enrolled at or after the
+   auth key's control-plane creation time; reruns re-check the recorded device
+   ID and never search by name again. More than one candidate, or a missing or
+   changed recorded device, fails before any remote step. Every mutation failure
    returns a typed lifecycle phase plus non-secret resource IDs, including IDs
    whose checkpoint failed.
 9. Wait for Tailscale SSH and converge the managed host tools through the

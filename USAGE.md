@@ -285,7 +285,13 @@ before a compute server ID exists. A retry refetches checkpointed provider acces
 policy and fails before compute mutation if ownership, rules/selectors, or
 attachments broadened. If a tunnel was created before its checkpoint was
 published, rerun adopts the one exact-name tunnel instead of creating a
-duplicate; multiple exact matches fail as ambiguous. A definitive checkpoint
+duplicate; multiple exact matches fail as ambiguous. Create also refuses to
+continue when more than one tailnet device with the server's name and tags
+enrolled after its bootstrap key, or when a rerun finds the recorded device
+missing or renamed; the error lists the device IDs. Older devices with the same
+name are ignored. Remove the unexpected devices in the Tailscale admin console,
+then rerun create. Doctor reports the same conflicts on the `tailscale node`
+check with code `tailscale_device_identity`. A definitive checkpoint
 failure deletes only the tunnel created by that attempt, never an adopted one.
 Durable state records whether each tunnel was created, adopted, or imported;
 delete removes only tunnels proven created by serverpro. Legacy state without

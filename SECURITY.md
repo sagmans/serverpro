@@ -49,6 +49,11 @@ serverpro assumes hostile public networks and keeps administration private by
 default.
 
 - Tailscale SSH is mandatory for normal administration.
+- Create binds the server to the one tailnet device that enrolled with its
+  single-use bootstrap key, judged by control-plane creation time, before any
+  secret or bootstrap script leaves the controller. Several matching devices,
+  or a recorded device that is gone or renamed, stop create and doctor instead
+  of choosing one. Doctor and reruns check the recorded device ID, not the name.
 - Public SSH is disabled.
 - Public app ingress defaults to `none`.
 - Post-bootstrap egress lockdown is fail-closed: an omitted
