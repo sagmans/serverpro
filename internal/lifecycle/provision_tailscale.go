@@ -71,12 +71,17 @@ func waitTailscaleDevice(ctx context.Context, st *state.State, stPath string, cr
 	if creds.Tailscale == "" {
 		return nil
 	}
-	dev, err := c.WaitDevice(ctx, mesh.DeviceQuery{
+	q := mesh.DeviceQuery{
 		Hostname:         cfg.Compute.Name,
 		Tags:             cfg.Access.Tailscale.Tags,
-		NodeID:           st.Tailscale.NodeID,
 		CreatedNotBefore: st.Tailscale.AuthKeyCreatedAt,
-	})
+	}
+	// An open enrolment window means this run minted a key for new compute, so
+	// any recorded device belongs to an earlier server and must not be reused.
+	if q.CreatedNotBefore.IsZero() {
+		q.NodeID = st.Tailscale.NodeID
+	}
+	dev, err := c.WaitDevice(ctx, q)
 	if err != nil {
 		return err
 	}

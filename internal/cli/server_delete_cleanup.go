@@ -350,6 +350,7 @@ func clearTailscaleDeviceState(st *state.State) {
 
 func clearTailscaleAuthKeyState(st *state.State) {
 	st.Tailscale.AuthKeyID = ""
+	st.Tailscale.AuthKeyCreatedAt = time.Time{}
 }
 
 func clearTunnelState(st *state.State) {

@@ -9,6 +9,7 @@ import (
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/provider/tailscale"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 func TestRunRejectsProvidedAuthKey(t *testing.T) {
@@ -75,6 +76,25 @@ func TestRunBindsDeviceToBootstrapKeyThenRecordedID(t *testing.T) {
 	}
 	if len(ts.waitQueries) != 2 || ts.waitQueries[1].NodeID != "d1" {
 		t.Fatalf("rerun query = %+v", ts.waitQueries)
+	}
+}
+
+// A device recorded for an earlier server must not satisfy a fresh compute
+// run: the new key's enrolment window decides instead.
+func TestRunFreshComputeIgnoresLeftoverRecordedDevice(t *testing.T) {
+	cfg := config.Example("prod")
+	cfg.Cloudflare.AccountID = "acc"
+	path := provisionStatePath(t)
+	if err := state.Save(path, state.State{Namespace: "prod", Server: cfg.Server, Compute: state.ComputeState{Name: cfg.Compute.Name}, Tailscale: state.TailscaleState{Tailnet: cfg.Access.Tailscale.Tailnet, NodeID: "old-device"}}); err != nil {
+		t.Fatal(err)
+	}
+	ts := &fakeTailscale{keyCreated: "2026-10-07T10:00:00Z"}
+	opt := Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api-token", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}}
+	if _, err := Run(context.Background(), opt); err != nil {
+		t.Fatal(err)
+	}
+	if len(ts.waitQueries) != 1 || ts.waitQueries[0].NodeID != "" || ts.waitQueries[0].CreatedNotBefore.IsZero() {
+		t.Fatalf("fresh compute query = %+v", ts.waitQueries)
 	}
 }
 
