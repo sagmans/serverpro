@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/mesh"
 	"github.com/sagmans/serverpro/internal/provider/httpjson"
 	"github.com/sagmans/serverpro/internal/state"
@@ -14,6 +15,10 @@ import (
 // authKeyCleanupTimeout bounds best-effort deletion of the one-off bootstrap
 // auth key so cleanup cannot hang the caller.
 const authKeyCleanupTimeout = 10 * time.Second
+
+// defaultComputeAccountName labels a compute account the caller left unnamed,
+// matching the single-account layout older state files assume.
+const defaultComputeAccountName = "default"
 
 // cleanupProvisionAuthKey deletes the one-off bootstrap auth key on a fresh,
 // bounded context so it still runs when the provisioning context is already at
@@ -36,7 +41,13 @@ func cleanupProvisionAuthKey(st *state.State, stPath string, c TailscaleClient, 
 
 func Run(ctx context.Context, opt Options) (state.State, error) {
 	cfg := opt.Config
-	st, err := initializeProvisionState(opt.StatePath, cfg, opt.ComputeAccount.Provider)
+	// Resolved before any mutation so a missing compute client fails without
+	// touching tailnet policy, and the provider written to state is never empty.
+	if opt.Clients.Compute == nil {
+		return state.State{}, newProvisionError(ProvisionPhaseCompute, state.State{}, errors.New("compute provider required"))
+	}
+	account := resolveComputeAccount(opt.ComputeAccount, opt.Clients.Compute)
+	st, err := initializeProvisionState(opt.StatePath, cfg, account.Provider)
 	if err != nil {
 		return st, newProvisionError(ProvisionPhaseInitialize, st, err)
 	}
@@ -56,10 +67,10 @@ func Run(ctx context.Context, opt Options) (state.State, error) {
 		}
 		var minted mesh.AuthKey
 		minted, err = tailscaleAuthKey(ctx, opt.Clients.Tailscale, opt.Creds, cfg)
-		key, keyID = minted.Key, minted.ID
 		if err != nil {
 			return st, newProvisionError(ProvisionPhaseTailscaleAuthKey, st, err)
 		}
+		key, keyID = minted.Key, minted.ID
 		// Recorded before the key ID checkpoint so the enrolment window is open
 		// even if the control plane returned no key ID.
 		st.Tailscale.AuthKeyCreatedAt = authKeyCreatedAt(minted, opt.now())
@@ -82,16 +93,6 @@ func Run(ctx context.Context, opt Options) (state.State, error) {
 		if err != nil {
 			return st, newProvisionError(ProvisionPhaseBootstrapRender, st, err)
 		}
-	}
-	if opt.Clients.Compute == nil {
-		return st, newProvisionError(ProvisionPhaseCompute, st, errors.New("compute provider required"))
-	}
-	account := opt.ComputeAccount
-	if account.Name == "" {
-		account.Name = "default"
-	}
-	if account.Provider == "" {
-		account.Provider = opt.Clients.Compute.Name()
 	}
 	if err := ensureComputeServer(ctx, &st, opt.StatePath, cfg, account, opt.Clients.Compute, userData, save); err != nil {
 		return st, newProvisionError(ProvisionPhaseCompute, st, err)
@@ -116,4 +117,16 @@ func Run(ctx context.Context, opt Options) (state.State, error) {
 		return st, newProvisionError(ProvisionPhaseComplete, st, err)
 	}
 	return st, nil
+}
+
+// resolveComputeAccount fills the account defaults once, so state init and the
+// compute call record the same provider and account name.
+func resolveComputeAccount(account compute.Account, provider ComputeCreator) compute.Account {
+	if account.Name == "" {
+		account.Name = defaultComputeAccountName
+	}
+	if account.Provider == "" {
+		account.Provider = provider.Name()
+	}
+	return account
 }
