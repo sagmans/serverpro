@@ -112,9 +112,9 @@ func TestAuthKeyCreatedAtFallsBackToBoundedLocalWindow(t *testing.T) {
 	}
 }
 
-func TestBestDeviceIDPrefersNodeID(t *testing.T) {
-	if got := bestDeviceID(tailscale.Device{ID: "393735751060", NodeID: "n1"}); got != "n1" {
-		t.Fatalf("bestDeviceID() = %q", got)
+func TestStableDeviceIDPrefersNodeID(t *testing.T) {
+	if got := (tailscale.Device{ID: "393735751060", NodeID: "n1"}).StableID(); got != "n1" {
+		t.Fatalf("StableID() = %q", got)
 	}
 }
 

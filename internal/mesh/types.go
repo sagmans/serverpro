@@ -40,6 +40,16 @@ type Device struct {
 	Created string `json:"created"`
 }
 
+// StableID is the identifier recorded in state and shown to operators. The
+// node ID is preferred because it survives device key rotation; older API
+// responses carry only the legacy ID.
+func (d Device) StableID() string {
+	if d.NodeID != "" {
+		return d.NodeID
+	}
+	return d.ID
+}
+
 // DNSConfig mirrors the tailnet DNS posture that decides whether quad100 has a
 // usable upstream for public names (2026-07 quad100 SERVFAIL incident).
 type DNSConfig struct {

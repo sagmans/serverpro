@@ -34,9 +34,15 @@ func MatchTailscaleDevice(ctx context.Context, client meshDeviceLister, candidat
 	if err != nil {
 		return state.TailscaleState{}, fmt.Errorf("tailscale device lookup failed: %w", err)
 	}
+	// Import adopts the device's tags as the managed identity. With none to
+	// adopt, the namespace tags stay configured and doctor would reject the
+	// recorded device on every run, so refuse before recording it.
+	if len(device.Tags) == 0 && len(tags) > 0 {
+		return state.TailscaleState{}, fmt.Errorf("tailscale device %s (%q) has no tags; tag it with %s in the admin console, then rerun import", device.StableID(), wantHost, strings.Join(tags, ","))
+	}
 	return state.TailscaleState{
 		Tailnet: cfg.Access.Tailscale.Tailnet,
-		NodeID:  device.NodeID,
+		NodeID:  device.StableID(),
 		Name:    device.Name,
 		IPs:     append([]string(nil), device.Addresses...),
 		Tags:    append([]string(nil), device.Tags...),

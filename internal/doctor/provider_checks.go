@@ -82,7 +82,7 @@ func checkTailscaleNode(ctx context.Context, cfg config.Config, st state.State, 
 	dev, err := client.WaitDevice(tsCtx, tailscaleDeviceQuery(cfg, st))
 	cancel()
 	if isDeviceIdentityError(err) {
-		result := fail("provider", "tailscale node", err.Error(), "confirm which tailnet device is this server; remove stale or unexpected devices with the same name before running commands that reach the host")
+		result := fail("provider", "tailscale node", err.Error(), TailscaleDeviceIdentityRemediation)
 		result.Code = TailscaleDeviceIdentityCode
 		return result
 	}
@@ -92,11 +92,24 @@ func checkTailscaleNode(ctx context.Context, cfg config.Config, st state.State, 
 	return pass("provider", "tailscale node", fmt.Sprintf("%s api_reported_online=%t control_connected=%t", dev.Name, dev.Online, dev.ConnectedToControl))
 }
 
-// tailscaleDeviceQuery checks the device recorded at create or import when
-// one exists. A name-only lookup could report a different node with the same
-// name as healthy.
+// tailscaleDeviceQuery applies the same identity rule as create: the recorded
+// device when one exists, else only devices enrolled after the bootstrap key
+// of a create that has not bound yet. A name-only lookup could report a
+// different node with the same name as healthy.
 func tailscaleDeviceQuery(cfg config.Config, st state.State) mesh.DeviceQuery {
-	return mesh.DeviceQuery{Hostname: tailscaleLookupName(cfg, st), Tags: cfg.Access.Tailscale.Tags, NodeID: st.Tailscale.NodeID}
+	return mesh.ManagedDeviceQuery(tailscaleLookupName(cfg, st), cfg.Access.Tailscale.Tags, st.Tailscale.NodeID, st.Tailscale.AuthKeyCreatedAt)
+}
+
+// identityBlocked reports whether a report refused the tailnet device
+// identity. Doctor and its sudo retry share it so both stop on the same
+// verdict before anything reaches the host.
+func identityBlocked(results []Result) bool {
+	for _, result := range results {
+		if result.Code == TailscaleDeviceIdentityCode {
+			return true
+		}
+	}
+	return false
 }
 
 // isDeviceIdentityError separates identity conflicts, which need an operator

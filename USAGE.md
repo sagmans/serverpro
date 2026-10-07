@@ -290,7 +290,9 @@ continue when more than one tailnet device with the server's name and tags
 enrolled after its bootstrap key, or when a rerun finds the recorded device
 missing or renamed; the error lists the device IDs. Older devices with the same
 name are ignored. Remove the unexpected devices in the Tailscale admin console,
-then rerun create. Doctor reports the same conflicts on the `tailscale node`
+then rerun create. If the recorded device was replaced on purpose (deleted and
+re-enrolled with a new node ID), rebind state with
+`serverpro server import --force --with-tailscale`. Doctor reports the same conflicts on the `tailscale node`
 check with code `tailscale_device_identity` and skips all remote checks and
 repairs, including `--fix`, until the conflict is resolved. A definitive checkpoint
 failure deletes only the tunnel created by that attempt, never an adopted one.
@@ -478,7 +480,10 @@ safe cleanup. A provider-only import keeps mandatory Tailscale access enabled
 and stores supplied credentials as an incomplete server-scoped set; doctor can
 prompt for the missing Tailscale token. SSH additionally needs discovered mesh
 host state, so rerun the command with `--force --with-tailscale` before SSH when
-the initial import omitted enrichment. Forced import repairs the invalid
+the initial import omitted enrichment. When only the hostname matches because
+the device lost its tags, import refuses to record an untagged device while
+namespace tags are configured: doctor would reject it on every run. Tag the
+device in the admin console, then rerun. Forced import repairs the invalid
 disabled-Tailscale config written by earlier releases and preserves existing
 service tokens when replacements are omitted. Vultr supplies its attached
 firewall-group ID; Hetzner and

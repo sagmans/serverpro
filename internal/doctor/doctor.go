@@ -19,7 +19,7 @@ func RunWithOptions(ctx context.Context, cfg config.Config, st state.State, cred
 	node := checkTailscaleNode(ctx, cfg, st, creds.Tailscale, clients.Tailscale)
 	// Remote steps address the host by name and may pipe the sudo password, so
 	// an unresolved device identity must stop them before anything is sent.
-	remoteBlocked := node.Code == TailscaleDeviceIdentityCode
+	remoteBlocked := identityBlocked([]Result{node})
 	inventory := providerInventory(ctx, cfg, st, creds, clients, opt)
 	if !remoteBlocked {
 		inventory = append(inventory, remoteInventory(ctx, clients.Remote, cfg.Admin.Username, st.Tailscale.Name)...)

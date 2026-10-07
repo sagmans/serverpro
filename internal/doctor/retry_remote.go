@@ -14,10 +14,8 @@ import (
 func RetryRemote(ctx context.Context, cfg config.Config, st state.State, existing Report, runner remote.Runner, opt Options) Report {
 	// The retry carries the sudo password, so it inherits the original run's
 	// identity verdict instead of reaching a host that run refused to trust.
-	for _, result := range existing.Results {
-		if result.Code == TailscaleDeviceIdentityCode {
-			return existing
-		}
+	if identityBlocked(existing.Results) {
+		return existing
 	}
 	inventory := replaceRemoteInventory(existing.Inventory, remoteInventory(ctx, runner, cfg.Admin.Username, st.Tailscale.Name))
 	results := replaceRemoteResults(existing.Results, remoteChecksWithOptions(ctx, cfg, runner, st.Tailscale.Name, opt))

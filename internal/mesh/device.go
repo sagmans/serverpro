@@ -27,7 +27,10 @@ var (
 	ErrBoundDeviceMismatch = errors.New("recorded mesh device identity changed")
 )
 
-// DeviceQuery describes the managed node identity for SelectDevice.
+// DeviceQuery describes the managed node identity for SelectDevice. NodeID
+// takes precedence: when it is set, CreatedNotBefore is ignored. Build queries
+// for a managed server with ManagedDeviceQuery so every flow applies the same
+// precedence.
 type DeviceQuery struct {
 	// Hostname is the expected short name or MagicDNS name.
 	Hostname string
@@ -37,10 +40,23 @@ type DeviceQuery struct {
 	// tags are verified against that one device instead of searched for.
 	NodeID string
 	// CreatedNotBefore drops devices enrolled before the single-use bootstrap
-	// key existed. Stale devices that share the hostname cannot satisfy it, and
-	// both timestamps come from the control plane, so local clock skew does not
-	// matter. The zero value disables the filter.
+	// key existed, so stale devices that share the hostname cannot satisfy it.
+	// It is the key's control-plane creation time when the API returned one,
+	// else the local mint time widened by a clock-skew margin. The zero value
+	// disables the filter.
 	CreatedNotBefore time.Time
+}
+
+// ManagedDeviceQuery builds the identity query for a managed server from what
+// state recorded. An open enrolment window means a key was minted for new
+// compute that has not bound yet, so any recorded device belongs to an earlier
+// server and must not be reused; otherwise the recorded device is verified.
+func ManagedDeviceQuery(hostname string, tags []string, recordedNodeID string, enrolledSince time.Time) DeviceQuery {
+	q := DeviceQuery{Hostname: hostname, Tags: tags, CreatedNotBefore: enrolledSince}
+	if enrolledSince.IsZero() {
+		q.NodeID = recordedNodeID
+	}
+	return q
 }
 
 // DeviceMatches applies one normalized hostname and tag identity policy.
@@ -88,7 +104,8 @@ func SelectDevice(devices []Device, q DeviceQuery) (Device, error) {
 
 // selectBoundDevice re-checks the device recorded in state. A missing or
 // renamed device is terminal: searching by name again could hand a recorded
-// server's traffic to a different node.
+// server's traffic to a different node. Both ID forms are accepted because
+// older state recorded the legacy ID.
 func selectBoundDevice(devices []Device, q DeviceQuery) (Device, error) {
 	for _, device := range devices {
 		if device.ID != q.NodeID && device.NodeID != q.NodeID {
@@ -120,11 +137,7 @@ func createdNotBefore(device Device, bound time.Time) bool {
 func deviceIDs(devices []Device) []string {
 	ids := make([]string, 0, len(devices))
 	for _, device := range devices {
-		id := device.NodeID
-		if id == "" {
-			id = device.ID
-		}
-		ids = append(ids, id)
+		ids = append(ids, device.StableID())
 	}
 	slices.Sort(ids)
 	return ids

@@ -12,6 +12,12 @@ import (
 	"github.com/sagmans/serverpro/internal/state"
 )
 
+// authKeyClockSkewMargin widens the local-clock fallback for the enrolment
+// window. Devices enrolled earlier than this before the key was minted cannot
+// be the new server; a controller clock running further ahead only makes create
+// time out, which fails closed.
+const authKeyClockSkewMargin = 5 * time.Minute
+
 func ensureTailscalePolicy(ctx context.Context, st *state.State, stPath string, c TailscaleClient, creds credentials.Set, cfg config.Config, save provisionStateSaver) error {
 	if creds.Tailscale == "" {
 		return nil
@@ -45,12 +51,6 @@ func tailscaleAuthKey(ctx context.Context, c TailscaleClient, creds credentials.
 	return c.CreateAuthKey(ctx, cfg.Access.Tailscale.Tags, 30*time.Minute)
 }
 
-// authKeyClockSkewMargin widens the local-clock fallback for the enrolment
-// window. Devices enrolled earlier than this before the key was minted cannot
-// be the new server; a controller clock running further ahead only makes create
-// time out, which fails closed.
-const authKeyClockSkewMargin = 5 * time.Minute
-
 // authKeyCreatedAt returns the earliest time the new server's device can have
 // enrolled. The control-plane mint time is preferred because device creation
 // times use the same clock. Without it, the local clock minus a skew margin
@@ -79,21 +79,12 @@ func waitTailscaleDevice(ctx context.Context, st *state.State, stPath string, cr
 	if creds.Tailscale == "" {
 		return nil
 	}
-	q := mesh.DeviceQuery{
-		Hostname:         cfg.Compute.Name,
-		Tags:             cfg.Access.Tailscale.Tags,
-		CreatedNotBefore: st.Tailscale.AuthKeyCreatedAt,
-	}
-	// An open enrolment window means this run minted a key for new compute, so
-	// any recorded device belongs to an earlier server and must not be reused.
-	if q.CreatedNotBefore.IsZero() {
-		q.NodeID = st.Tailscale.NodeID
-	}
+	q := mesh.ManagedDeviceQuery(cfg.Compute.Name, cfg.Access.Tailscale.Tags, st.Tailscale.NodeID, st.Tailscale.AuthKeyCreatedAt)
 	dev, err := c.WaitDevice(ctx, q)
 	if err != nil {
 		return err
 	}
-	st.Tailscale.NodeID = bestDeviceID(dev)
+	st.Tailscale.NodeID = dev.StableID()
 	st.Tailscale.Name = bestName(dev)
 	st.Tailscale.IPs = dev.Addresses
 	st.Tailscale.Tags = dev.Tags
@@ -109,13 +100,6 @@ func appendMissingStrings(existing, additions []string) []string {
 		}
 	}
 	return out
-}
-
-func bestDeviceID(d mesh.Device) string {
-	if d.NodeID != "" {
-		return d.NodeID
-	}
-	return d.ID
 }
 
 func bestName(d mesh.Device) string {
