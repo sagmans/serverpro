@@ -266,16 +266,17 @@ run_with_timeout() {
 	return "$rc"
 }
 
-# state_path locates the current target's state under a HOME (default: the
-# harness HOME), so keep-mode state can be checked from a throwaway run too.
+# state_path locates the current target's state under the given HOME, so
+# keep-mode state can be checked from a throwaway run too. Callers always pass
+# the HOME so every call site states which home it reads.
 state_path() {
 	# shellcheck disable=SC2059 # WHY: the format is a named constant, not input.
-	printf "$DOGFOOD_STATE_PATH_FORMAT" "${1:-$HOME}" "$namespace" "$server"
+	printf "$DOGFOOD_STATE_PATH_FORMAT" "$1" "$namespace" "$server"
 }
 
 # state_field reads one dotted field from server state; empty when absent.
 state_field() {
-	python3 "$validator_script" state-field "$(state_path)" "$1"
+	python3 "$validator_script" state-field "$(state_path "$HOME")" "$1"
 }
 
 # remote_read runs a read-only command on the managed host over Tailscale SSH,
