@@ -1,6 +1,10 @@
 package digitalocean
 
-import "github.com/sagmans/serverpro/internal/compute"
+import (
+	"slices"
+
+	"github.com/sagmans/serverpro/internal/compute"
+)
 
 func mapCatalog(catalog Catalog, location string) compute.Catalog {
 	out := compute.Catalog{
@@ -15,7 +19,9 @@ func mapCatalog(catalog Catalog, location string) compute.Catalog {
 		out.Locations = append(out.Locations, compute.Location{Name: region.Slug, Description: region.Name})
 	}
 	for _, size := range catalog.Sizes {
-		if !size.Available || (location != "" && !stringInSlice(location, size.Regions)) {
+		// Sizes require explicit region membership: DigitalOcean lists sizes with
+		// no regions (for example GPU plans) that a droplet create rejects.
+		if !size.Available || (location != "" && !slices.Contains(size.Regions, location)) {
 			continue
 		}
 		out.Sizes = append(out.Sizes, compute.Size{

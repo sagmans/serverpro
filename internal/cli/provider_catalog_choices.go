@@ -89,6 +89,18 @@ func validateManagedImageCatalog(catalog compute.Catalog, selected string) error
 	return fmt.Errorf("unsupported managed image %q; require %s %s on %s", selected, hostplatform.ManagedHostOS, hostplatform.ManagedHostVersion, strings.Join(hostplatform.ManagedHostArchitectures(), " or "))
 }
 
+// validateManagedSizeCatalog rejects a size the location-scoped catalog does
+// not offer, so create fails before minting Tailscale keys or policy instead of
+// at the provider's create call.
+func validateManagedSizeCatalog(catalog compute.Catalog, selected, location string) error {
+	for _, size := range catalog.Sizes {
+		if size.Name == selected {
+			return nil
+		}
+	}
+	return fmt.Errorf("size %q is not available in location %q", selected, location)
+}
+
 func isSupportedManagedImage(image compute.Image) bool {
 	flavor := strings.ToLower(strings.TrimSpace(image.OSFlavor))
 	if flavor != hostplatform.ManagedHostOS {

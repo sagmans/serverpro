@@ -123,6 +123,9 @@ func (a *app) preflight(ctx context.Context, cfg config.Config, creds credential
 		if err := validateManagedImageCatalog(catalog, cfg.Compute.Image); err != nil {
 			return err
 		}
+		if err := validateManagedSizeCatalog(catalog, cfg.Compute.Size, cfg.Compute.Location); err != nil {
+			return err
+		}
 	}
 	var tailscaleClient preflightTailscaleClient = tailscale.New(creds.Tailscale, cfg.Access.Tailscale.Tailnet)
 	if a.services.preflightTailscaleClient != nil {
