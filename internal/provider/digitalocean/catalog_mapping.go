@@ -35,7 +35,7 @@ func mapCatalog(catalog Catalog, location string) compute.Catalog {
 		})
 	}
 	for _, image := range catalog.Images {
-		if !image.Public || image.Slug == "" || image.Status != "available" || (location != "" && !stringInSlice(location, image.Regions)) {
+		if !image.Public || image.Slug == "" || image.Status != "available" || (location != "" && !offeredIn(image.Regions, location)) {
 			continue
 		}
 		out.Images = append(out.Images, compute.Image{
@@ -48,13 +48,12 @@ func mapCatalog(catalog Catalog, location string) compute.Catalog {
 	return out
 }
 
-func stringInSlice(needle string, haystack []string) bool {
-	for _, item := range haystack {
-		if item == needle {
-			return true
-		}
-	}
-	return len(haystack) == 0
+// offeredIn reports whether an image is offered in location. DigitalOcean
+// leaves regions empty on images available everywhere, so an empty list means
+// offered; sizes use slices.Contains instead because a size without regions
+// (GPU plans) cannot be ordered in any standard location.
+func offeredIn(regions []string, location string) bool {
+	return len(regions) == 0 || slices.Contains(regions, location)
 }
 
 func sizeArchitecture(slug string) string {
