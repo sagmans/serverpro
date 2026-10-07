@@ -18,13 +18,37 @@ ABS_BIN_DIR := $(abspath $(BIN_DIR))
 COVERAGE_PROFILE := coverage.out
 MIN_COVERAGE := 81.8
 HARNESS_ENV_SENTINEL := serverpro-no-token-sentinel
+# ShellCheck is a system tool (preinstalled on the CI runner), not a pinned Go
+# tool, so lint-shell fails with guidance instead of installing anything.
+SHELLCHECK ?= shellcheck
+# ShellCheck reports findings only for the files it is given, so sourced flow
+# files are listed too; -x lets each see the shared lib it sources.
+# scripts/test-release-contract.sh stays out until its literal-brace warnings
+# (SC1083) are resolved.
+SHELL_LINT_SCRIPTS := \
+	scripts/test-dogfood-live.sh \
+	scripts/test-dogfood-live-selftest.sh \
+	scripts/dogfood-live-lib.sh \
+	scripts/dogfood-live-readonly.sh \
+	scripts/dogfood-live-create.sh \
+	scripts/dogfood-live-identity.sh \
+	scripts/dogfood-live-prompt.sh \
+	scripts/check-coverage.sh \
+	scripts/classify-release-tag.sh \
+	scripts/go-format.sh \
+	scripts/serverpro-bootstrap-tools.sh \
+	scripts/test-cli-no-token-surface.sh \
+	scripts/test-coverage-policy.sh \
+	scripts/test-make-gates.sh \
+	scripts/validate-release-provenance.sh \
+	scripts/validate-release-tag.sh
 
-.PHONY: ci check fmt fmt-check tidy-check test test-unit test-go-check test-harness test-smoke test-integration test-e2e test-full-chain-e2e test-release test-release-shell test-dogfood-readonly test-dogfood-live test-dogfood-live-selftest vet build bin dogfood-no-token link-bin lint vuln race cover install-tools install-hooks gen-bootstrap-wrapper
+.PHONY: ci check fmt fmt-check tidy-check test test-unit test-go-check test-harness test-smoke test-integration test-e2e test-full-chain-e2e test-release test-release-shell test-dogfood-readonly test-dogfood-live test-dogfood-live-selftest vet build bin dogfood-no-token link-bin lint lint-shell vuln race cover install-tools install-hooks gen-bootstrap-wrapper
 .SILENT: fmt fmt-check link-bin
 
 ci: build check
 
-check: fmt-check tidy-check test-go-check test-harness test-smoke test-e2e test-release-shell test-dogfood-live-selftest vet lint vuln
+check: fmt-check tidy-check test-go-check test-harness test-smoke test-e2e test-release-shell test-dogfood-live-selftest vet lint lint-shell vuln
 
 fmt:
 	bash scripts/go-format.sh write
@@ -106,6 +130,10 @@ link-bin: bin
 
 lint: ${GOLANGCI_LINT_STAMP}
 	GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE}" "${GOLANGCI_LINT}" run
+
+lint-shell:
+	command -v "${SHELLCHECK}" >/dev/null 2>&1 || { echo "lint-shell: ${SHELLCHECK} not found; install ShellCheck with your system package manager" >&2; exit 1; }
+	"${SHELLCHECK}" -x ${SHELL_LINT_SCRIPTS}
 
 vuln: ${GOVULNCHECK_STAMP}
 	"${GOVULNCHECK}" ./...

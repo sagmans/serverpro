@@ -23,6 +23,7 @@ why a layer is not applicable.
 | Read-only dogfood | `make test-dogfood-readonly` | Dogfood the actual binary across every no-token command path and local state mutation path. | No |
 | Live dogfood | `make test-dogfood-live` | Use real provider APIs for catalog, provider doctor, discover, and optional selectable create, status, doctor, fix, bootstrap, power, import, identity, and delete scenarios on a throwaway or kept test server; every successful command must emit valid JSON with command-specific status, shape, and identity. | Yes |
 | Live harness self-test | `make test-dogfood-live-selftest` | Unit-test every importable output contract, then prove malformed/invalid-success rejection, fallback-delete evidence, guards, secret transport, and cleanup retention through the shell orchestrator with a fake binary; no tokens or network. | No |
+| Shell lint | `make lint-shell` | Run `shellcheck -x` on the dogfood harness (orchestrator, shared lib, every flow file, self-test) and the other standalone shell scripts. ShellCheck is a system tool, not installed by the Makefile; the target fails with guidance when it is missing. | No |
 
 CI combines `make check` with a separate `make test-full-chain-e2e` job.
 `make check` runs the primary non-live gates once; release workflow Go tests
@@ -334,7 +335,8 @@ after interruption and after a second signal during teardown, home aliases, an S
 import failed row hidden behind exit zero, prompted inputs with masking, backspace
 editing, sudo retries, and required-value exhaustion, and secrets absent from every argv and
 artifact. Both run through `make test-dogfood-live-selftest` as part of
-`make check`.
+`make check`, and `make lint-shell` (also in `make check`) lints every harness
+shell file.
 
 Read-only API dogfood runs when provider tokens are present:
 
