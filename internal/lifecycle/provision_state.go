@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/state"
 )
 
-func initializeProvisionState(stPath string, cfg config.Config) (state.State, error) {
-	st := state.State{Namespace: cfg.Namespace, Server: cfg.Server, Labels: cfg.Compute.Labels, Tailscale: state.TailscaleState{Tailnet: cfg.Access.Tailscale.Tailnet}}
+func initializeProvisionState(stPath string, cfg config.Config, provider compute.ProviderName) (state.State, error) {
+	// The provider is recorded before any provider call so a create that fails
+	// early still leaves state that provider-scoped delete and status accept.
+	st := state.State{Namespace: cfg.Namespace, Server: cfg.Server, Labels: cfg.Compute.Labels, Compute: state.ComputeState{Provider: string(provider)}, Tailscale: state.TailscaleState{Tailnet: cfg.Access.Tailscale.Tailnet}}
 	exists, err := state.Exists(stPath)
 	if err != nil {
 		return st, err

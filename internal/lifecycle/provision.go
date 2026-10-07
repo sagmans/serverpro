@@ -36,7 +36,7 @@ func cleanupProvisionAuthKey(st *state.State, stPath string, c TailscaleClient, 
 
 func Run(ctx context.Context, opt Options) (state.State, error) {
 	cfg := opt.Config
-	st, err := initializeProvisionState(opt.StatePath, cfg)
+	st, err := initializeProvisionState(opt.StatePath, cfg, opt.ComputeAccount.Provider)
 	if err != nil {
 		return st, newProvisionError(ProvisionPhaseInitialize, st, err)
 	}
