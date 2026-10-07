@@ -413,23 +413,23 @@ convention.
 SERVERPRO_SERVER_PROVIDER_TOKEN='digitalocean-api-token' \
   serverpro location list -p digitalocean --non-interactive
 SERVERPRO_SERVER_PROVIDER_TOKEN='digitalocean-api-token' \
-  serverpro size list -p digitalocean --location nyc3 --non-interactive
+  serverpro size list -p digitalocean --location fra1 --non-interactive
 SERVERPRO_SERVER_PROVIDER_TOKEN='digitalocean-api-token' \
-  serverpro image list -p digitalocean --location nyc3 --non-interactive
+  serverpro image list -p digitalocean --location fra1 --non-interactive
 
 # 3. Preview a create
 serverpro server create webapp \
   -n mynamespace -p digitalocean \
-  --location nyc3 \
-  --size s-1vcpu-1gb \
+  --location fra1 \
+  --size s-1vcpu-1gb-amd \
   --image ubuntu-24-04-x64 \
   --dry-run
 
 # 4. Run live create; Cloudflare is requested only when ingress is enabled
 serverpro server create webapp \
   -n mynamespace -p digitalocean \
-  --location nyc3 \
-  --size s-1vcpu-1gb \
+  --location fra1 \
+  --size s-1vcpu-1gb-amd \
   --image ubuntu-24-04-x64
 ```
 
