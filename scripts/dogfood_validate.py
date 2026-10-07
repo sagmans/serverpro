@@ -15,6 +15,11 @@ INVENTORY_TEXT_FIELDS = ("id", "name", "namespace", "server")
 INVENTORY_ID_FIELDS = ("namespace", "server")
 INVENTORY_STATES = frozenset({"missing", "partial", "present"})
 VALID_ID_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$")
+# Provider power labels after the CLI's own mapping: only "running" becomes
+# "on", so DigitalOcean reports "active" and Vultr reports "stopped".
+POWER_ON_LABELS = frozenset({"on", "active"})
+POWER_OFF_LABELS = frozenset({"off", "stopped"})
+IMPORTED_STATUS = "imported"
 ARGUMENT_COUNT = 6
 
 
@@ -152,6 +157,34 @@ def validate_output(kind, value, provider="", namespace="", server=""):
             raise ValidationError("provider mismatch")
         if not isinstance(value.get("power"), str) or not value["power"]:
             raise ValidationError("server power status missing")
+        return
+
+    if kind in ("power-on", "power-off"):
+        # Power commands and status share one row; a settled state, not an
+        # in-between label such as "stopping", proves the operation finished.
+        validate_output("server-status", value, provider, namespace, server)
+        expected = POWER_ON_LABELS if kind == "power-on" else POWER_OFF_LABELS
+        if value["power"] not in expected:
+            raise ValidationError(f"power {value['power']!r} is not settled {kind}")
+        return
+
+    if kind == "import-complete":
+        # Import exits zero even when a row failed, so success needs exactly one
+        # imported row for the requested server.
+        rows = (
+            [
+                item
+                for item in value
+                if isinstance(item, dict)
+                and item.get("namespace") == namespace
+                and item.get("server") == server
+                and item.get("provider") == provider
+            ]
+            if isinstance(value, list)
+            else []
+        )
+        if len(rows) != 1 or rows[0].get("status") != IMPORTED_STATUS:
+            raise ValidationError("import must report exactly one imported row for the server")
         return
 
     if kind == "bootstrap-complete":

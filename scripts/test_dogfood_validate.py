@@ -58,6 +58,26 @@ VALID_OUTPUTS = {
         "server": SERVER,
         "provider": PROVIDER,
     },
+    "power-on": {
+        "namespace": NAMESPACE,
+        "server": SERVER,
+        "provider": PROVIDER,
+        "power": "on",
+    },
+    "power-off": {
+        "namespace": NAMESPACE,
+        "server": SERVER,
+        "provider": PROVIDER,
+        "power": "off",
+    },
+    "import-complete": [
+        {
+            "namespace": NAMESPACE,
+            "server": SERVER,
+            "provider": PROVIDER,
+            "status": "imported",
+        }
+    ],
 }
 CONTRACT_FIELD_MUTATIONS = {
     "namespace-created": {
@@ -109,6 +129,26 @@ INVALID_OUTPUTS = {
         "server": "wrong",
         "provider": PROVIDER,
     },
+    "power-on": {
+        "namespace": NAMESPACE,
+        "server": SERVER,
+        "provider": PROVIDER,
+        "power": "starting",
+    },
+    "power-off": {
+        "namespace": NAMESPACE,
+        "server": SERVER,
+        "provider": PROVIDER,
+        "power": "stopping",
+    },
+    "import-complete": [
+        {
+            "namespace": NAMESPACE,
+            "server": SERVER,
+            "provider": PROVIDER,
+            "status": "failed",
+        }
+    ],
 }
 
 
@@ -307,6 +347,43 @@ class ValidateOutputTests(unittest.TestCase):
                     dogfood_validate.validate_output(
                         "doctor-report", value, PROVIDER, NAMESPACE, SERVER
                     )
+
+    def test_power_labels_cover_every_provider_mapping(self):
+        for kind, labels in (
+            ("power-on", ("on", "active")),
+            ("power-off", ("off", "stopped")),
+        ):
+            for label in labels:
+                with self.subTest(kind=kind, label=label):
+                    value = dict(VALID_OUTPUTS[kind], power=label)
+                    dogfood_validate.validate_output(
+                        kind, value, PROVIDER, NAMESPACE, SERVER
+                    )
+        with self.assertRaises(dogfood_validate.ValidationError):
+            dogfood_validate.validate_output(
+                "power-on", dict(VALID_OUTPUTS["power-on"], provider="vultr"),
+                PROVIDER, NAMESPACE, SERVER,
+            )
+
+    def test_import_needs_exactly_one_imported_row(self):
+        row = VALID_OUTPUTS["import-complete"][0]
+        for label, value in (
+            ("empty", []),
+            ("object", row),
+            ("duplicate", [row, dict(row)]),
+            ("skipped", [dict(row, status="skipped")]),
+            ("other server", [dict(row, server="other")]),
+            ("other provider", [dict(row, provider="vultr")]),
+        ):
+            with self.subTest(label=label):
+                with self.assertRaises(dogfood_validate.ValidationError):
+                    dogfood_validate.validate_output(
+                        "import-complete", value, PROVIDER, NAMESPACE, SERVER
+                    )
+        unrelated = dict(row, server="other", status="skipped")
+        dogfood_validate.validate_output(
+            "import-complete", [unrelated, row], PROVIDER, NAMESPACE, SERVER
+        )
 
     def test_rejects_unknown_validator(self):
         with self.assertRaisesRegex(
