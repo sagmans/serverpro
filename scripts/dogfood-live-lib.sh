@@ -184,28 +184,32 @@ validate_case_output() {
 }
 
 # run_case records one judged command, keeping its stdout and stderr as
-# artifacts and echoing them on failure so a paid run is diagnosable.
+# artifacts and echoing them on failure so a paid run is diagnosable. Each
+# verdict carries the command's wall time so a slow scenario can be traced to
+# the step that spent it instead of only the scenario total.
 run_case() {
 	local expect="$1"
 	local validator_kind="$2"
 	local label="$3"
 	shift 3
-	local stem out err status valid
+	local stem out err status valid started elapsed
 	stem="$(case_path "$label")"
 	out="$out_dir/$stem.out"
 	err="$out_dir/$stem.err"
+	started=$SECONDS
 	"$@" >"$out" 2>"$err"
 	status=$?
+	elapsed=$((SECONDS - started))
 	valid=1
 	if [[ "$expect" == ok && "$status" -eq 0 ]] && ! validate_case_output "$validator_kind" "$out" >>"$err" 2>&1; then
 		valid=0
 	fi
 	if [[ "$expect" == ok && "$status" -eq 0 && "$valid" -eq 1 ]] || [[ "$expect" == fail && "$status" -ne 0 ]]; then
-		log "PASS | $label"
+		log "PASS | $label | ${elapsed}s"
 		pass=$((pass + 1))
 		return 0
 	fi
-	log "FAIL | $label | exit $status | output-valid=$valid"
+	log "FAIL | $label | exit $status | output-valid=$valid | ${elapsed}s"
 	sed 's/^/  stdout: /' "$out" | tee -a "$results"
 	sed 's/^/  stderr: /' "$err" | tee -a "$results"
 	fail=$((fail + 1))

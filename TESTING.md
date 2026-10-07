@@ -303,7 +303,7 @@ every scenario except `create` and `delete` is skipped when no server is ready.
 | `fix` | `server doctor --fix` passes, then plain doctor passes. |
 | `power` | Stop reaches a settled off state, start reaches on and doctor passes, restart changes the kernel boot ID (a real reboot) and doctor passes again. |
 | `import` | Import from provider labels into a separate empty `HOME` reports exactly one `imported` row, and doctor passes from the recovered artifacts. |
-| `identity` | A short-lived decoy (a second userspace `tailscaled` on the test host, enrolled with an ephemeral, single-use, 10-minute tagged key) claims the server's recorded hostname and recorded Tailscale tag (read from state, not rebuilt); doctor and a create rerun still pass and the recorded node ID stays unchanged. The decoy is logged out, stopped, and its key revoked when the scenario returns, and on interruption. |
+| `identity` | A short-lived decoy (a second userspace `tailscaled` on the test host, enrolled with an ephemeral, single-use, 10-minute tagged key) claims the server's recorded hostname and recorded Tailscale tag (read from state, not rebuilt); doctor and a create rerun still pass and the recorded node ID stays unchanged. The create rerun repeats the full tool bootstrap over the recorded node, so it proves remote commands reach that node beside the decoy and takes most of the scenario's several minutes. The decoy is logged out, stopped, and its key revoked when the scenario returns, and on interruption. |
 | `delete` | Delete completes and clears the throwaway markers. |
 
 Recovery waits poll every `SERVERPRO_DOGFOOD_POLL_INTERVAL` seconds (default 15)
@@ -315,7 +315,8 @@ positive integers. The keep-mode home is compared by physical path, so `.`,
 a directory above it. Before a throwaway run, provider discovery in the dogfood
 namespace must find no servers; after every run, including one ended by a
 signal, it reports any still listed. A second signal during teardown is ignored
-so the fallback delete always finishes. The summary lists each scenario's result and
+so the fallback delete always finishes. Every judged command's `PASS` or `FAIL` line ends with its wall time, so a slow
+scenario can be traced to the step that spent it. The summary lists each scenario's result and
 duration, the server's compute and node IDs and age, and warns when a kept server
 reaches `SERVERPRO_DOGFOOD_MAX_AGE_HOURS` (default 24). The identity scenario
 and power reboot check reach the host with the local `tailscale ssh`, so the
