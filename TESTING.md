@@ -21,7 +21,7 @@ why a layer is not applicable.
 | Full-chain E2E | `make test-full-chain-e2e` | Build the test-only composition binary and run concurrent create→status→doctor→delete journeys against stateful local Hetzner, Vultr, and DigitalOcean APIs. Production doctor and cleanup orchestration consume injected local clients; fixed time, checkpoint recovery, strict JSON, cleanup evidence, and sanitized failure artifacts remain hermetic. | No |
 | Release contract | `make test-release` | Run the focused release-contract Go package once plus shell assertions for the workflow DAG, exact step order/matrices, target-paired evidence, prerelease classification, toolchain pins, native smoke, and no-clobber invariants. `make check` gets the Go coverage from its consolidated suite and runs only the shell half separately. | No |
 | Read-only dogfood | `make test-dogfood-readonly` | Dogfood the actual binary across every no-token command path and local state mutation path. | No |
-| Live dogfood | `make test-dogfood-live` | Use real provider APIs for catalog, provider doctor, discover, and optional create→doctor→bootstrap→status→delete; every successful command must emit valid JSON with command-specific status, shape, and identity. | Yes |
+| Live dogfood | `make test-dogfood-live` | Use real provider APIs for catalog, provider doctor, discover, and optional selectable create, status, doctor, fix, bootstrap, power, import, identity, and delete scenarios on a throwaway or kept test server; every successful command must emit valid JSON with command-specific status, shape, and identity. | Yes |
 | Live harness self-test | `make test-dogfood-live-selftest` | Unit-test every importable output contract, then prove malformed/invalid-success rejection, fallback-delete evidence, guards, secret transport, and cleanup retention through the shell orchestrator with a fake binary; no tokens or network. | No |
 
 CI combines `make check` with a separate `make test-full-chain-e2e` job.
@@ -245,11 +245,16 @@ status/count data and failures disguised as success.
 ## Live dogfood contract
 
 `scripts/test-dogfood-live.sh` remains the single public live API orchestrator.
-It sources `scripts/dogfood-live-readonly.sh` for provider reads and
-`scripts/dogfood-live-create.sh` for explicitly approved paid lifecycle work;
+It sources `scripts/dogfood-live-readonly.sh` for provider reads,
+`scripts/dogfood-live-create.sh` for explicitly approved paid lifecycle work, and
+`scripts/dogfood-live-identity.sh` for the tailnet device identity scenario;
 `scripts/dogfood_validate.py` owns importable output contracts. The orchestrator
 uses an isolated `HOME`, never reuses operator state, and removes its temp home
-unless `SERVERPRO_KEEP_HARNESS_TEMP=1` is set. Guard rails: namespace and server
+unless `SERVERPRO_KEEP_HARNESS_TEMP=1` is set. Keep mode is the one exception:
+`SERVERPRO_DOGFOOD_KEEP_SERVER=1` uses a dedicated persistent `0700` home
+(`SERVERPRO_DOGFOOD_HOME`, default `~/.local/state/serverpro-dogfood/home`, never
+the operator's own home) so one on-demand test server survives between runs
+until the `delete` scenario removes it. Guard rails: namespace and server
 identifiers must match the CLI's `ValidID` grammar before any path is built,
 `SERVERPRO_DOGFOOD_INGRESS` accepts only `none` or `cloudflare-tunnel` and fails
 closed otherwise, tokens reach helper processes through the environment rather
@@ -258,15 +263,48 @@ command-specific semantic validation, discovered candidates must prove the
 requested provider and complete managed identity, and a failed delete is retried
 once from the exit trap; when that fallback fails or returns invalid resource-identity
 evidence, the harness keeps the created-resource markers, preserves the run
-artifacts, and exits nonzero.
+artifacts, and exits nonzero. SIGINT, SIGTERM, and SIGHUP route through the same
+exit trap, so an interrupted throwaway run still deletes its server.
+
+`SERVERPRO_DOGFOOD_SCENARIOS` selects a comma-separated subset of `create`,
+`status`, `doctor`, `fix`, `bootstrap`, `power`, `import`, `identity`, and
+`delete` (default `create,status,doctor,bootstrap,delete`). Scenarios always run
+in that order; unknown names, and server scenarios without `create` outside keep
+mode, exit 2 before any paid call.
+
+| Scenario | Proves |
+|---|---|
+| `create` | Create (or a resume in keep mode) ends with a passing doctor report. |
+| `status`, `doctor`, `bootstrap` | Status row identity, passing doctor, idempotent `git` bootstrap. |
+| `fix` | `server doctor --fix` passes, then plain doctor passes. |
+| `power` | Stop reaches a settled off state, start reaches on and doctor passes, restart changes the kernel boot ID (a real reboot) and doctor passes again. |
+| `import` | Import from provider labels into a separate empty `HOME` reports exactly one `imported` row, and doctor passes from the recovered artifacts. |
+| `identity` | A short-lived decoy (a second userspace `tailscaled` on the test host, enrolled with an ephemeral, single-use, 10-minute tagged key) claims the server's hostname and tag; doctor and a create rerun still pass and the recorded node ID stays unchanged. The decoy is logged out, stopped, and its key revoked when the scenario returns, and on interruption. |
+| `delete` | Delete completes and clears the throwaway markers. |
+
+Recovery waits poll every `SERVERPRO_DOGFOOD_POLL_INTERVAL` seconds (default 15)
+up to `SERVERPRO_DOGFOOD_RECOVERY_TIMEOUT` (default 600). Before a throwaway run,
+provider discovery in the dogfood namespace must find no servers; after every
+run it reports any still listed. The summary lists each scenario's result and
+duration, the server's compute and node IDs and age, and warns when a kept server
+reaches `SERVERPRO_DOGFOOD_MAX_AGE_HOURS` (default 24). The identity scenario
+and power reboot check reach the host with the local `tailscale ssh`, so the
+controller must be in the test server's tailnet; the decoy key request sends the
+Tailscale token through curl's stdin config, and the sudo password and decoy key
+reach the host only on stdin.
 
 `scripts/test_dogfood_validate.py` table-tests every validator directly.
 `scripts/test-dogfood-live-selftest.sh` then supplies valid fixtures for every
 live command and proves empty, malformed, failing-status, wrong-action,
 wrong-identity, invalid-catalog, and invalid-inventory outputs fail. It also
 proves every provider command path, destructive opt-in guard, Cloudflare token
-transport, and exact fallback cleanup payload/error retention. Both run through
-`make test-dogfood-live-selftest` as part of `make check`.
+transport, and exact fallback cleanup payload/error retention. Fake `tailscale`
+and `curl` binaries extend it to scenario selection, the full ordered run, keep
+mode reuse and deletion, the kept-server age warning, leftover preflight, delete
+after interruption, decoy failures with teardown, a recorded-node swap, an
+import failed row hidden behind exit zero, and secrets absent from every argv and
+artifact. Both run through `make test-dogfood-live-selftest` as part of
+`make check`.
 
 Read-only API dogfood runs when provider tokens are present:
 
@@ -299,6 +337,15 @@ SERVERPRO_DOGFOOD_SIZE=cx23 \
 SERVERPRO_DOGFOOD_IMAGE=ubuntu-24.04 \
 SERVERPRO_DOGFOOD_SUDOPASS='long unique password here' \
 make test-dogfood-live
+```
+
+On-demand kept test server: create once, run any scenarios later, delete when done
+(each command also needs the create/delete variables above):
+
+```sh
+SERVERPRO_DOGFOOD_KEEP_SERVER=1 SERVERPRO_DOGFOOD_SCENARIOS=create make test-dogfood-live
+SERVERPRO_DOGFOOD_KEEP_SERVER=1 SERVERPRO_DOGFOOD_SCENARIOS=doctor,fix,power,import,identity make test-dogfood-live
+SERVERPRO_DOGFOOD_KEEP_SERVER=1 SERVERPRO_DOGFOOD_SCENARIOS=delete make test-dogfood-live
 ```
 
 Optional Cloudflare Tunnel create path:

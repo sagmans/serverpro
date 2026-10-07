@@ -12,11 +12,12 @@ bin="${SERVERPRO_BIN:-${1:-./serverpro}}"
 validator_script="$script_dir/dogfood_validate.py"
 readonly_flow="$script_dir/dogfood-live-readonly.sh"
 destructive_flow="$script_dir/dogfood-live-create.sh"
+identity_flow="$script_dir/dogfood-live-identity.sh"
 if [[ ! -x "$bin" ]]; then
 	printf 'serverpro binary not executable: %s\n' "$bin" >&2
 	exit 2
 fi
-for required_file in "$validator_script" "$readonly_flow" "$destructive_flow"; do
+for required_file in "$validator_script" "$readonly_flow" "$destructive_flow" "$identity_flow"; do
 	if [[ ! -r "$required_file" ]]; then
 		printf 'live dogfood support file not readable: %s\n' "$required_file" >&2
 		exit 2
@@ -27,6 +28,24 @@ work_dir="$(mktemp -d "${TMPDIR:-/tmp}/serverpro-live-dogfood.XXXXXX")"
 home_dir="$work_dir/home"
 out_dir="$work_dir/out"
 results="$work_dir/results.txt"
+operator_home="$HOME"
+keep_server=0
+if [[ "${SERVERPRO_DOGFOOD_KEEP_SERVER:-}" == "1" ]]; then
+	# WHY a dedicated persistent home: a kept server needs its config, state,
+	# and credentials across runs, but must never share the operator's real
+	# serverpro home, so production namespaces stay out of reach.
+	keep_server=1
+	home_dir="${SERVERPRO_DOGFOOD_HOME:-$operator_home/.local/state/serverpro-dogfood/home}"
+	if [[ "$home_dir" != /* || "$home_dir" == "$operator_home" || "$home_dir" == "$operator_home/" || -L "$home_dir" ]]; then
+		printf 'invalid SERVERPRO_DOGFOOD_HOME %q: must be an absolute, dedicated, non-symlink directory\n' "$home_dir" >&2
+		rm -rf "$work_dir"
+		exit 2
+	fi
+	if ! mkdir -p "$home_dir" || ! chmod 700 "$home_dir"; then
+		rm -rf "$work_dir"
+		exit 2
+	fi
+fi
 mkdir -p "$home_dir" "$out_dir"
 
 cleanup() {
@@ -47,6 +66,8 @@ live=0
 created_namespace=""
 created_server=""
 created_provider=""
+# Per-scenario result lines and server facts printed before the final summary.
+scenario_summary=()
 
 log() {
 	printf '%s\n' "$*" | tee -a "$results"
@@ -200,6 +221,16 @@ os.chmod(path, 0o600)
 }
 
 cleanup_failed=0
+# Flows register extra teardown (for example the identity decoy) here so the
+# exit trap runs it before deleting the server it lives on.
+finish_hooks=()
+run_finish_hooks() {
+	local hook
+	for hook in ${finish_hooks[@]+"${finish_hooks[@]}"}; do
+		"$hook"
+	done
+	finish_hooks=()
+}
 cleanup_created_server() {
 	if [[ -z "$created_namespace" || -z "$created_server" || -z "$created_provider" ]]; then
 		return
@@ -219,6 +250,7 @@ cleanup_created_server() {
 	cleanup_failed=1
 }
 finish() {
+	run_finish_hooks
 	cleanup_created_server
 	if [[ "$cleanup_failed" -eq 1 ]]; then
 		printf 'preserved live dogfood temp dir after cleanup failure: %s\n' "$work_dir" >&2
@@ -228,12 +260,19 @@ finish() {
 	cleanup
 }
 trap finish EXIT
+# WHY explicit signal traps: an interrupted paid run must still reach the
+# EXIT trap so the throwaway server and any decoy are removed.
+trap 'log "INTERRUPTED | SIGINT"; exit 130' INT
+trap 'log "INTERRUPTED | SIGTERM"; exit 143' TERM
+trap 'log "INTERRUPTED | SIGHUP"; exit 129' HUP
 
 # Source only flow ownership; shared execution, credentials, and cleanup remain here.
 # shellcheck source=scripts/dogfood-live-readonly.sh
 source "$readonly_flow"
 # shellcheck source=scripts/dogfood-live-create.sh
 source "$destructive_flow"
+# shellcheck source=scripts/dogfood-live-identity.sh
+source "$identity_flow"
 
 log "serverpro live dogfood run"
 log "binary: $bin"
@@ -248,7 +287,10 @@ if [[ "${SERVERPRO_REQUIRE_LIVE_DOGFOOD:-}" == "1" && "$live" -eq 0 ]]; then
 	fail=$((fail + 1))
 fi
 
-log "SUMMARY | pass=$pass fail=$fail skip=$skip live=$live"
+for summary_line in ${scenario_summary[@]+"${scenario_summary[@]}"}; do
+	log "$summary_line"
+done
+log "SUMMARY | pass=$pass fail=$fail skip=$skip live=$live duration=${SECONDS}s"
 if [[ "$fail" -ne 0 ]]; then
 	exit 1
 fi

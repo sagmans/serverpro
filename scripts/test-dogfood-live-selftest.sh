@@ -22,6 +22,7 @@ SENT_DIGITALOCEAN='SENTINEL_DIGITALOCEAN_SECRET'
 SENT_TS='SENTINEL_TAILSCALE_SECRET'
 SENT_SUDO='SENTINEL_SUDO_SECRET'
 SENT_CF='SENTINEL_CLOUDFLARE_SECRET'
+SENT_DECOY='SENTINEL_DECOY_AUTH_KEY'
 
 # Fake python3 records argv, then executes the production validator or inline
 # credential writer unchanged so serialization assertions cover real code.
@@ -126,9 +127,30 @@ case " $* " in
 	*" server discover "*)
 		if [[ "${FAKE_INVALID_SEMANTIC:-}" == inventory-provider ]]; then
 			printf '[{"provider":"wrong","id":"123","name":"selftest","namespace":"spdogfood","server":"web","labels_ok":true,"local_state":"missing"}]\n'
+		elif [[ -n "${FAKE_LEFTOVER:-}" && -n "$namespace" ]]; then
+			printf '[{"provider":"%s","id":"999","name":"%s-old","namespace":"%s","server":"old","labels_ok":true,"local_state":"missing"}]\n' "$provider" "$namespace" "$namespace"
 		else
 			printf '[]\n'
 		fi
+		;;
+	*" server import "*)
+		printf 'HOME %s\n' "$HOME" >>"$FAKE_ARGV_DIR/import-home.log"
+		status=imported
+		[[ "${FAKE_INVALID_SEMANTIC:-}" == import-status ]] && status=failed
+		printf '[{"namespace":"%s","server":"%s","provider":"%s","provider_id":"123","status":"%s","config_path":"c","state_path":"s"}]\n' "$namespace" "$(sequence_value server import)" "$provider" "$status"
+		;;
+	*" server stop "*|*" server start "*|*" server restart "*)
+		case " $* " in
+			*" server stop "*) printf 'off' >"$FAKE_ARGV_DIR/power"; server="$(sequence_value server stop)" ;;
+			*" server start "*) printf 'on' >"$FAKE_ARGV_DIR/power"; server="$(sequence_value server start)" ;;
+			*" server restart "*)
+				server="$(sequence_value server restart)"
+				boots=0
+				[[ -f "$FAKE_ARGV_DIR/boot" ]] && boots="$(cat "$FAKE_ARGV_DIR/boot")"
+				printf '%s' "$((boots + 1))" >"$FAKE_ARGV_DIR/boot"
+				;;
+		esac
+		printf '{"namespace":"%s","server":"%s","provider":"%s","power":"%s"}\n' "$namespace" "$server" "$provider" "$(cat "$FAKE_ARGV_DIR/power" 2>/dev/null || printf on)"
 		;;
 	*" namespace create "*)
 		namespace="$(sequence_value namespace create)"
@@ -140,11 +162,27 @@ case " $* " in
 		if [[ "${SERVERPRO_CLOUDFLARE_TOKEN:-}" == "${SENT_CF:-}" ]]; then
 			printf 'exact\n' >"$FAKE_ARGV_DIR/cloudflare-env"
 		fi
-		doctor_summary "$(sequence_value server create)" create-doctor-status
+		server="$(sequence_value server create)"
+		if [[ -n "${FAKE_INTERRUPT_ON_CREATE:-}" ]]; then
+			# The harness must still delete the throwaway server after a signal.
+			kill -TERM "$PPID"
+			exit 1
+		fi
+		# A create rerun keeps the recorded node unless a test asks for a swap.
+		state_file="$HOME/.local/state/serverpro/namespaces/$namespace/servers/$server.json"
+		node=node-recorded
+		if [[ -f "$state_file" && -n "${FAKE_NODE_SWAP_ON_RERUN:-}" ]]; then
+			node=node-swapped
+		fi
+		mkdir -p "$(dirname "$state_file")"
+		printf '{"created_at":"%s","compute":{"id":"srv-1","name":"%s-%s"},"tailscale":{"name":"%s-%s.selftest.ts.net","node_id":"%s"}}\n' \
+			"${FAKE_CREATED_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" "$namespace" "$server" "$namespace" "$server" "$node" >"$state_file"
+		doctor_summary "$server" create-doctor-status
 		;;
 	*" server status "*)
 		server="$(sequence_value server status)"
 		power=running
+		[[ -f "$FAKE_ARGV_DIR/power" ]] && power="$(cat "$FAKE_ARGV_DIR/power")"
 		case "${FAKE_INVALID_SEMANTIC:-}" in
 			status-provider) provider=wrong ;;
 			status-power) power= ;;
@@ -169,6 +207,7 @@ case " $* " in
 				malformed) printf '{\n'; exit 0 ;;
 			esac
 			server="$(sequence_value server delete)"
+			rm -f "$HOME/.local/state/serverpro/namespaces/$namespace/servers/$server.json"
 			action=delete
 			case "${FAKE_INVALID_SEMANTIC:-}" in
 				delete-provider) provider=wrong ;;
@@ -183,7 +222,47 @@ case " $* " in
 esac
 FAKE
 
-chmod +x "$fakebin/python3" "$fakebin/serverpro"
+# Fake tailscale: records argv and stdin separately so tests prove the sudo
+# password and decoy key travel only on stdin. Boot IDs follow the restart
+# counter the fake serverpro keeps, so reboot detection is exercised.
+cat >"$fakebin/tailscale" <<'FAKE'
+#!/usr/bin/env bash
+printf '<%s>\n' "$@" >>"$FAKE_ARGV_DIR/tailscale-argv.log"
+cat >>"$FAKE_ARGV_DIR/tailscale-stdin.log"
+case "$*" in
+	*boot_id*) printf 'boot-%s\n' "$(cat "$FAKE_ARGV_DIR/boot" 2>/dev/null || printf 0)" ;;
+	*) [[ -z "${FAKE_DECOY_JOIN_FAIL:-}" ]] || exit 1 ;;
+esac
+FAKE
+
+# Fake curl: records argv and the stdin config, then answers the three
+# Tailscale API calls the identity scenario makes.
+cat >"$fakebin/curl" <<'FAKE'
+#!/usr/bin/env bash
+printf '<%s>\n' "$@" >>"$FAKE_ARGV_DIR/curl-argv.log"
+cat >>"$FAKE_ARGV_DIR/curl-stdin.log"
+method=GET
+args=("$@")
+for ((i = 0; i + 1 < ${#args[@]}; i++)); do
+	[[ "${args[i]}" == -X ]] && method="${args[i + 1]}"
+done
+url="${args[${#args[@]} - 1]}"
+case "$method $url" in
+	"POST "*/keys) printf '{"id":"k-decoy","key":"%s"}\n' "$SENT_DECOY" ;;
+	"GET "*/devices)
+		device='{"hostname":"spdogfooda-web","tags":["tag:serverpro-spdogfooda"]}'
+		if [[ -n "${FAKE_DECOY_MISSING:-}" ]]; then
+			printf '{"devices":[%s]}\n' "$device"
+		else
+			printf '{"devices":[%s,%s]}\n' "$device" "$device"
+		fi
+		;;
+	"DELETE "*) printf '{}\n' ;;
+	*) exit 22 ;;
+esac
+FAKE
+
+chmod +x "$fakebin/python3" "$fakebin/serverpro" "$fakebin/tailscale" "$fakebin/curl"
 
 fails=0
 note() { printf '%s\n' "$*"; }
@@ -263,7 +342,7 @@ run_harness() {
 		TMPDIR="$stmp/htmp" FAKE_ARGV_DIR="$FAKE_ARGV_DIR" FAKE_REAL_PYTHON="$real_python" \
 		SERVERPRO_BIN="$fakebin/serverpro" \
 		SENT_HETZNER="$SENT_HETZNER" SENT_VULTR="$SENT_VULTR" \
-		SENT_DIGITALOCEAN="$SENT_DIGITALOCEAN" SENT_CF="$SENT_CF" \
+		SENT_DIGITALOCEAN="$SENT_DIGITALOCEAN" SENT_CF="$SENT_CF" SENT_DECOY="$SENT_DECOY" \
 		"$@" \
 		bash "$live_script" >"$stmp/harness.log" 2>&1
 	harness_rc=$?
@@ -534,6 +613,125 @@ for entry in "${invalid_semantics[@]}"; do
 		fi
 	fi
 done
+
+fast_waits=(SERVERPRO_DOGFOOD_RECOVERY_TIMEOUT=3 SERVERPRO_DOGFOOD_POLL_INTERVAL=0)
+all_scenarios="create,status,doctor,fix,bootstrap,power,import,identity,delete"
+
+check_no_secret_in() { # check_no_secret_in <label> <path...>
+	local label="$1" path secret
+	shift
+	for path in "$@"; do
+		[[ -e "$path" ]] || continue
+		for secret in "$SENT_HETZNER" "$SENT_TS" "$SENT_SUDO" "$SENT_DECOY"; do
+			if grep -rFq "$secret" "$path"; then
+				bad "$label ($path)"
+				return
+			fi
+		done
+	done
+	ok "$label"
+}
+
+note "scenario S: scenario selection fails closed"
+run_harness scenarioS-unknown "" env "${create_env[@]}" SERVERPRO_DOGFOOD_SCENARIOS=create,reboot
+if [[ "$harness_rc" -eq 2 ]]; then ok "S unknown scenario exit 2"; else bad "S unknown scenario exit 2 ($harness_rc)"; fi
+check_no_create_or_credentials "S unknown scenario"
+run_harness scenarioS-nocreate "" env "${create_env[@]}" SERVERPRO_DOGFOOD_SCENARIOS=doctor
+if [[ "$harness_rc" -eq 2 ]]; then ok "S server scenario without create exit 2"; else bad "S server scenario without create exit 2 ($harness_rc)"; fi
+check_no_create_or_credentials "S server scenario without create"
+
+note "scenario P: every scenario runs in order and keeps secrets off argv"
+run_harness scenarioP "" env "${create_env[@]}" "${fast_waits[@]}" \
+	SERVERPRO_DOGFOOD_SCENARIOS="$all_scenarios" SERVERPRO_KEEP_HARNESS_TEMP=1
+wd="$(work_dir)"
+if [[ "$harness_rc" -eq 0 ]]; then
+	ok "P exit zero"
+else
+	bad "P exit zero"
+	sed 's/^/  log: /' "$scenario_tmp/harness.log"
+fi
+scope="<-n> <spdogfooda> <-p> <hetzner>"
+check_command "P stop argv" "CMD <--non-interactive> <--yes> $scope <server> <stop> <web>"
+check_command "P start argv" "CMD <--non-interactive> <--yes> $scope <server> <start> <web>"
+check_command "P restart argv" "CMD <--non-interactive> <--yes> $scope <server> <restart> <web>"
+check_command "P fix argv" "CMD <--non-interactive> $scope <server> <doctor> <web> <--fix>"
+check "P reboot proven by boot id" grep -Fq "PASS | live server rebooted" "$scenario_tmp/harness.log"
+check "P doctor after restart" grep -Fq "PASS | live server doctor after restart" "$scenario_tmp/harness.log"
+check "P import ran in a separate HOME" grep -Fq "HOME $wd/import-home" "$FAKE_ARGV_DIR/import-home.log"
+check "P doctor after import" grep -Fq "PASS | live server doctor after import" "$scenario_tmp/harness.log"
+check "P decoy enrolled" grep -Fq "PASS | live identity decoy enrolled" "$scenario_tmp/harness.log"
+check "P recorded node unchanged" grep -Fq "PASS | live recorded node unchanged beside identity decoy" "$scenario_tmp/harness.log"
+check "P decoy removed" grep -Fq "CLEANUP | identity decoy removed" "$scenario_tmp/harness.log"
+check "P decoy key revoked" grep -Fq "keys/k-decoy>" "$FAKE_ARGV_DIR/curl-argv.log"
+check "P token sent via curl stdin" grep -Fq "Authorization: Bearer $SENT_TS" "$FAKE_ARGV_DIR/curl-stdin.log"
+check "P decoy key sent via ssh stdin" grep -Fq "$SENT_DECOY" "$FAKE_ARGV_DIR/tailscale-stdin.log"
+check "P sudo password sent via ssh stdin" grep -Fq "$SENT_SUDO" "$FAKE_ARGV_DIR/tailscale-stdin.log"
+check_no_secret_in "P no secret in any argv" "$FAKE_ARGV_DIR/serverpro-argv.log" "$FAKE_ARGV_DIR/python-argv.log" "$FAKE_ARGV_DIR/tailscale-argv.log" "$FAKE_ARGV_DIR/curl-argv.log"
+[[ -n "$wd" ]] && check_no_secret_in "P no secret in artifacts" "$wd/out" "$wd/results.txt"
+for scenario in ${all_scenarios//,/ }; do
+	check "P $scenario summary pass" grep -Fq "SCENARIO | $scenario | pass |" "$scenario_tmp/harness.log"
+done
+check "P server facts reported" grep -Fq "SERVER | hetzner/spdogfooda/web" "$scenario_tmp/harness.log"
+check "P leftover check after run" grep -Fq "PASS | live leftover check after" "$scenario_tmp/harness.log"
+
+note "scenario K: keep mode reuses one server across runs"
+keep_home="$tmp/keep-home"
+keep_env=("${create_env[@]}" "${fast_waits[@]}" SERVERPRO_DOGFOOD_KEEP_SERVER=1 SERVERPRO_DOGFOOD_HOME="$keep_home")
+run_harness scenarioK-create "" env "${keep_env[@]}" SERVERPRO_DOGFOOD_SCENARIOS=create,doctor
+if [[ "$harness_rc" -eq 0 ]]; then ok "K create exit zero"; else bad "K create exit zero"; sed 's/^/  log: /' "$scenario_tmp/harness.log"; fi
+check_absent "K create run never deletes" "<delete>" "$FAKE_ARGV_DIR/serverpro-argv.log"
+check "K state persisted" test -f "$keep_home/.local/state/serverpro/namespaces/spdogfooda/servers/web.json"
+perm="$(stat -c '%a' "$keep_home" 2>/dev/null || stat -f '%Lp' "$keep_home")"
+if [[ "$perm" == "700" ]]; then ok "K home mode 0700"; else bad "K home mode 0700 ($perm)"; fi
+run_harness scenarioK-reuse "" env "${keep_env[@]}" SERVERPRO_DOGFOOD_SCENARIOS=doctor,fix
+if [[ "$harness_rc" -eq 0 ]]; then ok "K reuse exit zero"; else bad "K reuse exit zero"; sed 's/^/  log: /' "$scenario_tmp/harness.log"; fi
+check_absent "K reuse never creates" "<server> <create>" "$FAKE_ARGV_DIR/serverpro-command.log"
+check "K reuse ran doctor" grep -Fq "PASS | live server doctor after fix" "$scenario_tmp/harness.log"
+check "K kept server reported" grep -Fq "kept=yes" "$scenario_tmp/harness.log"
+run_harness scenarioK-delete "" env "${keep_env[@]}" SERVERPRO_DOGFOOD_SCENARIOS=delete
+check "K delete scenario removes server" grep -Fq "PASS | live server delete" "$scenario_tmp/harness.log"
+check "K state removed" test ! -f "$keep_home/.local/state/serverpro/namespaces/spdogfooda/servers/web.json"
+run_harness scenarioK-badhome "" env "${create_env[@]}" SERVERPRO_DOGFOOD_KEEP_SERVER=1 SERVERPRO_DOGFOOD_HOME=relative/home
+if [[ "$harness_rc" -eq 2 ]]; then ok "K relative home rejected"; else bad "K relative home rejected ($harness_rc)"; fi
+
+note "scenario W: an old kept server is flagged"
+aged_home="$tmp/aged-home"
+run_harness scenarioW "" env "${create_env[@]}" "${fast_waits[@]}" SERVERPRO_DOGFOOD_KEEP_SERVER=1 \
+	SERVERPRO_DOGFOOD_HOME="$aged_home" SERVERPRO_DOGFOOD_SCENARIOS=create FAKE_CREATED_AT=2020-01-01T00:00:00Z
+check "W age warning" grep -Fq "WARN | kept server age" "$scenario_tmp/harness.log"
+
+note "scenario L: leftovers block a throwaway run before create"
+run_harness scenarioL "" env "${create_env[@]}" FAKE_LEFTOVER=1
+if [[ "$harness_rc" -ne 0 ]]; then ok "L nonzero exit"; else bad "L nonzero exit"; fi
+check "L leftover reported" grep -Fq "FAIL | live leftover check preflight | servers already exist in hetzner/spdogfooda: old" "$scenario_tmp/harness.log"
+check_absent "L create never attempted" "<server> <create>" "$FAKE_ARGV_DIR/serverpro-command.log"
+
+note "scenario I: an interrupted run still deletes the throwaway server"
+run_harness scenarioI "" env "${create_env[@]}" FAKE_INTERRUPT_ON_CREATE=1
+if [[ "$harness_rc" -ne 0 ]]; then ok "I nonzero exit"; else bad "I nonzero exit"; fi
+check "I interruption recorded" grep -Fq "INTERRUPTED | SIGTERM" "$scenario_tmp/harness.log"
+check_command "I fallback delete ran" "CMD <-n> <spdogfooda> <-p> <hetzner> <--yes> <server> <delete> <web>"
+
+note "scenario J: identity failures fail loudly and still tear down the decoy"
+run_harness scenarioJ-missing "" env "${create_env[@]}" "${fast_waits[@]}" \
+	SERVERPRO_DOGFOOD_SCENARIOS=create,identity,delete FAKE_DECOY_MISSING=1
+if [[ "$harness_rc" -ne 0 ]]; then ok "J missing decoy nonzero exit"; else bad "J missing decoy nonzero exit"; fi
+check "J missing decoy reported" grep -Fq "FAIL | live identity decoy enrolled | only 1 device(s)" "$scenario_tmp/harness.log"
+check "J decoy torn down after failure" grep -Fq "CLEANUP | identity decoy removed" "$scenario_tmp/harness.log"
+run_harness scenarioJ-swap "" env "${create_env[@]}" "${fast_waits[@]}" \
+	SERVERPRO_DOGFOOD_SCENARIOS=create,identity,delete FAKE_NODE_SWAP_ON_RERUN=1
+if [[ "$harness_rc" -ne 0 ]]; then ok "J node swap nonzero exit"; else bad "J node swap nonzero exit"; fi
+check "J node swap reported" grep -Fq "FAIL | live recorded node unchanged beside identity decoy | node-recorded became node-swapped" "$scenario_tmp/harness.log"
+run_harness scenarioJ-join "" env "${create_env[@]}" "${fast_waits[@]}" \
+	SERVERPRO_DOGFOOD_SCENARIOS=create,identity,delete FAKE_DECOY_JOIN_FAIL=1
+if [[ "$harness_rc" -ne 0 ]]; then ok "J join failure nonzero exit"; else bad "J join failure nonzero exit"; fi
+check "J join failure reported" grep -Fq "FAIL | live identity decoy enrolled | decoy tailscaled did not join" "$scenario_tmp/harness.log"
+
+note "scenario M: import that exits zero with a failed row is rejected"
+run_harness scenarioM "" env "${create_env[@]}" "${fast_waits[@]}" \
+	SERVERPRO_DOGFOOD_SCENARIOS=create,import,delete FAKE_INVALID_SEMANTIC=import-status
+if [[ "$harness_rc" -ne 0 ]]; then ok "M nonzero exit"; else bad "M nonzero exit"; fi
+check "M import failure recorded" grep -Fq "FAIL | live server import" "$scenario_tmp/harness.log"
 
 note "SUMMARY | fails=$fails"
 [[ "$fails" -eq 0 ]]
