@@ -22,7 +22,7 @@ SENT_DIGITALOCEAN='SENTINEL_DIGITALOCEAN_SECRET'
 SENT_TS='SENTINEL_TAILSCALE_SECRET'
 SENT_SUDO='SENTINEL_SUDO_SECRET'
 SENT_CF='SENTINEL_CLOUDFLARE_SECRET'
-SENT_DECOY='SENTINEL_DECOY_AUTH_KEY'
+SENT_DECOY='tskey-auth-SENTINEL-DECOY-KEY'
 
 # Fake python3 records argv, then executes the production validator or inline
 # credential writer unchanged so serialization assertions cover real code.
@@ -207,6 +207,8 @@ case " $* " in
 				malformed) printf '{\n'; exit 0 ;;
 			esac
 			server="$(sequence_value server delete)"
+			# A second signal during teardown must not abort the delete.
+			[[ -z "${FAKE_SIGNAL_DURING_DELETE:-}" ]] || kill -INT "$PPID"
 			rm -f "$HOME/.local/state/serverpro/namespaces/$namespace/servers/$server.json"
 			action=delete
 			case "${FAKE_INVALID_SEMANTIC:-}" in
@@ -230,8 +232,20 @@ cat >"$fakebin/tailscale" <<'FAKE'
 printf '<%s>\n' "$@" >>"$FAKE_ARGV_DIR/tailscale-argv.log"
 cat >>"$FAKE_ARGV_DIR/tailscale-stdin.log"
 case "$*" in
-	*boot_id*) printf 'boot-%s\n' "$(cat "$FAKE_ARGV_DIR/boot" 2>/dev/null || printf 0)" ;;
-	*) [[ -z "${FAKE_DECOY_JOIN_FAIL:-}" ]] || exit 1 ;;
+	*boot_id*)
+		# A hung host must be cut off by the harness's own SSH timeout.
+		[[ -z "${FAKE_SSH_HANG:-}" ]] || sleep 20
+		printf 'boot-%s\n' "$(cat "$FAKE_ARGV_DIR/boot" 2>/dev/null || printf 0)"
+		;;
+	*sudo*)
+		# Without a TTY the cached sudo credential only holds when both sudo
+		# calls share a parent shell, so exec-ing a second sudo would fail live.
+		if [[ "$*" == *"exec sudo"* || "$*" != *"sudo -n sh -s"* ]]; then
+			printf 'unsupported sudo shape\n' >&2
+			exit 97
+		fi
+		[[ -z "${FAKE_DECOY_JOIN_FAIL:-}" ]] || exit 1
+		;;
 esac
 FAKE
 
@@ -248,9 +262,9 @@ for ((i = 0; i + 1 < ${#args[@]}; i++)); do
 done
 url="${args[${#args[@]} - 1]}"
 case "$method $url" in
-	"POST "*/keys) printf '{"id":"k-decoy","key":"%s"}\n' "$SENT_DECOY" ;;
+	"POST "*/keys) printf '{"id":"kdecoy","key":"%s"}\n' "$SENT_DECOY" ;;
 	"GET "*/devices)
-		device='{"hostname":"spdogfooda-web","tags":["tag:serverpro-spdogfooda"]}'
+		device='{"hostname":"spdogfooda-web","tags":["tag:serverpro-spdogfooda"],"connectedToControl":true}'
 		if [[ -n "${FAKE_DECOY_MISSING:-}" ]]; then
 			printf '{"devices":[%s]}\n' "$device"
 		else
@@ -336,7 +350,8 @@ run_harness() {
 	shift 2
 	local stmp="$tmp/$scenario"
 	export FAKE_ARGV_DIR="$stmp/argv"
-	mkdir -p "$FAKE_ARGV_DIR" "$stmp/htmp"
+	# Operators always have a home; keep-mode alias checks resolve it physically.
+	mkdir -p "$FAKE_ARGV_DIR" "$stmp/htmp" "$stmp/home"
 	[[ -z "$delete_status" ]] || printf '%s\n' "$delete_status" >"$FAKE_ARGV_DIR/delete-status"
 	env -i PATH="$fakebin:/usr/bin:/bin" HOME="$stmp/home" \
 		TMPDIR="$stmp/htmp" FAKE_ARGV_DIR="$FAKE_ARGV_DIR" FAKE_REAL_PYTHON="$real_python" \
@@ -614,14 +629,18 @@ for entry in "${invalid_semantics[@]}"; do
 	fi
 done
 
-fast_waits=(SERVERPRO_DOGFOOD_RECOVERY_TIMEOUT=3 SERVERPRO_DOGFOOD_POLL_INTERVAL=0)
+fast_waits=(SERVERPRO_DOGFOOD_RECOVERY_TIMEOUT=3 SERVERPRO_DOGFOOD_POLL_INTERVAL=1)
 all_scenarios="create,status,doctor,fix,bootstrap,power,import,identity,delete"
 
 check_no_secret_in() { # check_no_secret_in <label> <path...>
 	local label="$1" path secret
 	shift
 	for path in "$@"; do
-		[[ -e "$path" ]] || continue
+		# A renamed or missing log must fail rather than pass unchecked.
+		if [[ ! -e "$path" ]]; then
+			bad "$label (missing $path)"
+			return
+		fi
 		for secret in "$SENT_HETZNER" "$SENT_TS" "$SENT_SUDO" "$SENT_DECOY"; do
 			if grep -rFq "$secret" "$path"; then
 				bad "$label ($path)"
@@ -662,7 +681,7 @@ check "P doctor after import" grep -Fq "PASS | live server doctor after import" 
 check "P decoy enrolled" grep -Fq "PASS | live identity decoy enrolled" "$scenario_tmp/harness.log"
 check "P recorded node unchanged" grep -Fq "PASS | live recorded node unchanged beside identity decoy" "$scenario_tmp/harness.log"
 check "P decoy removed" grep -Fq "CLEANUP | identity decoy removed" "$scenario_tmp/harness.log"
-check "P decoy key revoked" grep -Fq "keys/k-decoy>" "$FAKE_ARGV_DIR/curl-argv.log"
+check "P decoy key revoked" grep -Fq "keys/kdecoy>" "$FAKE_ARGV_DIR/curl-argv.log"
 check "P token sent via curl stdin" grep -Fq "Authorization: Bearer $SENT_TS" "$FAKE_ARGV_DIR/curl-stdin.log"
 check "P decoy key sent via ssh stdin" grep -Fq "$SENT_DECOY" "$FAKE_ARGV_DIR/tailscale-stdin.log"
 check "P sudo password sent via ssh stdin" grep -Fq "$SENT_SUDO" "$FAKE_ARGV_DIR/tailscale-stdin.log"
@@ -697,7 +716,7 @@ if [[ "$harness_rc" -eq 2 ]]; then ok "K relative home rejected"; else bad "K re
 note "scenario W: an old kept server is flagged"
 aged_home="$tmp/aged-home"
 run_harness scenarioW "" env "${create_env[@]}" "${fast_waits[@]}" SERVERPRO_DOGFOOD_KEEP_SERVER=1 \
-	SERVERPRO_DOGFOOD_HOME="$aged_home" SERVERPRO_DOGFOOD_SCENARIOS=create FAKE_CREATED_AT=2020-01-01T00:00:00Z
+	SERVERPRO_DOGFOOD_HOME="$aged_home" SERVERPRO_DOGFOOD_SCENARIOS=create FAKE_CREATED_AT=2020-01-01T00:00:00.123456789Z
 check "W age warning" grep -Fq "WARN | kept server age" "$scenario_tmp/harness.log"
 
 note "scenario L: leftovers block a throwaway run before create"
@@ -711,6 +730,29 @@ run_harness scenarioI "" env "${create_env[@]}" FAKE_INTERRUPT_ON_CREATE=1
 if [[ "$harness_rc" -ne 0 ]]; then ok "I nonzero exit"; else bad "I nonzero exit"; fi
 check "I interruption recorded" grep -Fq "INTERRUPTED | SIGTERM" "$scenario_tmp/harness.log"
 check_command "I fallback delete ran" "CMD <-n> <spdogfooda> <-p> <hetzner> <--yes> <server> <delete> <web>"
+
+run_harness scenarioI2 "" env "${create_env[@]}" FAKE_INTERRUPT_ON_CREATE=1 FAKE_SIGNAL_DURING_DELETE=1
+check "I2 second signal does not abort the delete" grep -Fq "CLEANUP | deleted hetzner/spdogfooda/web" "$scenario_tmp/harness.log"
+check "I2 leftover check runs on exit" grep -Fq "live leftover check exit" "$scenario_tmp/harness.log"
+
+note "scenario K2: keep-mode home cannot alias the operator home"
+for alias in "home/." "home//" "home/../home" "/"; do
+	case "$alias" in
+		/) alias_path="/" ;;
+		*) alias_path="$tmp/scenarioK2-${alias//[^a-z]/_}/$alias" ;;
+	esac
+	run_harness "scenarioK2-${alias//[^a-z]/_}" "" env "${create_env[@]}" SERVERPRO_DOGFOOD_KEEP_SERVER=1 SERVERPRO_DOGFOOD_HOME="$alias_path"
+	if [[ "$harness_rc" -eq 2 ]]; then ok "K2 alias $alias rejected"; else bad "K2 alias $alias rejected ($harness_rc)"; fi
+	check_no_create_or_credentials "K2 alias $alias"
+done
+
+note "scenario T: a hung SSH read is cut off by the harness timeout"
+started=$SECONDS
+run_harness scenarioT "" env "${create_env[@]}" "${fast_waits[@]}" SERVERPRO_DOGFOOD_SSH_TIMEOUT=1 \
+	SERVERPRO_DOGFOOD_SCENARIOS=create,power,delete FAKE_SSH_HANG=1
+if [[ "$harness_rc" -ne 0 ]]; then ok "T nonzero exit"; else bad "T nonzero exit"; fi
+check "T unreadable boot id reported" grep -Fq "FAIL | live boot id before restart | unreadable" "$scenario_tmp/harness.log"
+if ((SECONDS - started < 15)); then ok "T bounded by SSH timeout"; else bad "T bounded by SSH timeout ($((SECONDS - started))s)"; fi
 
 note "scenario J: identity failures fail loudly and still tear down the decoy"
 run_harness scenarioJ-missing "" env "${create_env[@]}" "${fast_waits[@]}" \

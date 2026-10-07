@@ -18,6 +18,8 @@ DOGFOOD_DECOY_DIR="/run/serverpro-dogfood-decoy"
 DOGFOOD_DECOY_MIN_MATCHES=2
 DOGFOOD_HOSTNAME_PATTERN='^[a-z0-9]([a-z0-9-]*[a-z0-9])?$'
 DOGFOOD_TAILNET_PATTERN='^[A-Za-z0-9._@-]+$'
+DOGFOOD_AUTH_KEY_PATTERN='^tskey-[A-Za-z0-9-]+$'
+DOGFOOD_KEY_ID_PATTERN='^[A-Za-z0-9]+$'
 
 decoy_key_id=""
 decoy_started=0
@@ -42,7 +44,13 @@ import sys
 
 host, tag = sys.argv[1:3]
 devices = json.load(sys.stdin).get("devices", [])
-print(sum(1 for d in devices if d.get("hostname") == host and tag in (d.get("tags") or [])))
+# Offline devices, such as a decoy left by an earlier run, do not compete.
+print(sum(
+    1 for d in devices
+    if d.get("hostname") == host
+    and tag in (d.get("tags") or [])
+    and (d.get("connectedToControl") or d.get("online"))
+))
 ' "$host" "$tag"
 }
 
@@ -124,6 +132,13 @@ print(created["key"])
 	fi
 	decoy_key_id="${key%%$'\n'*}"
 	key="${key#*$'\n'}"
+	# The key is written into a root script, so only the documented shape passes.
+	if [[ ! "$key" =~ $DOGFOOD_AUTH_KEY_PATTERN || ! "$decoy_key_id" =~ $DOGFOOD_KEY_ID_PATTERN ]]; then
+		key=""
+		log "FAIL | live identity decoy key | unexpected key format from the Tailscale API"
+		fail=$((fail + 1))
+		return 1
+	fi
 
 	decoy_started=1
 	if ! remote_sudo_script >"$out_dir/identity-decoy.out" 2>"$out_dir/identity-decoy.err" <<SCRIPT

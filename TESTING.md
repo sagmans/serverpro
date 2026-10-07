@@ -283,9 +283,15 @@ mode, exit 2 before any paid call.
 | `delete` | Delete completes and clears the throwaway markers. |
 
 Recovery waits poll every `SERVERPRO_DOGFOOD_POLL_INTERVAL` seconds (default 15)
-up to `SERVERPRO_DOGFOOD_RECOVERY_TIMEOUT` (default 600). Before a throwaway run,
-provider discovery in the dogfood namespace must find no servers; after every
-run it reports any still listed. The summary lists each scenario's result and
+up to `SERVERPRO_DOGFOOD_RECOVERY_TIMEOUT` (default 600), and every remote
+`tailscale ssh` call, with its child processes, is stopped after
+`SERVERPRO_DOGFOOD_SSH_TIMEOUT` seconds (default 60); all three accept only
+positive integers. The keep-mode home is compared by physical path, so `.`,
+`..`, doubled slashes, or a symlinked parent cannot alias the operator home or
+a directory above it. Before a throwaway run, provider discovery in the dogfood
+namespace must find no servers; after every run, including one ended by a
+signal, it reports any still listed. A second signal during teardown is ignored
+so the fallback delete always finishes. The summary lists each scenario's result and
 duration, the server's compute and node IDs and age, and warns when a kept server
 reaches `SERVERPRO_DOGFOOD_MAX_AGE_HOURS` (default 24). The identity scenario
 and power reboot check reach the host with the local `tailscale ssh`, so the
@@ -301,7 +307,7 @@ proves every provider command path, destructive opt-in guard, Cloudflare token
 transport, and exact fallback cleanup payload/error retention. Fake `tailscale`
 and `curl` binaries extend it to scenario selection, the full ordered run, keep
 mode reuse and deletion, the kept-server age warning, leftover preflight, delete
-after interruption, decoy failures with teardown, a recorded-node swap, an
+after interruption and after a second signal during teardown, home aliases, an SSH hang cut off by the timeout, the sudo command shape, decoy failures with teardown, a recorded-node swap, an
 import failed row hidden behind exit zero, and secrets absent from every argv and
 artifact. Both run through `make test-dogfood-live-selftest` as part of
 `make check`.

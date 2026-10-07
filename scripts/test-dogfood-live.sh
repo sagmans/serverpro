@@ -36,15 +36,21 @@ if [[ "${SERVERPRO_DOGFOOD_KEEP_SERVER:-}" == "1" ]]; then
 	# serverpro home, so production namespaces stay out of reach.
 	keep_server=1
 	home_dir="${SERVERPRO_DOGFOOD_HOME:-$operator_home/.local/state/serverpro-dogfood/home}"
-	if [[ "$home_dir" != /* || "$home_dir" == "$operator_home" || "$home_dir" == "$operator_home/" || -L "$home_dir" ]]; then
+	if [[ "$home_dir" != /* || -L "$home_dir" ]] || ! mkdir -p "$home_dir"; then
 		printf 'invalid SERVERPRO_DOGFOOD_HOME %q: must be an absolute, dedicated, non-symlink directory\n' "$home_dir" >&2
 		rm -rf "$work_dir"
 		exit 2
 	fi
-	if ! mkdir -p "$home_dir" || ! chmod 700 "$home_dir"; then
+	# Compare physical paths so ".", "..", doubled slashes, or a symlinked
+	# parent cannot alias the operator's home or any directory above it.
+	resolved_home="$(cd -P -- "$home_dir" && pwd -P)"
+	resolved_operator="$(cd -P -- "$operator_home" && pwd -P)"
+	if [[ -z "$resolved_home" || "$resolved_home" == / || "$resolved_operator/" == "$resolved_home/"* ]] || ! chmod 700 "$resolved_home"; then
+		printf 'invalid SERVERPRO_DOGFOOD_HOME %q: must not be the operator home or one of its parents\n' "$home_dir" >&2
 		rm -rf "$work_dir"
 		exit 2
 	fi
+	home_dir="$resolved_home"
 fi
 mkdir -p "$home_dir" "$out_dir"
 
@@ -250,8 +256,14 @@ cleanup_created_server() {
 	cleanup_failed=1
 }
 finish() {
+	# WHY ignore signals here: a second Ctrl-C during the fallback delete would
+	# otherwise abort teardown and leave the paid server running.
+	trap '' INT TERM HUP
 	run_finish_hooks
 	cleanup_created_server
+	if declare -F check_leftovers_on_exit >/dev/null; then
+		check_leftovers_on_exit
+	fi
 	if [[ "$cleanup_failed" -eq 1 ]]; then
 		printf 'preserved live dogfood temp dir after cleanup failure: %s\n' "$work_dir" >&2
 		printf 'recover manually, then remove: %s\n' "$work_dir" >&2

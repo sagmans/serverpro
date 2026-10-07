@@ -25,6 +25,12 @@ DOGFOOD_DEFAULT_POLL_INTERVAL=15
 # A kept server older than this is reported so a forgotten one is noticed.
 DOGFOOD_DEFAULT_MAX_AGE_HOURS=24
 DOGFOOD_BOOT_ID_PATH="/proc/sys/kernel/random/boot_id"
+# A host mid-reboot can leave Tailscale SSH hanging; every remote call is
+# bounded so recovery deadlines stay meaningful and a paid run cannot stall.
+DOGFOOD_DEFAULT_SSH_TIMEOUT=60
+# Set once a paid run starts, so the exit trap knows to look for leftovers.
+destructive_started=0
+leftovers_checked=0
 
 # scenario_selected reports whether the operator asked for a scenario.
 scenario_selected() {
@@ -56,11 +62,30 @@ parse_dogfood_scenarios() {
 positive_int_setting() {
 	local name="$1" default="$2" value
 	value="${!name:-$default}"
-	if [[ ! "$value" =~ ^[0-9]+$ ]]; then
-		printf 'invalid %s %q: expected a non-negative integer\n' "$name" "$value" >&2
+	# Zero would spin against provider APIs, and a leading zero reads as octal.
+	if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
+		printf 'invalid %s %q: expected a positive integer without leading zeros\n' "$name" "$value" >&2
 		exit 2
 	fi
 	printf '%s' "$value"
+}
+
+# run_with_timeout bounds one command. Explicit stdin redirection keeps piped
+# input attached, since background jobs otherwise read from /dev/null.
+run_with_timeout() {
+	local seconds="$1" pid watcher rc
+	shift
+	"$@" <&0 &
+	pid=$!
+	# The watcher must not hold stdout, or a $(...) caller waits out the sleep.
+	# Children are stopped too, since an ssh child would keep the pipe open.
+	(sleep "$seconds" && { pkill -TERM -P "$pid"; kill -TERM "$pid"; }) >/dev/null 2>&1 &
+	watcher=$!
+	wait "$pid"
+	rc=$?
+	kill "$watcher" 2>/dev/null
+	wait "$watcher" 2>/dev/null
+	return "$rc"
 }
 
 # state_path is the CLI's fixed per-server state location under the harness HOME.
@@ -99,11 +124,13 @@ remote_read() {
 	local target
 	target="$(state_field tailscale.name)"
 	[[ -n "$target" ]] || return 1
-	tailscale ssh "$admin_user@$target" "$1"
+	run_with_timeout "$ssh_timeout" tailscale ssh "$admin_user@$target" "$1" </dev/null
 }
 
 # remote_sudo_script runs the script on stdin as root. The sudo password and
-# script travel on stdin, never in argv, mirroring serverpro's remote runner.
+# script travel on stdin, never in argv, mirroring serverpro's remote runner:
+# both sudo calls stay children of one shell so the cached credential applies
+# without a TTY, and the second runs non-interactively.
 remote_sudo_script() {
 	local target script
 	target="$(state_field tailscale.name)"
@@ -112,7 +139,7 @@ remote_sudo_script() {
 	{
 		printf '%s\n' "$SERVERPRO_DOGFOOD_SUDOPASS"
 		printf '%s\n' "$script"
-	} | tailscale ssh "$admin_user@$target" "sh -c 'IFS= read -r p; printf \"%s\\n\" \"\$p\" | sudo -S -p \"\" -v && exec sudo sh -s'"
+	} | run_with_timeout "$ssh_timeout" tailscale ssh "$admin_user@$target" "sh -c 'IFS= read -r p; printf \"%s\\n\" \"\$p\" | sudo -S -p \"\" -v && sudo -n sh -s'"
 }
 
 # wait_live_ok polls a read-only command until its output passes validation or
@@ -199,6 +226,20 @@ check_leftovers() {
 	return 0
 }
 
+# check_leftovers_on_exit covers runs that ended early, for example by signal,
+# where the normal post-run check never ran and a fallback delete may have
+# found nothing to delete.
+check_leftovers_on_exit() {
+	[[ "$destructive_started" -eq 1 && "$leftovers_checked" -eq 0 ]] || return 0
+	local expected=""
+	[[ "$keep_server" -eq 1 && -n "$(state_field compute.id)" ]] && expected="$server"
+	export SERVERPRO_SERVER_PROVIDER_TOKEN
+	SERVERPRO_SERVER_PROVIDER_TOKEN="$(provider_token "$provider")"
+	check_leftovers exit "$expected"
+	leftovers_checked=1
+	unset SERVERPRO_SERVER_PROVIDER_TOKEN
+}
+
 # report_server_facts adds identity and age to the summary, and flags a kept
 # server old enough to be costing money unnoticed.
 report_server_facts() {
@@ -215,8 +256,12 @@ report_server_facts() {
 import sys
 from datetime import datetime, timezone
 
+import re
+
+# Go writes nanoseconds, which older Python fromisoformat rejects.
+stamp = re.sub(r"(\.\d{6})\d+", r"\1", sys.argv[1]).replace("Z", "+00:00")
 try:
-    created = datetime.fromisoformat(sys.argv[1].replace("Z", "+00:00"))
+    created = datetime.fromisoformat(stamp)
 except ValueError:
     sys.exit(0)
 print(int((datetime.now(timezone.utc) - created).total_seconds() // 3600))
@@ -364,6 +409,7 @@ run_destructive_dogfood() {
 	recovery_timeout="$(positive_int_setting SERVERPRO_DOGFOOD_RECOVERY_TIMEOUT "$DOGFOOD_DEFAULT_RECOVERY_TIMEOUT")" || exit 2
 	poll_interval="$(positive_int_setting SERVERPRO_DOGFOOD_POLL_INTERVAL "$DOGFOOD_DEFAULT_POLL_INTERVAL")" || exit 2
 	max_age_hours="$(positive_int_setting SERVERPRO_DOGFOOD_MAX_AGE_HOURS "$DOGFOOD_DEFAULT_MAX_AGE_HOURS")" || exit 2
+	ssh_timeout="$(positive_int_setting SERVERPRO_DOGFOOD_SSH_TIMEOUT "$DOGFOOD_DEFAULT_SSH_TIMEOUT")" || exit 2
 	# A throwaway server cannot outlive the run, so server scenarios need create.
 	if [[ "$keep_server" -ne 1 ]] && ! scenario_selected create; then
 		for scenario in $DOGFOOD_SERVER_SCENARIOS; do
@@ -420,6 +466,7 @@ run_destructive_dogfood() {
 			created_server="$server"
 			created_provider="$provider"
 		fi
+		destructive_started=1
 		run_scenario create scenario_create
 		if [[ "$server_ready" -eq 1 ]]; then
 			run_scenario status scenario_status
@@ -439,6 +486,7 @@ run_destructive_dogfood() {
 		local expected=""
 		[[ "$server_ready" -eq 1 ]] && expected="$server"
 		check_leftovers after "$expected"
+		leftovers_checked=1
 	fi
 	unset SERVERPRO_SERVER_PROVIDER_TOKEN SERVERPRO_TAILSCALE_TOKEN SERVERPRO_CLOUDFLARE_TOKEN "$sudo_env_name"
 }
