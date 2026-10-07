@@ -24,8 +24,8 @@ SENT_SUDO='SENTINEL_SUDO_SECRET'
 SENT_CF='SENTINEL_CLOUDFLARE_SECRET'
 SENT_DECOY='tskey-auth-SENTINEL-DECOY-KEY'
 
-# Fake python3 records argv, then executes the production validator or inline
-# credential writer unchanged so serialization assertions cover real code.
+# Fake python3 records argv, then executes the production validator and its
+# helper subcommands unchanged so serialization assertions cover real code.
 cat >"$fakebin/python3" <<'FAKE'
 #!/usr/bin/env bash
 printf '<%s>\n' "$@" >>"$FAKE_ARGV_DIR/python-argv.log"
@@ -175,8 +175,9 @@ case " $* " in
 			node=node-swapped
 		fi
 		mkdir -p "$(dirname "$state_file")"
-		printf '{"created_at":"%s","compute":{"id":"srv-1","name":"%s-%s"},"tailscale":{"name":"%s-%s.selftest.ts.net","node_id":"%s"}}\n' \
-			"${FAKE_CREATED_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" "$namespace" "$server" "$namespace" "$server" "$node" >"$state_file"
+		# The recorded tag is what the identity decoy must advertise.
+		printf '{"created_at":"%s","compute":{"id":"srv-1","name":"%s-%s"},"tailscale":{"name":"%s-%s.selftest.ts.net","node_id":"%s","tags":["tag:serverpro-%s"]}}\n' \
+			"${FAKE_CREATED_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" "$namespace" "$server" "$namespace" "$server" "$node" "$namespace" >"$state_file"
 		doctor_summary "$server" create-doctor-status
 		;;
 	*" server status "*)
@@ -674,6 +675,7 @@ check "P decoy removed" grep -Fq "CLEANUP | identity decoy removed" "$scenario_t
 check "P decoy key revoked" grep -Fq "keys/kdecoy>" "$FAKE_ARGV_DIR/curl-argv.log"
 check "P token sent via curl stdin" grep -Fq "Authorization: Bearer $SENT_TS" "$FAKE_ARGV_DIR/curl-stdin.log"
 check "P decoy key sent via ssh stdin" grep -Fq "$SENT_DECOY" "$FAKE_ARGV_DIR/tailscale-stdin.log"
+check "P decoy advertises the recorded tag" grep -Fq -e "--advertise-tags='tag:serverpro-spdogfooda' --timeout=60s" "$FAKE_ARGV_DIR/tailscale-stdin.log"
 check "P sudo password sent via ssh stdin" grep -Fq "$SENT_SUDO" "$FAKE_ARGV_DIR/tailscale-stdin.log"
 check_no_secret_in "P no secret in any argv" "$FAKE_ARGV_DIR/serverpro-argv.log" "$FAKE_ARGV_DIR/python-argv.log" "$FAKE_ARGV_DIR/tailscale-argv.log" "$FAKE_ARGV_DIR/curl-argv.log"
 [[ -n "$wd" ]] && check_no_secret_in "P no secret in artifacts" "$wd/out" "$wd/results.txt"

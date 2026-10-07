@@ -7,6 +7,11 @@
 # secrets as they are typed, and keeps them in harness variables only. Without
 # a terminal (CI, scripts) nothing is asked and the existing skip rules apply.
 
+# The lib is this flow's only dependency; sourcing it here keeps that explicit
+# and lets shellcheck lint the flow alone. Re-sourcing only redefines.
+# shellcheck source=scripts/dogfood-live-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/dogfood-live-lib.sh"
+
 DOGFOOD_PROMPT_IN_FD=7
 DOGFOOD_PROMPT_OUT_FD=8
 DOGFOOD_PROMPT_MAX_ATTEMPTS=3
@@ -33,6 +38,8 @@ open_prompt_streams() {
 	fi
 }
 
+# close_prompt_streams releases the prompt descriptors so no later command
+# inherits a handle on the terminal.
 close_prompt_streams() {
 	exec 7<&- 8>&-
 }

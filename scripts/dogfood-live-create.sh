@@ -3,8 +3,11 @@
 # in one fixed order against one server, so each step starts from the state the
 # previous step proved.
 
-# DigitalOcean is the default test provider for on-demand dogfood servers.
-DOGFOOD_DEFAULT_PROVIDER="digitalocean"
+# The lib is this flow's only dependency; sourcing it here keeps that explicit
+# and lets shellcheck lint the flow alone. Re-sourcing only redefines.
+# shellcheck source=scripts/dogfood-live-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/dogfood-live-lib.sh"
+
 DOGFOOD_DEFAULT_SERVER="web"
 # WHY fixed: create adds tailnet policy tag owners and an SSH rule per
 # namespace tag, and delete deliberately leaves tailnet-global policy alone.
@@ -13,12 +16,14 @@ DOGFOOD_DEFAULT_SERVER="web"
 DOGFOOD_DEFAULT_NAMESPACE="spdogfood"
 DOGFOOD_DEFAULT_ADMIN_USER="deploy"
 DOGFOOD_DEFAULT_INGRESS="none"
-# Execution order is fixed so a scenario never runs before the one it builds on.
+# Execution order is fixed so a scenario never runs before the one it builds
+# on. Each name maps to a scenario_<name> function; adding one is one edit here.
 DOGFOOD_SCENARIO_ORDER="create status doctor fix bootstrap power import identity delete"
+# Scenarios that do not need an existing server; every other one does, so
+# without keep mode it needs create in the same run.
+DOGFOOD_LIFECYCLE_SCENARIOS="create delete"
 # The default keeps the historical create→status→doctor→bootstrap→delete run.
 DOGFOOD_DEFAULT_SCENARIOS="create,status,doctor,bootstrap,delete"
-# Scenarios that act on an existing server; without keep mode they need create.
-DOGFOOD_SERVER_SCENARIOS="status doctor fix bootstrap power import identity"
 # Recovery waits cover provider power transitions and a full reboot.
 DOGFOOD_DEFAULT_RECOVERY_TIMEOUT=600
 DOGFOOD_DEFAULT_POLL_INTERVAL=15
@@ -28,13 +33,16 @@ DOGFOOD_BOOT_ID_PATH="/proc/sys/kernel/random/boot_id"
 # A host mid-reboot can leave Tailscale SSH hanging; every remote call is
 # bounded so recovery deadlines stay meaningful and a paid run cannot stall.
 DOGFOOD_DEFAULT_SSH_TIMEOUT=60
-# Set once a paid run starts, so the exit trap knows to look for leftovers.
-destructive_started=0
-leftovers_checked=0
 
 # scenario_selected reports whether the operator asked for a scenario.
 scenario_selected() {
 	[[ "$dogfood_scenarios" == *",$1,"* ]]
+}
+
+# server_scenario reports whether a scenario acts on an existing server, so
+# it is skipped when no server is ready.
+server_scenario() {
+	[[ " $DOGFOOD_LIFECYCLE_SCENARIOS " != *" $1 "* ]]
 }
 
 # parse_dogfood_scenarios fails closed on unknown names so a typo cannot
@@ -57,96 +65,24 @@ parse_dogfood_scenarios() {
 	dogfood_scenarios=",$raw,"
 }
 
-# positive_int_setting reads a numeric knob and rejects anything that could
-# turn a bounded wait into an unbounded one.
-positive_int_setting() {
-	local name="$1" default="$2" value
-	value="${!name:-$default}"
-	# Zero would spin against provider APIs, and a leading zero reads as octal.
-	if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
-		printf 'invalid %s %q: expected a positive integer without leading zeros\n' "$name" "$value" >&2
-		exit 2
-	fi
-	printf '%s' "$value"
-}
-
-# run_with_timeout bounds one command. Explicit stdin redirection keeps piped
-# input attached, since background jobs otherwise read from /dev/null.
-run_with_timeout() {
-	local seconds="$1" pid watcher rc
-	shift
-	"$@" <&0 &
-	pid=$!
-	# The watcher must not hold stdout, or a $(...) caller waits out the sleep.
-	# Children are stopped too, since an ssh child would keep the pipe open.
-	(sleep "$seconds" && { pkill -TERM -P "$pid"; kill -TERM "$pid"; }) >/dev/null 2>&1 &
-	watcher=$!
-	wait "$pid"
-	rc=$?
-	kill "$watcher" 2>/dev/null
-	wait "$watcher" 2>/dev/null
-	return "$rc"
-}
-
-# state_path is the CLI's fixed per-server state location under the harness HOME.
 # kept_state_conflicts reports whether keep-mode state still tracks this
 # server. Its provider resources share names with a throwaway run, so a
 # throwaway create would collide with them instead of failing cleanly.
 kept_state_conflicts() {
-	[[ "$keep_server" -ne 1 && -e "$kept_dogfood_home/.local/state/serverpro/namespaces/$namespace/servers/$server.json" ]]
+	[[ "$require_clean_start" -eq 1 && -e "$(state_path "$kept_dogfood_home")" ]]
 }
 
-state_path() {
-	printf '%s/.local/state/serverpro/namespaces/%s/servers/%s.json' "$HOME" "$namespace" "$server"
-}
-
-# state_field reads one dotted field from server state; empty when absent.
-state_field() {
-	python3 - "$(state_path)" "$1" <<'PY'
-import json
-import sys
-
-path, field = sys.argv[1:3]
-try:
-    with open(path, encoding="utf-8") as stream:
-        value = json.load(stream)
-except (OSError, ValueError):
-    sys.exit(0)
-for part in field.split("."):
-    if isinstance(value, list) and part.isdigit() and int(part) < len(value):
-        value = value[int(part)]
-    elif isinstance(value, dict):
-        value = value.get(part)
-    else:
-        value = None
-    if value is None:
-        sys.exit(0)
-print(value)
-PY
-}
-
-# remote_read runs a read-only command on the managed host over Tailscale SSH,
-# the same transport serverpro itself uses.
-remote_read() {
-	local target
-	target="$(state_field tailscale.name)"
-	[[ -n "$target" ]] || return 1
-	run_with_timeout "$ssh_timeout" tailscale ssh "$admin_user@$target" "$1" </dev/null
-}
-
-# remote_sudo_script runs the script on stdin as root. The sudo password and
-# script travel on stdin, never in argv, mirroring serverpro's remote runner:
-# both sudo calls stay children of one shell so the cached credential applies
-# without a TTY, and the second runs non-interactively.
-remote_sudo_script() {
-	local target script
-	target="$(state_field tailscale.name)"
-	[[ -n "$target" ]] || return 1
-	script="$(cat)"
-	{
-		printf '%s\n' "$SERVERPRO_DOGFOOD_SUDOPASS"
-		printf '%s\n' "$script"
-	} | run_with_timeout "$ssh_timeout" tailscale ssh "$admin_user@$target" "sh -c 'IFS= read -r p; printf \"%s\\n\" \"\$p\" | sudo -S -p \"\" -v && sudo -n sh -s'"
+# write_credentials gives the CLI its per-server credential file. Tokens go
+# through the environment, never argv, because process argument lists are
+# world-readable on shared hosts; only non-secret identifiers stay in argv.
+write_credentials() {
+	local namespace="$1"
+	local server="$2"
+	local cred_dir="$HOME/.config/serverpro/namespaces/$namespace/servers/$server"
+	mkdir -p "$cred_dir" || return
+	chmod 700 "$HOME/.config/serverpro" "$HOME/.config/serverpro/namespaces" "$HOME/.config/serverpro/namespaces/$namespace" "$HOME/.config/serverpro/namespaces/$namespace/servers" "$cred_dir" 2>/dev/null || true
+	PROVIDER_TOKEN="$3" TAILSCALE_TOKEN="$4" CLOUDFLARE_TOKEN="$5" \
+		python3 "$validator_script" write-credentials "$cred_dir/credentials.json" "$namespace" "$server"
 }
 
 # wait_live_ok polls a read-only command until its output passes validation or
@@ -187,22 +123,26 @@ run_scenario() {
 	return "$rc"
 }
 
+# run_selected_scenarios walks the fixed order once, so selection, ordering,
+# and the no-ready-server skip all come from DOGFOOD_SCENARIO_ORDER.
+run_selected_scenarios() {
+	local scenario
+	for scenario in $DOGFOOD_SCENARIO_ORDER; do
+		if server_scenario "$scenario" && [[ "$server_ready" -ne 1 ]]; then
+			scenario_selected "$scenario" && skip_case "live $scenario" "no ready server"
+			continue
+		fi
+		run_scenario "$scenario" "scenario_$scenario"
+	done
+}
+
 # list_namespace_servers prints servers that carry this namespace's ownership
 # labels at the provider, so leftovers are found even without local state.
 list_namespace_servers() {
 	local out="$out_dir/discover-$1.json"
 	"$bin" --non-interactive -n "$namespace" -p "$provider" server discover >"$out" 2>"$out.err" || return 1
 	validate_case_output list "$out" >>"$out.err" 2>&1 || return 1
-	python3 - "$out" "$namespace" <<'PY'
-import json
-import sys
-
-path, namespace = sys.argv[1:3]
-with open(path, encoding="utf-8") as stream:
-    for candidate in json.load(stream):
-        if candidate.get("namespace") == namespace:
-            print(candidate["server"])
-PY
+	python3 "$validator_script" namespace-servers "$out" "$namespace"
 }
 
 # check_leftovers reports provider servers in the dogfood namespace other than
@@ -233,13 +173,35 @@ check_leftovers() {
 	return 0
 }
 
+# cleanup_created_server is the fallback delete for a throwaway server the run
+# armed but did not delete itself, for example after a failure or signal. It
+# fails only when paid resources may remain, so the caller preserves evidence.
+cleanup_created_server() {
+	if [[ -z "$created_namespace" || -z "$created_server" || -z "$created_provider" ]]; then
+		return 0
+	fi
+	log "CLEANUP | deleting $created_provider/$created_namespace/$created_server"
+	# WHY no error suppression: a failed fallback delete must stay loud so the
+	# operator can recover paid resources from the preserved artifacts.
+	if SERVERPRO_SERVER_PROVIDER_TOKEN="$(provider_token "$created_provider")" \
+		"$bin" -n "$created_namespace" -p "$created_provider" --yes server delete "$created_server" \
+		>"$out_dir/cleanup-delete.out" 2>"$out_dir/cleanup-delete.err" && \
+		validate_case_output delete-complete "$out_dir/cleanup-delete.out" "$created_provider" "$created_namespace" "$created_server" \
+		>>"$out_dir/cleanup-delete.err" 2>&1; then
+		log "CLEANUP | deleted $created_provider/$created_namespace/$created_server"
+		return 0
+	fi
+	log "CLEANUP-FAIL | delete failed or returned invalid evidence | resources may remain: $created_provider/$created_namespace/$created_server"
+	return 1
+}
+
 # check_leftovers_on_exit covers runs that ended early, for example by signal,
 # where the normal post-run check never ran and a fallback delete may have
 # found nothing to delete.
 check_leftovers_on_exit() {
 	[[ "$destructive_started" -eq 1 && "$leftovers_checked" -eq 0 ]] || return 0
 	local expected=""
-	[[ "$keep_server" -eq 1 && -n "$(state_field compute.id)" ]] && expected="$server"
+	[[ "$server_outlives_run" -eq 1 && -n "$(state_field compute.id)" ]] && expected="$server"
 	export SERVERPRO_SERVER_PROVIDER_TOKEN
 	SERVERPRO_SERVER_PROVIDER_TOKEN="$(provider_token "$provider")"
 	check_leftovers exit "$expected"
@@ -250,8 +212,8 @@ check_leftovers_on_exit() {
 # report_server_facts adds identity and age to the summary, and flags a kept
 # server old enough to be costing money unnoticed.
 report_server_facts() {
-	local compute node created age_hours kept=no
-	[[ "$keep_server" -eq 1 ]] && kept=yes
+	local compute node age_hours kept=no
+	[[ "$server_outlives_run" -eq 1 ]] && kept=yes
 	compute="$(state_field compute.id)"
 	if [[ -z "$compute" ]]; then
 		# Without compute nothing billable is kept, even in keep mode.
@@ -259,28 +221,15 @@ report_server_facts() {
 		return
 	fi
 	node="$(state_field tailscale.node_id)"
-	created="$(state_field created_at)"
-	age_hours="$(python3 - "$created" <<'PY'
-import sys
-from datetime import datetime, timezone
-
-import re
-
-# Go writes nanoseconds, which older Python fromisoformat rejects.
-stamp = re.sub(r"(\.\d{6})\d+", r"\1", sys.argv[1]).replace("Z", "+00:00")
-try:
-    created = datetime.fromisoformat(stamp)
-except ValueError:
-    sys.exit(0)
-print(int((datetime.now(timezone.utc) - created).total_seconds() // 3600))
-PY
-)"
+	age_hours="$(python3 "$validator_script" age-hours "$(state_field created_at)")"
 	scenario_summary+=("SERVER | $provider/$namespace/$server | compute=$compute node=${node:-unknown} age=${age_hours:-unknown}h kept=$kept")
 	if [[ "$kept" == yes && -n "$age_hours" ]] && ((age_hours >= max_age_hours)); then
 		scenario_summary+=("WARN | kept server age ${age_hours}h reaches SERVERPRO_DOGFOOD_MAX_AGE_HOURS=$max_age_hours; delete it with SERVERPRO_DOGFOOD_SCENARIOS=delete")
 	fi
 }
 
+# scenario_create marks the server ready only after create proved it, so
+# server scenarios never run against a half-built host.
 scenario_create() {
 	if ! run_live_ok doctor-report "live server create" "$bin" "${create_args[@]}"; then
 		server_ready=0
@@ -289,10 +238,12 @@ scenario_create() {
 	server_ready=1
 }
 
+# scenario_status proves the status row reports the requested identity.
 scenario_status() {
 	run_live_ok server-status "live server status" "$bin" --non-interactive -n "$namespace" -p "$provider" server status "$server"
 }
 
+# scenario_doctor proves a fresh or kept host passes every doctor check.
 scenario_doctor() {
 	run_live_ok doctor-report "live server doctor" "$bin" --non-interactive -n "$namespace" -p "$provider" server doctor "$server"
 }
@@ -303,6 +254,7 @@ scenario_fix() {
 	run_live_ok doctor-report "live server doctor after fix" "$bin" --non-interactive -n "$namespace" -p "$provider" server doctor "$server"
 }
 
+# scenario_bootstrap proves a bootstrap rerun on an existing host is idempotent.
 scenario_bootstrap() {
 	run_live_ok bootstrap-complete "live server bootstrap git" "$bin" --non-interactive -n "$namespace" -p "$provider" server bootstrap "$server" git
 }
@@ -357,6 +309,8 @@ scenario_import() {
 	run_live_ok doctor-report "live server doctor after import" env HOME="$import_home" "$bin" --non-interactive -n "$namespace" -p "$provider" server doctor "$server"
 }
 
+# scenario_delete disarms the fallback delete once the server is proven gone,
+# so the exit trap does not delete it a second time.
 scenario_delete() {
 	if run_live_ok delete-complete "live server delete" "$bin" --non-interactive --yes -n "$namespace" -p "$provider" server delete "$server"; then
 		created_namespace=""
@@ -366,14 +320,15 @@ scenario_delete() {
 	fi
 }
 
+# run_destructive_dogfood validates every paid-run input before the first
+# mutating call, then runs the selected scenarios against one server.
 run_destructive_dogfood() {
 	if [[ "${SERVERPRO_DOGFOOD_CREATE:-}" != "1" ]]; then
 		skip_case "live create/delete" "set SERVERPRO_DOGFOOD_CREATE=1"
 		return
 	fi
 
-	local token location size image sudo_env_name scenario
-	# Shared with scenario functions and finish hooks through dynamic scope.
+	local token location size image sudo_env_name scenario expected
 	provider="${SERVERPRO_DOGFOOD_PROVIDER:-$DOGFOOD_DEFAULT_PROVIDER}"
 	token="$(provider_token "$provider")"
 	if [[ -z "$token" ]]; then
@@ -415,9 +370,9 @@ run_destructive_dogfood() {
 	max_age_hours="$(positive_int_setting SERVERPRO_DOGFOOD_MAX_AGE_HOURS "$DOGFOOD_DEFAULT_MAX_AGE_HOURS")" || exit 2
 	ssh_timeout="$(positive_int_setting SERVERPRO_DOGFOOD_SSH_TIMEOUT "$DOGFOOD_DEFAULT_SSH_TIMEOUT")" || exit 2
 	# A throwaway server cannot outlive the run, so server scenarios need create.
-	if [[ "$keep_server" -ne 1 ]] && ! scenario_selected create; then
-		for scenario in $DOGFOOD_SERVER_SCENARIOS; do
-			if scenario_selected "$scenario"; then
+	if [[ "$server_outlives_run" -ne 1 ]] && ! scenario_selected create; then
+		for scenario in $DOGFOOD_SCENARIO_ORDER; do
+			if server_scenario "$scenario" && scenario_selected "$scenario"; then
 				printf 'SERVERPRO_DOGFOOD_SCENARIOS includes %s without create; add create or set SERVERPRO_DOGFOOD_KEEP_SERVER=1\n' "$scenario" >&2
 				exit 2
 			fi
@@ -454,12 +409,12 @@ run_destructive_dogfood() {
 	esac
 
 	server_ready=0
-	[[ "$keep_server" -eq 1 && -n "$(state_field compute.id)" ]] && server_ready=1
+	[[ "$server_outlives_run" -eq 1 && -n "$(state_field compute.id)" ]] && server_ready=1
 	if kept_state_conflicts; then
 		log "FAIL | live kept state check | $kept_dogfood_home tracks $provider/$namespace/$server; delete it with SERVERPRO_DOGFOOD_KEEP_SERVER=1 SERVERPRO_DOGFOOD_SCENARIOS=delete"
 		fail=$((fail + 1))
 		skip_case "live create/delete" "kept server state must be removed first"
-	elif [[ "$keep_server" -ne 1 && "$server_ready" -eq 0 ]] && ! check_leftovers preflight ""; then
+	elif [[ "$require_clean_start" -eq 1 ]] && ! check_leftovers preflight ""; then
 		skip_case "live create/delete" "leftover servers must be removed first"
 	elif ! run_live_ok namespace-created "live namespace create" "$bin" namespace create "$namespace"; then
 		skip_case "live create/delete" "namespace create failed"
@@ -467,31 +422,15 @@ run_destructive_dogfood() {
 		log "FAIL | live write credentials"
 		fail=$((fail + 1))
 	else
-		# Arm fallback cleanup only for throwaway servers; keep mode leaves the
-		# server for later runs until the delete scenario removes it.
-		if [[ "$keep_server" -ne 1 ]]; then
+		if [[ "$arm_fallback_delete" -eq 1 ]]; then
 			created_namespace="$namespace"
 			created_server="$server"
 			created_provider="$provider"
 		fi
 		destructive_started=1
-		run_scenario create scenario_create
-		if [[ "$server_ready" -eq 1 ]]; then
-			run_scenario status scenario_status
-			run_scenario doctor scenario_doctor
-			run_scenario fix scenario_fix
-			run_scenario bootstrap scenario_bootstrap
-			run_scenario power scenario_power
-			run_scenario import scenario_import
-			run_scenario identity scenario_identity
-		else
-			for scenario in $DOGFOOD_SERVER_SCENARIOS; do
-				scenario_selected "$scenario" && skip_case "live $scenario" "no ready server"
-			done
-		fi
-		run_scenario delete scenario_delete
+		run_selected_scenarios
 		report_server_facts
-		local expected=""
+		expected=""
 		[[ "$server_ready" -eq 1 ]] && expected="$server"
 		check_leftovers after "$expected"
 		leftovers_checked=1

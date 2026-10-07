@@ -7,6 +7,11 @@
 # host itself, a second userspace tailscaled, so no extra paid machine is
 # needed, then proves doctor and a create rerun stay bound to the recorded node.
 
+# The lib is this flow's only dependency; sourcing it here keeps that explicit
+# and lets shellcheck lint the flow alone. Re-sourcing only redefines.
+# shellcheck source=scripts/dogfood-live-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/dogfood-live-lib.sh"
+
 DOGFOOD_TAILSCALE_API="https://api.tailscale.com/api/v2"
 DOGFOOD_API_TIMEOUT_SECONDS=30
 # The decoy key is single-use, ephemeral, and short-lived, so a leaked copy
@@ -15,12 +20,19 @@ DOGFOOD_DECOY_KEY_EXPIRY_SECONDS=600
 DOGFOOD_DECOY_DESCRIPTION="serverpro dogfood identity decoy"
 # Root-only runtime directory on the test host; tmpfs, so a reboot clears it.
 DOGFOOD_DECOY_DIR="/run/serverpro-dogfood-decoy"
+# Bounds inside the root script, so a decoy that never starts or never joins
+# fails the scenario instead of outliving the SSH timeout unnoticed.
+DOGFOOD_DECOY_SOCKET_WAIT_SECONDS=30
+DOGFOOD_DECOY_UP_TIMEOUT_SECONDS=60
 DOGFOOD_DECOY_MIN_MATCHES=2
 DOGFOOD_HOSTNAME_PATTERN='^[a-z0-9]([a-z0-9-]*[a-z0-9])?$'
+# Tailscale tag grammar: letters, digits, and dashes after a leading letter.
+DOGFOOD_TAG_PATTERN='^tag:[A-Za-z][A-Za-z0-9-]*$'
 DOGFOOD_TAILNET_PATTERN='^[A-Za-z0-9._@-]+$'
 DOGFOOD_AUTH_KEY_PATTERN='^tskey-[A-Za-z0-9-]+$'
 DOGFOOD_KEY_ID_PATTERN='^[A-Za-z0-9]+$'
 
+# Decoy lifecycle owned by this flow alone; teardown reads it to know what to undo.
 decoy_key_id=""
 decoy_started=0
 
@@ -37,21 +49,8 @@ tailscale_api() {
 # count_identity_devices counts tailnet devices that claim the managed
 # hostname and tag; at least two means the decoy is really competing.
 count_identity_devices() {
-	local host="$1" tag="$2"
-	tailscale_api GET "/tailnet/$SERVERPRO_DOGFOOD_TAILNET/devices" | python3 -c '
-import json
-import sys
-
-host, tag = sys.argv[1:3]
-devices = json.load(sys.stdin).get("devices", [])
-# Offline devices, such as a decoy left by an earlier run, do not compete.
-print(sum(
-    1 for d in devices
-    if d.get("hostname") == host
-    and tag in (d.get("tags") or [])
-    and (d.get("connectedToControl") or d.get("online"))
-))
-' "$host" "$tag"
+	tailscale_api GET "/tailnet/$SERVERPRO_DOGFOOD_TAILNET/devices" |
+		python3 "$validator_script" count-identity-devices "$1" "$2"
 }
 
 # identity_teardown logs the decoy out (removing the ephemeral device), stops
@@ -89,14 +88,16 @@ scenario_identity() {
 	return "$rc"
 }
 
+# run_identity_checks enrols the decoy with the identity the CLI recorded, not
+# one the harness rebuilds, so the check follows the CLI's own tag naming.
 run_identity_checks() {
 	local host tag node_before node_after secret_dir body key count deadline
 	host="$(state_field compute.name)"
-	tag="tag:serverpro-$namespace"
+	tag="$(state_field tailscale.tags.0)"
 	node_before="$(state_field tailscale.node_id)"
 	# Values are interpolated into a root script, so only strict grammars pass.
-	if [[ ! "$host" =~ $DOGFOOD_HOSTNAME_PATTERN || ! "$SERVERPRO_DOGFOOD_TAILNET" =~ $DOGFOOD_TAILNET_PATTERN || -z "$node_before" ]]; then
-		log "FAIL | live identity preconditions | need recorded hostname, node id, and a valid tailnet name"
+	if [[ ! "$host" =~ $DOGFOOD_HOSTNAME_PATTERN || ! "$tag" =~ $DOGFOOD_TAG_PATTERN || ! "$SERVERPRO_DOGFOOD_TAILNET" =~ $DOGFOOD_TAILNET_PATTERN || -z "$node_before" ]]; then
+		log "FAIL | live identity preconditions | need recorded hostname, tag, node id, and a valid tailnet name"
 		fail=$((fail + 1))
 		return 1
 	fi
@@ -104,28 +105,9 @@ run_identity_checks() {
 	secret_dir="$work_dir/secret"
 	mkdir -p "$secret_dir" && chmod 700 "$secret_dir" || return 1
 	body="$secret_dir/decoy-key-request.json"
-	python3 - "$tag" "$DOGFOOD_DECOY_KEY_EXPIRY_SECONDS" "$DOGFOOD_DECOY_DESCRIPTION" >"$body" <<'PY'
-import json
-import sys
-
-tag, expiry, description = sys.argv[1:4]
-print(json.dumps({
-    "capabilities": {"devices": {"create": {
-        "reusable": False, "ephemeral": True, "preauthorized": True, "tags": [tag],
-    }}},
-    "expirySeconds": int(expiry),
-    "description": description,
-}))
-PY
+	python3 "$validator_script" decoy-key-request "$tag" "$DOGFOOD_DECOY_KEY_EXPIRY_SECONDS" "$DOGFOOD_DECOY_DESCRIPTION" >"$body"
 	finish_hooks+=(identity_teardown)
-	if ! key="$(tailscale_api POST "/tailnet/$SERVERPRO_DOGFOOD_TAILNET/keys" "$body" | python3 -c '
-import json
-import sys
-
-created = json.load(sys.stdin)
-print(created["id"])
-print(created["key"])
-')"; then
+	if ! key="$(tailscale_api POST "/tailnet/$SERVERPRO_DOGFOOD_TAILNET/keys" "$body" | python3 "$validator_script" created-key)"; then
 		log "FAIL | live identity decoy key | Tailscale API key creation failed"
 		fail=$((fail + 1))
 		return 1
@@ -153,8 +135,8 @@ SERVERPRO_DECOY_KEY
 nohup tailscaled --tun=userspace-networking --statedir="\$d/state" --socket="\$d/sock" --port=0 >"\$d/log" 2>&1 </dev/null &
 echo \$! >"\$d/pid"
 i=0
-while [ ! -S "\$d/sock" ] && [ "\$i" -lt 30 ]; do i=\$((i + 1)); sleep 1; done
-tailscale --socket="\$d/sock" up --auth-key="file:\$d/key" --hostname='$host' --advertise-tags='$tag' --timeout=60s
+while [ ! -S "\$d/sock" ] && [ "\$i" -lt $DOGFOOD_DECOY_SOCKET_WAIT_SECONDS ]; do i=\$((i + 1)); sleep 1; done
+tailscale --socket="\$d/sock" up --auth-key="file:\$d/key" --hostname='$host' --advertise-tags='$tag' --timeout=${DOGFOOD_DECOY_UP_TIMEOUT_SECONDS}s
 rm -f "\$d/key"
 SCRIPT
 	then

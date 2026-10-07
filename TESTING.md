@@ -245,10 +245,17 @@ status/count data and failures disguised as success.
 ## Live dogfood contract
 
 `scripts/test-dogfood-live.sh` remains the single public live API orchestrator.
-It sources `scripts/dogfood-live-readonly.sh` for provider reads,
-`scripts/dogfood-live-create.sh` for explicitly approved paid lifecycle work, and
-`scripts/dogfood-live-identity.sh` for the tailnet device identity scenario;
-`scripts/dogfood_validate.py` owns importable output contracts. The orchestrator
+It sources `scripts/dogfood-live-lib.sh` first, which owns the shared helpers
+and declares every shared run-context variable in `dogfood_context_init`. It
+then sources `scripts/dogfood-live-readonly.sh` for provider reads,
+`scripts/dogfood-live-create.sh` for explicitly approved paid lifecycle work,
+`scripts/dogfood-live-identity.sh` for the tailnet device identity scenario, and
+`scripts/dogfood-live-prompt.sh` for input prompts. Each flow file sources the
+lib itself and depends on nothing else, so source order is free.
+`scripts/dogfood_validate.py` owns importable output contracts and the
+harness's JSON helper subcommands (state field reads, discover filtering, age
+calculation, decoy key request and response, device counting, and the
+credential writer), so the shell holds no inline Python. The orchestrator
 uses an isolated `HOME`, never reuses operator state, and removes its temp home
 unless `SERVERPRO_KEEP_HARNESS_TEMP=1` is set. Keep mode is the one exception:
 `SERVERPRO_DOGFOOD_KEEP_SERVER=1` uses a dedicated persistent `0700` home
@@ -284,7 +291,9 @@ answers.
 `status`, `doctor`, `fix`, `bootstrap`, `power`, `import`, `identity`, and
 `delete` (default `create,status,doctor,bootstrap,delete`). Scenarios always run
 in that order; unknown names, and server scenarios without `create` outside keep
-mode, exit 2 before any paid call.
+mode, exit 2 before any paid call. The order lives once, in
+`DOGFOOD_SCENARIO_ORDER`; each name maps to a `scenario_<name>` function, and
+every scenario except `create` and `delete` is skipped when no server is ready.
 
 | Scenario | Proves |
 |---|---|
@@ -293,7 +302,7 @@ mode, exit 2 before any paid call.
 | `fix` | `server doctor --fix` passes, then plain doctor passes. |
 | `power` | Stop reaches a settled off state, start reaches on and doctor passes, restart changes the kernel boot ID (a real reboot) and doctor passes again. |
 | `import` | Import from provider labels into a separate empty `HOME` reports exactly one `imported` row, and doctor passes from the recovered artifacts. |
-| `identity` | A short-lived decoy (a second userspace `tailscaled` on the test host, enrolled with an ephemeral, single-use, 10-minute tagged key) claims the server's hostname and tag; doctor and a create rerun still pass and the recorded node ID stays unchanged. The decoy is logged out, stopped, and its key revoked when the scenario returns, and on interruption. |
+| `identity` | A short-lived decoy (a second userspace `tailscaled` on the test host, enrolled with an ephemeral, single-use, 10-minute tagged key) claims the server's recorded hostname and recorded Tailscale tag (read from state, not rebuilt); doctor and a create rerun still pass and the recorded node ID stays unchanged. The decoy is logged out, stopped, and its key revoked when the scenario returns, and on interruption. |
 | `delete` | Delete completes and clears the throwaway markers. |
 
 Recovery waits poll every `SERVERPRO_DOGFOOD_POLL_INTERVAL` seconds (default 15)

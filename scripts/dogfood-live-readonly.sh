@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 # Read-only provider matrix sourced by test-dogfood-live.sh.
 
+# The lib is this flow's only dependency; sourcing it here keeps that explicit
+# and lets shellcheck lint the flow alone. Re-sourcing only redefines.
+# shellcheck source=scripts/dogfood-live-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/dogfood-live-lib.sh"
+
+# run_readonly_dogfood proves every provider's free API paths with whichever
+# tokens are present; a missing token is a visible skip, never a failure.
 run_readonly_dogfood() {
 	local provider token location
-	local -a providers=(hetzner vultr digitalocean)
-	for provider in "${providers[@]}"; do
+	for provider in $DOGFOOD_PROVIDERS; do
 		token="$(provider_token "$provider")"
 		if [[ -z "$token" ]]; then
 			skip_case "live $provider read-only" "missing SERVERPRO_DOGFOOD_$(env_name_part "$provider")_TOKEN"
