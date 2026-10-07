@@ -4,12 +4,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/state"
 )
 
-func initializeProvisionState(stPath string, cfg config.Config) (state.State, error) {
-	st := state.State{Namespace: cfg.Namespace, Server: cfg.Server, Labels: cfg.Compute.Labels, Tailscale: state.TailscaleState{Tailnet: cfg.Access.Tailscale.Tailnet}}
+// initializeProvisionState creates or migrates the state file before any
+// remote mutation. provider must be the resolved compute provider: Run passes
+// its resolved account so the recorded value is never empty.
+func initializeProvisionState(stPath string, cfg config.Config, provider compute.ProviderName) (state.State, error) {
+	// The provider is recorded before any provider call so a create that fails
+	// early still leaves state that provider-scoped delete and status accept.
+	st := state.State{Namespace: cfg.Namespace, Server: cfg.Server, Labels: cfg.Compute.Labels, Compute: state.ComputeState{Provider: string(provider)}, Tailscale: state.TailscaleState{Tailnet: cfg.Access.Tailscale.Tailnet}}
 	exists, err := state.Exists(stPath)
 	if err != nil {
 		return st, err
@@ -27,12 +33,23 @@ func initializeProvisionState(stPath string, cfg config.Config) (state.State, er
 	if hasStableTailnetIdentity(loaded.Tailscale.Tailnet) && loaded.Tailscale.Tailnet != cfg.Access.Tailscale.Tailnet {
 		return st, fmt.Errorf("state tailnet %q conflicts with config tailnet %q", loaded.Tailscale.Tailnet, cfg.Access.Tailscale.Tailnet)
 	}
-	if loaded.SchemaVersion != 0 && !loaded.CreatedAt.IsZero() && loaded.Tailscale.Tailnet == cfg.Access.Tailscale.Tailnet {
+	needsMigration := loaded.SchemaVersion == 0 || loaded.CreatedAt.IsZero() || loaded.Tailscale.Tailnet != cfg.Access.Tailscale.Tailnet
+	// State left by a create that failed before any provider call, written
+	// before the provider was recorded at init, would otherwise stay invisible
+	// to provider-scoped delete and status.
+	needsProvider := loaded.Compute.Provider == "" && provider != ""
+	if !needsMigration && !needsProvider {
 		return loaded, nil
 	}
 	// Reload under the state lock so migration cannot overwrite an ingress or
 	// status update that lands after the initial target validation.
 	if err := state.Update(stPath, func(current *state.State) error {
+		if current.Compute.Provider == "" && provider != "" {
+			current.Compute.Provider = string(provider)
+		}
+		if !needsMigration {
+			return nil
+		}
 		if hasStableTailnetIdentity(current.Tailscale.Tailnet) && current.Tailscale.Tailnet != cfg.Access.Tailscale.Tailnet {
 			return fmt.Errorf("state tailnet %q conflicts with config tailnet %q", current.Tailscale.Tailnet, cfg.Access.Tailscale.Tailnet)
 		}

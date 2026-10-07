@@ -113,6 +113,10 @@ git -C "${PROV_SANDBOX}/repo" config user.name contract-test
 git -C "${PROV_SANDBOX}/repo" config commit.gpgsign false
 git -C "${PROV_SANDBOX}/repo" config tag.gpgsign false
 git -C "${PROV_SANDBOX}/repo" config tag.forcesignannotated false
+# Global hooks (commit-msg policy, pre-push checks) would judge the sandbox's
+# throwaway commits and pushes; an empty hooks directory keeps them out.
+mkdir "${PROV_SANDBOX}/no-hooks"
+git -C "${PROV_SANDBOX}/repo" config core.hooksPath "${PROV_SANDBOX}/no-hooks"
 git -C "${PROV_SANDBOX}/repo" remote add origin "${PROV_SANDBOX}/origin.git"
 git -C "${PROV_SANDBOX}/repo" commit --allow-empty -q -m base
 git -C "${PROV_SANDBOX}/repo" checkout -q -b feature
@@ -154,8 +158,8 @@ provenance_case() {
 }
 
 MAINTAINER_SIGNER=ahmetsercansagman@gmail.com
-TAG_OBJECT_SHA=$(git -C "${PROV_SANDBOX}/repo" rev-parse rel-main^{tag})
-OFFMAIN_OBJECT_SHA=$(git -C "${PROV_SANDBOX}/repo" rev-parse rel-offmain^{tag})
+TAG_OBJECT_SHA=$(git -C "${PROV_SANDBOX}/repo" rev-parse "rel-main^{tag}")
+OFFMAIN_OBJECT_SHA=$(git -C "${PROV_SANDBOX}/repo" rev-parse "rel-offmain^{tag}")
 
 provenance_case lightweight-tag fail rel-light '' false unsigned ''
 provenance_case annotated-off-main fail rel-offmain "${OFFMAIN_OBJECT_SHA}" true valid "${MAINTAINER_SIGNER}"

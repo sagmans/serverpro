@@ -14,7 +14,7 @@ type ComputeClient interface {
 }
 
 type TailscaleClient interface {
-	WaitDevice(context.Context, string, []string) (mesh.Device, error)
+	WaitDevice(context.Context, mesh.DeviceQuery) (mesh.Device, error)
 }
 
 // TailscaleDNSClient introspects tailnet DNS posture. Capability stays

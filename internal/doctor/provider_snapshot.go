@@ -45,8 +45,8 @@ type snapshotTailscaleClient struct {
 	dnsErr    error
 }
 
-func (c *snapshotTailscaleClient) WaitDevice(ctx context.Context, name string, tags []string) (mesh.Device, error) {
-	c.once.Do(func() { c.device, c.err = c.source.WaitDevice(ctx, name, tags) })
+func (c *snapshotTailscaleClient) WaitDevice(ctx context.Context, q mesh.DeviceQuery) (mesh.Device, error) {
+	c.once.Do(func() { c.device, c.err = c.source.WaitDevice(ctx, q) })
 	return c.device, c.err
 }
 

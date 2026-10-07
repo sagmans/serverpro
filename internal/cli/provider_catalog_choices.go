@@ -89,6 +89,20 @@ func validateManagedImageCatalog(catalog compute.Catalog, selected string) error
 	return fmt.Errorf("unsupported managed image %q; require %s %s on %s", selected, hostplatform.ManagedHostOS, hostplatform.ManagedHostVersion, strings.Join(hostplatform.ManagedHostArchitectures(), " or "))
 }
 
+// validateManagedSizeCatalog rejects a size the location-scoped catalog does
+// not offer, so create fails before minting Tailscale keys or policy instead of
+// at the provider's create call. It is only as strict as each provider's
+// location filter: a provider that lists a plan without locations counts it as
+// offered everywhere, and such a sold-out plan still fails at create.
+func validateManagedSizeCatalog(catalog compute.Catalog, selected, location string) error {
+	for _, size := range catalog.Sizes {
+		if size.Name == selected {
+			return nil
+		}
+	}
+	return fmt.Errorf("size %q is not available in location %q", selected, location)
+}
+
 func isSupportedManagedImage(image compute.Image) bool {
 	flavor := strings.ToLower(strings.TrimSpace(image.OSFlavor))
 	if flavor != hostplatform.ManagedHostOS {

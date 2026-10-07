@@ -19,6 +19,15 @@ const (
 	dnsCanaryName            = "one.one.one.one"
 	dnsResolutionRemediation = "check tailnet DNS global nameservers (admin console → DNS) and host resolver (tailscale dns status)"
 
+	// Egress targets: one name-resolved site and one literal IP, so a failure
+	// separates resolver trouble from blocked outbound TLS.
+	egressResolveName         = "ubuntu.com"
+	egressNameTarget          = "https://" + egressResolveName
+	egressAddressTarget       = "https://1.1.1.1"
+	egressProbeTimeoutSecs    = 10
+	egressNoResponseCode      = "000"
+	egressPositiveRemediation = "check provider firewall outbound rules, ufw egress rules, and the host route (ip route; tailscale status)"
+
 	sshdKeywordPermitRootLogin              = "PermitRootLogin"
 	sshdKeywordPasswordAuthentication       = "PasswordAuthentication"
 	sshdKeywordKbdInteractiveAuthentication = "KbdInteractiveAuthentication"
@@ -160,6 +169,21 @@ func ghAuthReadCommand(user string) string {
 
 func dnsResolutionCommand() string {
 	return "getent hosts " + dnsCanaryName + " >/dev/null && echo resolved || { echo 'dns resolution failed for " + dnsCanaryName + "'; exit 1; }"
+}
+
+// egressPositiveCommand accepts any HTTP status as proof of egress. A site may
+// answer 403 or 429 to datacenter ranges (seen live from a cloud datacenter
+// after a power cycle), and that is the site's policy, not a broken outbound
+// path. Only no response at all (curl code 000) fails, and the output names
+// the target so the evidence says which leg broke.
+func egressPositiveCommand() string {
+	probe := func(target string) string {
+		return "code=\"$(curl -sS -o /dev/null -I -m " + strconv.Itoa(egressProbeTimeoutSecs) + " -w '%{http_code}' " + shell.Quote(target) + " 2>&1)\"; " +
+			"case \"$code\" in " + egressNoResponseCode + "*|*[!0-9]*|'') echo " + shell.Quote("no response from "+target+": ") + "\"$code\"; exit 1 ;; esac; " +
+			"echo " + shell.Quote(target+" http ") + "\"$code\"; "
+	}
+	return "getent hosts " + egressResolveName + " >/dev/null || { echo " + shell.Quote("dns resolution failed for "+egressResolveName) + "; exit 1; }; " +
+		probe(egressNameTarget) + probe(egressAddressTarget)
 }
 
 func ufwSSHIngressCommand() string {

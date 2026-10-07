@@ -14,7 +14,7 @@ type fakeTailscaleDNS struct {
 	err error
 }
 
-func (f fakeTailscaleDNS) WaitDevice(context.Context, string, []string) (mesh.Device, error) {
+func (f fakeTailscaleDNS) WaitDevice(context.Context, mesh.DeviceQuery) (mesh.Device, error) {
 	return mesh.Device{Name: "prod-01.tailnet.ts.net", Hostname: "prod-01", Online: true}, nil
 }
 

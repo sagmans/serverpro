@@ -52,6 +52,10 @@ runs that package once plus the shell assertions. Standalone unit, integration,
 race, and cover targets support focused development. Build-tagged full-chain
 journeys run through `make test-full-chain-e2e` in a distinct CI job. The gate
 rejects aggregate coverage below 81.8% and any 0%-covered function.
+`make check` also runs `make lint-shell`, which needs ShellCheck on `PATH`
+(preinstalled on the CI runner; install it locally with your system package
+manager, for example `brew install shellcheck` or `apt install shellcheck`).
+The Makefile does not install it.
 
 `TESTING.md` owns the full capability matrix. Update it when adding or removing
 commands, packages, providers, ingress modes, lifecycle steps, or dogfood paths.

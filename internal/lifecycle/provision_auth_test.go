@@ -4,10 +4,12 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/provider/tailscale"
+	"github.com/sagmans/serverpro/internal/state"
 )
 
 func TestRunRejectsProvidedAuthKey(t *testing.T) {
@@ -47,9 +49,72 @@ func TestRunRejectsProvidedAuthKeyWithAPIToken(t *testing.T) {
 	}
 }
 
-func TestBestDeviceIDPrefersNodeID(t *testing.T) {
-	if got := bestDeviceID(tailscale.Device{ID: "393735751060", NodeID: "n1"}); got != "n1" {
-		t.Fatalf("bestDeviceID() = %q", got)
+// TestRunBindsDeviceToBootstrapKeyThenRecordedID pins how create chooses the
+// node that receives bootstrap secrets: the first bind only accepts devices
+// enrolled after the single-use key, and a rerun keeps the recorded device.
+func TestRunBindsDeviceToBootstrapKeyThenRecordedID(t *testing.T) {
+	cfg := config.Example("prod")
+	cfg.Cloudflare.AccountID = "acc"
+	ts := &fakeTailscale{keyCreated: "2026-10-07T10:00:00Z"}
+	path := provisionStatePath(t)
+	opt := Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api-token", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}}
+
+	st, err := Run(context.Background(), opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 10, 7, 10, 0, 0, 0, time.UTC)
+	if len(ts.waitQueries) != 1 || !ts.waitQueries[0].CreatedNotBefore.Equal(want) || ts.waitQueries[0].NodeID != "" {
+		t.Fatalf("first bind query = %+v", ts.waitQueries)
+	}
+	if st.Tailscale.NodeID != "d1" || !st.Tailscale.AuthKeyCreatedAt.IsZero() {
+		t.Fatalf("bound state = %+v", st.Tailscale)
+	}
+
+	if _, err := Run(context.Background(), opt); err != nil {
+		t.Fatal(err)
+	}
+	if len(ts.waitQueries) != 2 || ts.waitQueries[1].NodeID != "d1" {
+		t.Fatalf("rerun query = %+v", ts.waitQueries)
+	}
+}
+
+// A device recorded for an earlier server must not satisfy a fresh compute
+// run: the new key's enrolment window decides instead.
+func TestRunFreshComputeIgnoresLeftoverRecordedDevice(t *testing.T) {
+	cfg := config.Example("prod")
+	cfg.Cloudflare.AccountID = "acc"
+	path := provisionStatePath(t)
+	if err := state.Save(path, state.State{Namespace: "prod", Server: cfg.Server, Compute: state.ComputeState{Name: cfg.Compute.Name}, Tailscale: state.TailscaleState{Tailnet: cfg.Access.Tailscale.Tailnet, NodeID: "old-device"}}); err != nil {
+		t.Fatal(err)
+	}
+	ts := &fakeTailscale{keyCreated: "2026-10-07T10:00:00Z"}
+	opt := Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api-token", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}}
+	if _, err := Run(context.Background(), opt); err != nil {
+		t.Fatal(err)
+	}
+	if len(ts.waitQueries) != 1 || ts.waitQueries[0].NodeID != "" || ts.waitQueries[0].CreatedNotBefore.IsZero() {
+		t.Fatalf("fresh compute query = %+v", ts.waitQueries)
+	}
+}
+
+// A key without a usable control-plane time must still open a bounded window;
+// an unbounded one would let a stale online twin win before the node joins.
+func TestAuthKeyCreatedAtFallsBackToBoundedLocalWindow(t *testing.T) {
+	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	if got := authKeyCreatedAt(tailscale.AuthKey{Created: "2026-10-07T11:59:00Z"}, now); !got.Equal(now.Add(-time.Minute)) {
+		t.Fatalf("control-plane time = %s", got)
+	}
+	for _, created := range []string{"", "not-a-time"} {
+		if got := authKeyCreatedAt(tailscale.AuthKey{Created: created}, now); !got.Equal(now.Add(-authKeyClockSkewMargin)) {
+			t.Fatalf("fallback for %q = %s", created, got)
+		}
+	}
+}
+
+func TestStableDeviceIDPrefersNodeID(t *testing.T) {
+	if got := (tailscale.Device{ID: "393735751060", NodeID: "n1"}).StableID(); got != "n1" {
+		t.Fatalf("StableID() = %q", got)
 	}
 }
 

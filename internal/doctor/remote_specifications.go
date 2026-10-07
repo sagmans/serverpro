@@ -70,7 +70,7 @@ func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
 		remoteToolSpecification(user),
 		remoteFixableSpecification("listening ports", "ss -H -tuln", ""),
 		remoteDNSResolutionSpecification(),
-		remoteFixableSpecification("egress positive", "getent hosts ubuntu.com >/dev/null && curl -fsI https://ubuntu.com >/dev/null && curl -fsI https://1.1.1.1 >/dev/null", ""),
+		remoteEgressPositiveSpecification(),
 	)
 	if cfg.Network.Egress.Mode == "restricted" {
 		specifications = append(specifications,
@@ -159,15 +159,30 @@ func remoteToolSpecification(user string) remoteCheckSpecification {
 // the canary command fails only when name resolution breaks, and remediation
 // points at the tailnet/host resolver instead of the network path.
 func remoteDNSResolutionSpecification() remoteCheckSpecification {
-	command := dnsResolutionCommand()
+	return remoteProbeSpecification("dns resolution", dnsResolutionCommand(), dnsResolutionRemediation)
+}
+
+func remoteEgressPositiveSpecification() remoteCheckSpecification {
+	return remoteProbeSpecification("egress positive", egressPositiveCommand(), egressPositiveRemediation)
+}
+
+// remoteProbeSpecification runs one read-only probe whose own output explains
+// a failure. It keeps that output in the evidence because the batch error
+// alone ("command N failed with status S") does not say which target or leg
+// failed.
+func remoteProbeSpecification(name, command, remediation string) remoteCheckSpecification {
 	return remoteCheckSpecification{
 		readCommands: []string{command},
 		run: func(ctx context.Context, runner remote.Runner, user, host string, _ Options) []Result {
 			out, err := runner.Run(ctx, user, host, command)
 			if err != nil {
-				return []Result{fail("remote", "dns resolution", err.Error(), dnsResolutionRemediation)}
+				evidence := err.Error()
+				if detail := strings.TrimSpace(out); detail != "" {
+					evidence = detail + " (" + evidence + ")"
+				}
+				return []Result{fail("remote", name, evidence, remediation)}
 			}
-			return []Result{pass("remote", "dns resolution", out)}
+			return []Result{pass("remote", name, out)}
 		},
 	}
 }

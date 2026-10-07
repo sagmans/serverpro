@@ -16,8 +16,14 @@ func Run(ctx context.Context, cfg config.Config, st state.State, creds credentia
 
 func RunWithOptions(ctx context.Context, cfg config.Config, st state.State, creds credentials.Set, clients Clients, opt Options) Report {
 	clients = snapshotProviderClients(clients)
+	node := checkTailscaleNode(ctx, cfg, st, creds.Tailscale, clients.Tailscale)
+	// Remote steps address the host by name and may pipe the sudo password, so
+	// an unresolved device identity must stop them before anything is sent.
+	remoteBlocked := identityBlocked([]Result{node})
 	inventory := providerInventory(ctx, cfg, st, creds, clients, opt)
-	inventory = append(inventory, remoteInventory(ctx, clients.Remote, cfg.Admin.Username, st.Tailscale.Name)...)
+	if !remoteBlocked {
+		inventory = append(inventory, remoteInventory(ctx, clients.Remote, cfg.Admin.Username, st.Tailscale.Name)...)
+	}
 	rs := []Result{
 		localTool("tailscale"),
 		localTool("ssh"),
@@ -28,11 +34,15 @@ func RunWithOptions(ctx context.Context, cfg config.Config, st state.State, cred
 	for _, ip := range publicSSHAddresses(ctx, cfg, st, opt.ComputeAccount, clients.Compute) {
 		rs = append(rs, publicSSHClosedWithProbe(ctx, ip, clients.PublicSSHProbe))
 	}
-	rs = append(rs, checkTailscaleNode(ctx, cfg, st, creds.Tailscale, clients.Tailscale))
+	rs = append(rs, node)
 	rs = append(rs, checkTailscaleDNS(ctx, creds.Tailscale, clients.Tailscale))
-	// Remote gh token parity needs the locally stored PAT for comparison.
-	opt.GitHubPAT = creds.GitHubPAT
-	rs = append(rs, remoteChecksWithOptions(ctx, cfg, clients.Remote, st.Tailscale.Name, opt)...)
+	if remoteBlocked {
+		rs = append(rs, skip("remote", remoteChecksBlockedName, remoteChecksBlockedEvidence))
+	} else {
+		// Remote gh token parity needs the locally stored PAT for comparison.
+		opt.GitHubPAT = creds.GitHubPAT
+		rs = append(rs, remoteChecksWithOptions(ctx, cfg, clients.Remote, st.Tailscale.Name, opt)...)
+	}
 	rs = annotateTailscaleSSHStatus(rs)
 	rs = append(rs, checkCloudflareConnector(ctx, st.Cloudflare.TunnelID, clients.Cloudflare))
 	return Report{Inventory: inventory, Results: rs}

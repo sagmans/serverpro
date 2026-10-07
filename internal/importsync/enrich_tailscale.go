@@ -2,6 +2,7 @@ package importsync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -25,30 +26,23 @@ func MatchTailscaleDevice(ctx context.Context, client meshDeviceLister, candidat
 		wantHost = strings.TrimSuffix(cfg.Compute.Name, ".")
 	}
 	tags := cfg.Access.Tailscale.Tags
-	var matches []mesh.Device
-	for _, device := range devices {
-		if mesh.DeviceMatches(device, wantHost, tags) {
-			matches = append(matches, device)
-		}
-	}
-	if len(matches) == 0 {
+	device, err := mesh.SelectDevice(devices, mesh.DeviceQuery{Hostname: wantHost, Tags: tags})
+	if errors.Is(err, mesh.ErrDeviceNotFound) {
 		// Fall back to hostname-only when tags drifted but name still matches uniquely.
-		for _, device := range devices {
-			if mesh.DeviceMatches(device, wantHost, nil) {
-				matches = append(matches, device)
-			}
-		}
+		device, err = mesh.SelectDevice(devices, mesh.DeviceQuery{Hostname: wantHost})
 	}
-	if len(matches) == 0 {
-		return state.TailscaleState{}, fmt.Errorf("tailscale device %q not found", wantHost)
+	if err != nil {
+		return state.TailscaleState{}, fmt.Errorf("tailscale device lookup failed: %w", err)
 	}
-	if len(matches) > 1 {
-		return state.TailscaleState{}, fmt.Errorf("tailscale device %q is ambiguous", wantHost)
+	// Import adopts the device's tags as the managed identity. With none to
+	// adopt, the namespace tags stay configured and doctor would reject the
+	// recorded device on every run, so refuse before recording it.
+	if len(device.Tags) == 0 && len(tags) > 0 {
+		return state.TailscaleState{}, fmt.Errorf("tailscale device %s (%q) has no tags; tag it with %s in the admin console, then rerun import", device.StableID(), wantHost, strings.Join(tags, ","))
 	}
-	device := matches[0]
 	return state.TailscaleState{
 		Tailnet: cfg.Access.Tailscale.Tailnet,
-		NodeID:  device.NodeID,
+		NodeID:  device.StableID(),
 		Name:    device.Name,
 		IPs:     append([]string(nil), device.Addresses...),
 		Tags:    append([]string(nil), device.Tags...),

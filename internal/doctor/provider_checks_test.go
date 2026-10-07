@@ -7,7 +7,9 @@ import (
 
 	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/ingress"
+	"github.com/sagmans/serverpro/internal/mesh"
 	"github.com/sagmans/serverpro/internal/provider/tailscale"
 	"github.com/sagmans/serverpro/internal/state"
 )
@@ -27,9 +29,9 @@ func (timedOutCloudflare) GetTunnel(context.Context, string) (ingress.Tunnel, er
 	return ingress.Tunnel{}, context.DeadlineExceeded
 }
 
-func (d *deadlineCheckingTailscale) WaitDevice(ctx context.Context, name string, tags []string) (tailscale.Device, error) {
+func (d *deadlineCheckingTailscale) WaitDevice(ctx context.Context, q mesh.DeviceQuery) (tailscale.Device, error) {
 	_, d.deadlineSeen = ctx.Deadline()
-	return tailscale.Device{Name: name, Online: true, ConnectedToControl: true}, nil
+	return tailscale.Device{Name: q.Hostname, Online: true, ConnectedToControl: true}, nil
 }
 
 func TestProviderInventoryUsesBoundedTailscaleLookup(t *testing.T) {
@@ -41,6 +43,52 @@ func TestProviderInventoryUsesBoundedTailscaleLookup(t *testing.T) {
 	}
 	if len(items) != 1 || !strings.Contains(items[0].Value, "api_reported_online=true") {
 		t.Fatalf("missing tailscale inventory: %+v", items)
+	}
+}
+
+type identityTailscale struct {
+	query mesh.DeviceQuery
+	err   error
+}
+
+func (c *identityTailscale) WaitDevice(_ context.Context, q mesh.DeviceQuery) (mesh.Device, error) {
+	c.query = q
+	return mesh.Device{}, c.err
+}
+
+// Doctor must check the recorded device, and an identity conflict needs its
+// own code so automation does not treat it as an ordinary offline node.
+func TestTailscaleNodeCheckBindsRecordedDeviceAndCodesIdentityConflicts(t *testing.T) {
+	cfg := config.Example("prod")
+	st := state.State{Tailscale: state.TailscaleState{Name: "prod-01.example.ts.net", NodeID: "n-recorded"}}
+	client := &identityTailscale{err: mesh.ErrBoundDeviceMissing}
+	res := checkTailscaleNode(context.Background(), cfg, st, "ts-token-long", client)
+	if client.query.NodeID != "n-recorded" {
+		t.Fatalf("query = %+v, want recorded node id", client.query)
+	}
+	if res.Status != Fail || res.Code != TailscaleDeviceIdentityCode {
+		t.Fatalf("result = %+v", res)
+	}
+
+	client.err = context.DeadlineExceeded
+	if res := checkTailscaleNode(context.Background(), cfg, st, "ts-token-long", client); res.Status != Fail || res.Code != "" {
+		t.Fatalf("offline result = %+v, want uncoded failure", res)
+	}
+}
+
+// With --fix, remote repair pipes the sudo password to the recorded name. An
+// identity conflict must stop every remote command before that can happen.
+func TestDoctorSendsNothingRemoteWhenDeviceIdentityFails(t *testing.T) {
+	cfg := config.Example("prod")
+	st := doctorState(cfg, "", "")
+	st.Tailscale.NodeID = "n-recorded"
+	r := &fakeRemote{}
+	report := RunWithOptions(context.Background(), cfg, st, credentials.Set{Tailscale: "ts-token-long"}, Clients{Compute: fakeCompute{}, Tailscale: &identityTailscale{err: mesh.ErrBoundDeviceMissing}, Cloudflare: fakeCloudflare{}, Remote: r, PublicSSHProbe: refusedPublicSSHProbe}, Options{Fix: true, SudoPassword: "sudo-secret"})
+	if len(r.commands) != 0 {
+		t.Fatalf("remote commands sent despite identity failure: %d", len(r.commands))
+	}
+	if !hasResult(report, remoteChecksBlockedName, Skip, "no command or credential") {
+		t.Fatalf("missing blocked remote result: %+v", report.Results)
 	}
 }
 

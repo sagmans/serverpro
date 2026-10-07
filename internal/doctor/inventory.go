@@ -42,7 +42,7 @@ func tailscaleInventory(ctx context.Context, cfg config.Config, st state.State, 
 	}
 	tsCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	dev, err := client.WaitDevice(tsCtx, tailscaleLookupName(cfg, st), cfg.Access.Tailscale.Tags)
+	dev, err := client.WaitDevice(tsCtx, tailscaleDeviceQuery(cfg, st))
 	if err != nil {
 		return nil
 	}

@@ -276,8 +276,10 @@ Create requires explicit provider, location, size, and image values. Use
 `serverpro location list -p PROVIDER`, `serverpro size list -p PROVIDER`, and
 `serverpro image list -p PROVIDER` first. Select a supported Ubuntu 24.04 image.
 Live
-create verifies that exact image against the current selected-location catalog
-before the first provider mutation. During live create, every externally visible policy, tunnel, auth-key, compute, and device
+create verifies that exact image, and that the location offers the selected
+size, against the current selected-location catalog before the first provider
+mutation. A rerun that resumes a server already recorded in state skips the
+size check, since it orders nothing new. During live create, every externally visible policy, tunnel, auth-key, compute, and device
 mutation is checkpointed. A failed create reports its lifecycle phase and known
 non-secret resource IDs; rerun create to resume from durable checkpoints or use
 `server delete` to clean tracked resources, including access policies recorded
@@ -285,7 +287,16 @@ before a compute server ID exists. A retry refetches checkpointed provider acces
 policy and fails before compute mutation if ownership, rules/selectors, or
 attachments broadened. If a tunnel was created before its checkpoint was
 published, rerun adopts the one exact-name tunnel instead of creating a
-duplicate; multiple exact matches fail as ambiguous. A definitive checkpoint
+duplicate; multiple exact matches fail as ambiguous. Create also refuses to
+continue when more than one tailnet device with the server's name and tags
+enrolled after its bootstrap key, or when a rerun finds the recorded device
+missing or renamed; the error lists the device IDs. Older devices with the same
+name are ignored. Remove the unexpected devices in the Tailscale admin console,
+then rerun create. If the recorded device was replaced on purpose (deleted and
+re-enrolled with a new node ID), rebind state with
+`serverpro server import --force --with-tailscale`. Doctor reports the same conflicts on the `tailscale node`
+check with code `tailscale_device_identity` and skips all remote checks and
+repairs, including `--fix`, until the conflict is resolved. A definitive checkpoint
 failure deletes only the tunnel created by that attempt, never an adopted one.
 Durable state records whether each tunnel was created, adopted, or imported;
 delete removes only tunnels proven created by serverpro. Legacy state without
@@ -406,23 +417,23 @@ convention.
 SERVERPRO_SERVER_PROVIDER_TOKEN='digitalocean-api-token' \
   serverpro location list -p digitalocean --non-interactive
 SERVERPRO_SERVER_PROVIDER_TOKEN='digitalocean-api-token' \
-  serverpro size list -p digitalocean --location nyc3 --non-interactive
+  serverpro size list -p digitalocean --location fra1 --non-interactive
 SERVERPRO_SERVER_PROVIDER_TOKEN='digitalocean-api-token' \
-  serverpro image list -p digitalocean --location nyc3 --non-interactive
+  serverpro image list -p digitalocean --location fra1 --non-interactive
 
 # 3. Preview a create
 serverpro server create webapp \
   -n mynamespace -p digitalocean \
-  --location nyc3 \
-  --size s-1vcpu-1gb \
+  --location fra1 \
+  --size s-1vcpu-1gb-amd \
   --image ubuntu-24-04-x64 \
   --dry-run
 
 # 4. Run live create; Cloudflare is requested only when ingress is enabled
 serverpro server create webapp \
   -n mynamespace -p digitalocean \
-  --location nyc3 \
-  --size s-1vcpu-1gb \
+  --location fra1 \
+  --size s-1vcpu-1gb-amd \
   --image ubuntu-24-04-x64
 ```
 
@@ -471,7 +482,10 @@ safe cleanup. A provider-only import keeps mandatory Tailscale access enabled
 and stores supplied credentials as an incomplete server-scoped set; doctor can
 prompt for the missing Tailscale token. SSH additionally needs discovered mesh
 host state, so rerun the command with `--force --with-tailscale` before SSH when
-the initial import omitted enrichment. Forced import repairs the invalid
+the initial import omitted enrichment. When only the hostname matches because
+the device lost its tags, import refuses to record an untagged device while
+namespace tags are configured: doctor would reject it on every run. Tag the
+device in the admin console, then rerun. Forced import repairs the invalid
 disabled-Tailscale config written by earlier releases and preserves existing
 service tokens when replacements are omitted. Vultr supplies its attached
 firewall-group ID; Hetzner and
@@ -611,7 +625,10 @@ back to reading host system DNS, which can fail silently and kills all public
 name resolution (observed with tailscaled 1.98.10). `serverpro server doctor`
 covers this with the provider `tailnet dns` check (MagicDNS enabled but zero
 global nameservers warns) and the remote `dns resolution` canary, which
-separates resolver failure from egress failure.
+separates resolver failure from egress failure. The remote `egress positive`
+check passes on any HTTP answer from its targets, because sites may refuse
+datacenter addresses with 403 or 429. It fails only when a target gives no
+answer, and names that target in the evidence.
 
 ## Reconcile tailnet-global policy
 

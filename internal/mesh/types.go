@@ -8,6 +8,9 @@ type AuthKey struct {
 	Key          string              `json:"key"`
 	Description  string              `json:"description"`
 	Capabilities AuthKeyCapabilities `json:"capabilities"`
+	// Created is the control-plane RFC 3339 mint time. It bounds which devices
+	// can have enrolled with this single-use key.
+	Created string `json:"created"`
 }
 
 type AuthKeyCapabilities struct {
@@ -32,6 +35,19 @@ type Device struct {
 	Tags               []string `json:"tags"`
 	Online             bool     `json:"online"`
 	ConnectedToControl bool     `json:"connectedToControl"`
+	// Created is the control-plane RFC 3339 enrolment time. It stays a string
+	// so an empty or unexpected value cannot fail the whole device list decode.
+	Created string `json:"created"`
+}
+
+// StableID is the identifier recorded in state and shown to operators. The
+// node ID is preferred because it survives device key rotation; older API
+// responses carry only the legacy ID.
+func (d Device) StableID() string {
+	if d.NodeID != "" {
+		return d.NodeID
+	}
+	return d.ID
 }
 
 // DNSConfig mirrors the tailnet DNS posture that decides whether quad100 has a

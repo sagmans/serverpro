@@ -21,8 +21,9 @@ why a layer is not applicable.
 | Full-chain E2E | `make test-full-chain-e2e` | Build the test-only composition binary and run concurrent create→status→doctor→delete journeys against stateful local Hetzner, Vultr, and DigitalOcean APIs. Production doctor and cleanup orchestration consume injected local clients; fixed time, checkpoint recovery, strict JSON, cleanup evidence, and sanitized failure artifacts remain hermetic. | No |
 | Release contract | `make test-release` | Run the focused release-contract Go package once plus shell assertions for the workflow DAG, exact step order/matrices, target-paired evidence, prerelease classification, toolchain pins, native smoke, and no-clobber invariants. `make check` gets the Go coverage from its consolidated suite and runs only the shell half separately. | No |
 | Read-only dogfood | `make test-dogfood-readonly` | Dogfood the actual binary across every no-token command path and local state mutation path. | No |
-| Live dogfood | `make test-dogfood-live` | Use real provider APIs for catalog, provider doctor, discover, and optional create→doctor→bootstrap→status→delete; every successful command must emit valid JSON with command-specific status, shape, and identity. | Yes |
+| Live dogfood | `make test-dogfood-live` | Use real provider APIs for catalog, provider doctor, discover, and optional selectable create, status, doctor, fix, bootstrap, power, import, identity, and delete scenarios on a throwaway or kept test server; every successful command must emit valid JSON with command-specific status, shape, and identity. | Yes |
 | Live harness self-test | `make test-dogfood-live-selftest` | Unit-test every importable output contract, then prove malformed/invalid-success rejection, fallback-delete evidence, guards, secret transport, and cleanup retention through the shell orchestrator with a fake binary; no tokens or network. | No |
+| Shell lint | `make lint-shell` | Run `shellcheck -x` on the dogfood harness (orchestrator, shared lib, every flow file, self-test) and the other standalone shell scripts. ShellCheck is a system tool, not installed by the Makefile; the target fails with guidance when it is missing. | No |
 
 CI combines `make check` with a separate `make test-full-chain-e2e` job.
 `make check` runs the primary non-live gates once; release workflow Go tests
@@ -149,7 +150,7 @@ status/count data and failures disguised as success.
 | `serverpro namespace status` | Namespace lookup and server counts. | `internal/cli/namespace_status_command_test.go` | status/missing namespace cases | Read-only dogfood |
 | `serverpro namespace delete` | Preview, confirmation, exclusive namespace authority, post-lock registry plus parsed-state/missing-status revalidation, conditional stale cleanup, server cleanup delegation, local namespace removal. | `internal/cli/namespace_delete_command_test.go` | compiled dry-run plan plus no-write proof | Add live namespace cleanup only after server delete dogfood is stable |
 | `serverpro server` | Server parent help and unknown-child rejection. | `internal/cli/root_test.go` | parent help case | Read-only dogfood |
-| `serverpro server create` | Provider-agnostic create flow: explicit catalog selections, supported-image preflight, config completion, credentials, sudo password hashing, stored sudo/PAT reuse and storage gating (`internal/cli/sudo_password_test.go`), lifecycle, state checkpoints, stderr progress, doctor. | `internal/cli/create*_test.go`, `internal/cli/choices_test.go`, `internal/lifecycle/provision*_test.go`, `internal/cli/sudo_password_test.go`; provisioning and doctor use independent timeout budgets, live catalog filtering rejects unsupported OS/release/architecture entries, preflight rejects missing/unsupported selected images before mutation, config parsing uses the approved byte snapshot, conditional publication rejects appearance/removal/edit drift under coordinated file locking, namespace deletion is excluded, and token-relative policy work excludes explicit reconciliation | dry-run create plus hermetic compiled full-chain journeys for Hetzner, Vultr, and DigitalOcean; checkpoint-failure recovery, GitHub PAT stored only after the remote accepts it with the rejected value never persisted, credential merges that preserve a concurrent rotation | Live dogfood optional create→delete |
+| `serverpro server create` | Provider-agnostic create flow: explicit catalog selections, supported-image and location-offered size preflight before any Tailscale or provider mutation (size check skipped when resuming a server state already records), config completion, credentials, sudo password hashing, stored sudo/PAT reuse and storage gating (`internal/cli/sudo_password_test.go`), lifecycle, state checkpoints, stderr progress, doctor. | `internal/cli/create*_test.go`, `internal/cli/choices_test.go`, `internal/lifecycle/provision*_test.go`, `internal/cli/sudo_password_test.go`; provisioning and doctor use independent timeout budgets, live catalog filtering rejects unsupported OS/release/architecture entries, preflight rejects missing/unsupported selected images before mutation, config parsing uses the approved byte snapshot, conditional publication rejects appearance/removal/edit drift under coordinated file locking, namespace deletion is excluded, and token-relative policy work excludes explicit reconciliation | dry-run create plus hermetic compiled full-chain journeys for Hetzner, Vultr, and DigitalOcean; `internal/e2e/tailnet_identity_test.go` stale-twin bind and ambiguous-twin fail-closed journeys with no Tailscale SSH call; checkpoint-failure recovery, GitHub PAT stored only after the remote accepts it with the rejected value never persisted, credential merges that preserve a concurrent rotation | Live dogfood optional create→delete |
 | `serverpro server bootstrap` | Re-run managed host tools on existing hosts for `all`, `git`, `docker`, `mise`, `node`, `pi`; emit stderr progress; the Git target converges Git/OpenSSH, target-user mise, and gh before persisted `none`, single-repo deploy-key, or PAT-required account-key setup. | `internal/cli/bootstrap*_test.go`, `internal/cli/git_identity_test.go`, `internal/bootstraptools/*_test.go`, `internal/lifecycle/git_deploy*_test.go`, `internal/lifecycle/git_identity*_test.go`; intent-before-mutation, required-PAT, exact doctor state, deploy-to-account cleanup, key rerun/public-key repair | dry-run all targets with fixture state | Live dogfood optional idempotent target after create; interactive GitHub registration remains manual |
 | `serverpro server list` | Local registry/state listing with namespace/provider filters. | `internal/cli/server_read_command_test.go` | fixture list cases | Read-only dogfood |
 | `serverpro server status` | State resolution, ambiguity handling, provider status refresh, IP update, JSON row. | `internal/cli/server_discovery_command_test.go`, `internal/cli/server_read_command_test.go` | no-token credential guard and `--all` cases | Live dogfood after create |
@@ -192,13 +193,13 @@ status/count data and failures disguised as success.
 | `internal/compute` | Full registry-facing provider facade, catalogs, diagnostics, registry. Consumer packages own narrower discovery/create contracts. | Registry validation/sorting, diagnostics semantics and wrapped-cause identity, managed-resource typed/legacy canonicalization and conflict rejection, provider account tokens excluded from all request JSON, full adapters composing through narrow consumer fakes. |
 | `internal/config` | Defaults, paths, names, validation, YAML IO. | Strict supported-key decoding, byte-snapshot parsing, conditional locked publication, locked read-modify-write preservation, source appearance/removal/edit rejection, retired inert-key rejection, namespace/server validity, explicit create catalog requirements, typed Git access values, deploy repository scope rules and round trips, omitted lockdown defaults to enabled while explicit false is preserved, Tailscale mandatory defaults, ingress choices, private paths, schema stamping with legacy `store_console_password: false` migrated to stored, stamped opt-outs honored, unknown schema versions rejected. |
 | `internal/credentials` | Server-scoped credential IO and validation. | 0700/0600 permissions, symlink rejection, shared local-artifact cleanup coordination, scoped incomplete import sets, missing-secret matrix per ingress, no global token storage, stored operator auth (sudo password, GitHub PAT, Tailscale auth key) round trips and redaction inclusion, auth-key acceptance, locked read-modify-write merges that keep a credential another run just rotated, refused mutations leave the file untouched, credential writer serialization. |
-| `internal/doctor` | Local/provider/remote validation report. | Local tool checks, one-call compute/mesh/explicit Cloudflare tunnel snapshot fakes, injected public-SSH probes, exact Git identity/signing reads and fixes with first-failure preservation, first-in-plan supported-platform authority, no sequential or batched fixes after platform failure, explicit batched read plans with conditional reads, strict baseline replay, no fixes after per-command output overflow, planned fix/recheck delegation including package-refresh authority, sequential fallback, captured package/tool failure output, terminal repair causes after noisy progress, credential redaction before 4 KiB head/tail truncation, UTF-8 boundaries, remote-only sudo retry, Tailscale node, bootstrap tools, Cloudflare connector, `gh token parity` verdicts sourced from GitHub (accepted, rejected, unanswered, absent) with no credential write on an unanswered or silent probe, deploy recheck outcomes, PAT-on-stdin probe header, strict curl stdin-config consumption, real-curl loopback Authorization delivery without token arguments. |
+| `internal/doctor` | Local/provider/remote validation report. | Local tool checks, one-call compute/mesh/explicit Cloudflare tunnel snapshot fakes, injected public-SSH probes, exact Git identity/signing reads and fixes with first-failure preservation, first-in-plan supported-platform authority, no sequential or batched fixes after platform failure, explicit batched read plans with conditional reads, strict baseline replay, no fixes after per-command output overflow, planned fix/recheck delegation including package-refresh authority, sequential fallback, captured package/tool failure output, terminal repair causes after noisy progress, credential redaction before 4 KiB head/tail truncation, UTF-8 boundaries, remote-only sudo retry, Tailscale node checked by recorded device ID with `tailscale_device_identity` coding for identity conflicts that blocks every remote command and sudo retry, bootstrap tools, Cloudflare connector, `gh token parity` verdicts sourced from GitHub (accepted, rejected, unanswered, absent) with no credential write on an unanswered or silent probe, deploy recheck outcomes, PAT-on-stdin probe header, strict curl stdin-config consumption, real-curl loopback Authorization delivery without token arguments. |
 | `internal/filedescriptor` | File descriptor safety helper. | Descriptor limits and error cases. |
 | `internal/hostplatform` | Controller, managed-host, architecture, and direct apt-package support baselines. | Exact support matrix, every direct package floor, package-group composition, package-name/apt-token/manifest rendering, and immutable returned slices. |
 | `internal/importsync` | Discover/import recovery from provider labels through a read-only consumer contract. | Managed/unmanaged filtering, provider-recovered typed access-policy persistence, valid provider-only mesh intent, legacy disabled-mesh repair, omitted-token credential merge, duplicate labels, dry-run, preserving force refresh, malformed-existing-artifact and concurrent-config-drift rejection, same-tunnel provenance retention without ownership transfer, context-cancellable canonical workflow locking and matching-tailnet serialization, stable tailnet persistence, filesystem errors fail closed, injected config/credential/state/registry failures, marker-based retry, state-without-registry discovery, Tailscale/Cloudflare enrichment matchers (`enrich_test.go`). |
 | `internal/ingress` | Generic ingress route model and Cloudflare Tunnel pending adapter. | Add/remove validation, pending status, no public route mutation claims. |
-| `internal/lifecycle` | Provision sequence and state checkpoints through a create-only compute contract. | Narrow compute fakes, typed phase/resource failures, checkpoint save-failure matrix, field-preserving concurrent ingress/status checkpoints, persisted tailnet identity plus missing/token-relative migration and conflict rejection, auth-key compensation, Tailscale policy/auth key cleanup, Cloudflare tunnel exact-name adoption/ambiguity/created-vs-adopted provenance/fresh rollback, compute create reconciliation, state stat errors, wait loops, remote bootstrap, omitted-lockdown convergence, shared Ed25519 fresh/rerun/public-key repair, Git deploy access, exact managed deploy-to-account cleanup, PAT stdin isolation, partial failure state. |
-| `internal/mesh` | Provider-neutral mesh types and canonical device identity matching. | Short/FQDN/trailing-dot normalization, required-tag matching, and unknown SSH-rule field preservation through destination rewrites. |
+| `internal/lifecycle` | Provision sequence and state checkpoints through a create-only compute contract. | Narrow compute fakes, typed phase/resource failures, device bind bounded by the bootstrap key time (bounded local-clock fallback) then pinned to the recorded device ID on rerun, leftover device records ignored on fresh compute, provider recorded before the first provider call, checkpoint save-failure matrix, field-preserving concurrent ingress/status checkpoints, persisted tailnet identity plus missing/token-relative migration and conflict rejection, auth-key compensation, Tailscale policy/auth key cleanup, Cloudflare tunnel exact-name adoption/ambiguity/created-vs-adopted provenance/fresh rollback, compute create reconciliation, state stat errors, wait loops, remote bootstrap, omitted-lockdown convergence, shared Ed25519 fresh/rerun/public-key repair, Git deploy access, exact managed deploy-to-account cleanup, PAT stdin isolation, partial failure state. |
+| `internal/mesh` | Provider-neutral mesh types, canonical device identity matching, and fail-closed device selection. | Short/FQDN/trailing-dot normalization, required-tag matching, stale same-name devices excluded by enrolment time, undated devices failing closed, ambiguity listing every candidate ID, recorded-device binding with missing/changed rejection and no name fallback, and unknown SSH-rule field preservation through destination rewrites. |
 | `internal/network` | Network policy primitives. | Egress modes and allow-list behavior. |
 | `internal/ownership` | Provider ownership labels/tags. | Reversible encoding, cross-provider label equivalence, live ownership validation. |
 | `internal/passwordhash` | Remote admin password hashing. | SHA-512 validity, weak/invalid hash rejection, no plaintext persistence. |
@@ -207,7 +208,7 @@ status/count data and failures disguised as success.
 | `internal/provider/hetzner` | Hetzner compute adapter. | Catalog mapping, labels, firewall/access policy, create/status/power/delete, paginated server/firewall inventory, exact owned-policy recovery and checkpoint retry validation, foreign/broadened/attached policy rejection, action waits, not-found handling, bootstrap redaction. |
 | `internal/provider/vultr` | Vultr compute adapter. | Catalog mapping, tag encoding, IPv4-only create, firewall group lifecycle, paginated firewall-rule inventory, checkpoint retry reconciliation that creates only missing required rules while rejecting foreign/broadened rules or attachments, status/power/delete/list, error identity and redaction. |
 | `internal/provider/digitalocean` | DigitalOcean compute adapter. | Catalog mapping, one namespace/server-derived firewall selector, droplet ownership/custom tags, no direct firewall droplet-ID attachments, IPv4-only create, status/power/delete, all-resource delete preflight, guarded legacy broad-selector import/cleanup with zero-unrelated-match inventory, paginated droplet/firewall inventory, malformed pagination fail-closed behavior, exact owned-policy recovery and checkpoint retry validation, missing/ambiguous/foreign/broadened fail-closed behavior, error identity and redaction. |
-| `internal/provider/tailscale` | Tailscale API adapter. | Auth key create/list/tracked-ID delete, devices, ACL policy read/validate/update, conservative global reconcile planning, retained tag-owner dependency protection, approved-plan refetch equality, no-change behavior, custom-shape retention, mixed-rule destination rewrite, exact `If-Match` propagation, and missing-ETag mutation rejection. |
+| `internal/provider/tailscale` | Tailscale API adapter. | Auth key create/list/tracked-ID delete, devices, device waits that skip devices enrolled before the key and return ambiguity without polling, ACL policy read/validate/update, conservative global reconcile planning, retained tag-owner dependency protection, approved-plan refetch equality, no-change behavior, custom-shape retention, mixed-rule destination rewrite, exact `If-Match` propagation, and missing-ETag mutation rejection. |
 | `internal/provider/cloudflare` | Cloudflare API adapter. | Account validation, tunnel list/create/token/get/delete, connector health polling, pagination. |
 | `internal/provider/httpjson` | Shared HTTP JSON client. | Auth headers, JSON encode/decode, bounded body, status errors, redaction by caller. |
 | `internal/provider/providerutil` | Shared provider mutation validation and secret-safe diagnostics. | Provider mismatch, token/bootstrap redaction, encoded bootstrap forms. |
@@ -245,11 +246,25 @@ status/count data and failures disguised as success.
 ## Live dogfood contract
 
 `scripts/test-dogfood-live.sh` remains the single public live API orchestrator.
-It sources `scripts/dogfood-live-readonly.sh` for provider reads and
-`scripts/dogfood-live-create.sh` for explicitly approved paid lifecycle work;
-`scripts/dogfood_validate.py` owns importable output contracts. The orchestrator
+It sources `scripts/dogfood-live-lib.sh` first, which owns the shared helpers
+and declares every shared run-context variable in `dogfood_context_init`. It
+then sources `scripts/dogfood-live-readonly.sh` for provider reads,
+`scripts/dogfood-live-create.sh` for explicitly approved paid lifecycle work,
+`scripts/dogfood-live-identity.sh` for the tailnet device identity scenario, and
+`scripts/dogfood-live-prompt.sh` for input prompts. Each flow file sources the
+lib itself and depends on nothing else, so source order is free.
+`scripts/dogfood_validate.py` owns importable output contracts and the
+harness's JSON helper subcommands (state field reads, discover filtering, age
+calculation, decoy key request and response, device counting, and the
+credential writer), so the shell holds no inline Python. The orchestrator
 uses an isolated `HOME`, never reuses operator state, and removes its temp home
-unless `SERVERPRO_KEEP_HARNESS_TEMP=1` is set. Guard rails: namespace and server
+unless `SERVERPRO_KEEP_HARNESS_TEMP=1` is set. Keep mode is the one exception:
+`SERVERPRO_DOGFOOD_KEEP_SERVER=1` uses a dedicated persistent `0700` home
+(`SERVERPRO_DOGFOOD_HOME`, default `~/.local/state/serverpro-dogfood/home`, never
+the operator's own home) so one on-demand test server survives between runs
+until the `delete` scenario removes it. A throwaway run refuses to start while
+that home still tracks the same server, because both modes share provider
+resource names. Guard rails: namespace and server
 identifiers must match the CLI's `ValidID` grammar before any path is built,
 `SERVERPRO_DOGFOOD_INGRESS` accepts only `none` or `cloudflare-tunnel` and fails
 closed otherwise, tokens reach helper processes through the environment rather
@@ -258,15 +273,71 @@ command-specific semantic validation, discovered candidates must prove the
 requested provider and complete managed identity, and a failed delete is retried
 once from the exit trap; when that fallback fails or returns invalid resource-identity
 evidence, the harness keeps the created-resource markers, preserves the run
-artifacts, and exits nonzero.
+artifacts, and exits nonzero. SIGINT, SIGTERM, and SIGHUP route through the same
+exit trap, so an interrupted throwaway run still deletes its server.
+
+With a terminal attached, the harness asks for every missing input before any API
+call (`scripts/dogfood-live-prompt.sh`): whether to run paid scenarios, the
+provider token, the Tailscale token, the tailnet, the
+sudo password (entered twice, at least 16 characters), and the Cloudflare token
+and account ID for `cloudflare-tunnel` ingress. Secrets echo `*` per character,
+never reach the screen, logs, or argv, and live only in harness variables.
+Values already set in the environment are not asked for again; without a terminal,
+or with `SERVERPRO_DOGFOOD_NO_PROMPT=1`, nothing is asked and the skip rules
+apply. The default provider is DigitalOcean (`SERVERPRO_DOGFOOD_PROVIDER`).
+`SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT` exists only for the self-test's scripted
+answers.
+
+`SERVERPRO_DOGFOOD_SCENARIOS` selects a comma-separated subset of `create`,
+`status`, `doctor`, `fix`, `bootstrap`, `power`, `import`, `identity`, and
+`delete` (default `create,status,doctor,bootstrap,delete`). Scenarios always run
+in that order; unknown names, and server scenarios without `create` outside keep
+mode, exit 2 before any paid call. The order lives once, in
+`DOGFOOD_SCENARIO_ORDER`; each name maps to a `scenario_<name>` function, and
+every scenario except `create` and `delete` is skipped when no server is ready.
+
+| Scenario | Proves |
+|---|---|
+| `create` | Create (or a resume in keep mode) ends with a passing doctor report. |
+| `status`, `doctor`, `bootstrap` | Status row identity, passing doctor, idempotent `git` bootstrap. |
+| `fix` | `server doctor --fix` passes, then plain doctor passes. |
+| `power` | Stop reaches a settled off state, start reaches on and doctor passes, restart changes the kernel boot ID (a real reboot) and doctor passes again. |
+| `import` | Import from provider labels into a separate empty `HOME` reports exactly one `imported` row, and doctor passes from the recovered artifacts. |
+| `identity` | A short-lived decoy (a second userspace `tailscaled` on the test host, enrolled with an ephemeral, single-use, 10-minute tagged key) claims the server's recorded hostname and recorded Tailscale tag (read from state, not rebuilt); doctor and a create rerun still pass and the recorded node ID stays unchanged. The create rerun repeats the full tool bootstrap over the recorded node, so it proves remote commands reach that node beside the decoy and takes most of the scenario's several minutes. The decoy is logged out, stopped, and its key revoked when the scenario returns, and on interruption. |
+| `delete` | Delete completes and clears the throwaway markers. |
+
+Recovery waits poll every `SERVERPRO_DOGFOOD_POLL_INTERVAL` seconds (default 15)
+up to `SERVERPRO_DOGFOOD_RECOVERY_TIMEOUT` (default 600), and every remote
+`tailscale ssh` call, with its child processes, is stopped after
+`SERVERPRO_DOGFOOD_SSH_TIMEOUT` seconds (default 60); all three accept only
+positive integers. The keep-mode home is compared by physical path, so `.`,
+`..`, doubled slashes, or a symlinked parent cannot alias the operator home or
+a directory above it. Before a throwaway run, provider discovery in the dogfood
+namespace must find no servers; after every run, including one ended by a
+signal, it reports any still listed. A second signal during teardown is ignored
+so the fallback delete always finishes. Every judged command's `PASS` or `FAIL` line ends with its wall time, so a slow
+scenario can be traced to the step that spent it. The summary lists each scenario's result and
+duration, the server's compute and node IDs and age, and warns when a kept server
+reaches `SERVERPRO_DOGFOOD_MAX_AGE_HOURS` (default 24). The identity scenario
+and power reboot check reach the host with the local `tailscale ssh`, so the
+controller must be in the test server's tailnet; the decoy key request sends the
+Tailscale token through curl's stdin config, and the sudo password and decoy key
+reach the host only on stdin.
 
 `scripts/test_dogfood_validate.py` table-tests every validator directly.
 `scripts/test-dogfood-live-selftest.sh` then supplies valid fixtures for every
 live command and proves empty, malformed, failing-status, wrong-action,
 wrong-identity, invalid-catalog, and invalid-inventory outputs fail. It also
 proves every provider command path, destructive opt-in guard, Cloudflare token
-transport, and exact fallback cleanup payload/error retention. Both run through
-`make test-dogfood-live-selftest` as part of `make check`.
+transport, and exact fallback cleanup payload/error retention. Fake `tailscale`
+and `curl` binaries extend it to scenario selection, the full ordered run, keep
+mode reuse and deletion, the kept-server age warning, the kept-state collision guard, leftover preflight, delete
+after interruption and after a second signal during teardown, home aliases, an SSH hang cut off by the timeout, the sudo command shape, decoy failures with teardown, a recorded-node swap, an
+import failed row hidden behind exit zero, prompted inputs with masking, backspace
+editing, sudo retries, and required-value exhaustion, and secrets absent from every argv and
+artifact. Both run through `make test-dogfood-live-selftest` as part of
+`make check`, and `make lint-shell` (also in `make check`) lints every harness
+shell file.
 
 Read-only API dogfood runs when provider tokens are present:
 
@@ -281,20 +352,32 @@ call ran.
 
 Create/delete dogfood is destructive and paid-infrastructure creating. It must
 use a supported Ubuntu 24.04 LTS amd64 or arm64 image and requires explicit
-opt-in:
+opt-in. The namespace defaults to the fixed `spdogfood`: create adds tailnet
+policy tag owners and an SSH rule for the namespace tag, and delete never removes
+tailnet-global policy, so a fixed namespace reuses one set of policy entries
+instead of adding new ones on every run. Use a dedicated Tailscale API token for
+dogfood runs.
 
 ```sh
 SERVERPRO_DOGFOOD_CREATE=1 \
-SERVERPRO_DOGFOOD_CONFIRM=serverpro-live-dogfood \
-SERVERPRO_DOGFOOD_PROVIDER=hetzner \
-SERVERPRO_DOGFOOD_HETZNER_TOKEN=... \
+SERVERPRO_DOGFOOD_PROVIDER=digitalocean \
+SERVERPRO_DOGFOOD_DIGITALOCEAN_TOKEN=... \
 SERVERPRO_DOGFOOD_TAILSCALE_TOKEN=... \
 SERVERPRO_DOGFOOD_TAILNET=example.ts.net \
-SERVERPRO_DOGFOOD_LOCATION=fsn1 \
-SERVERPRO_DOGFOOD_SIZE=cx23 \
-SERVERPRO_DOGFOOD_IMAGE=ubuntu-24.04 \
+SERVERPRO_DOGFOOD_LOCATION=fra1 \
+SERVERPRO_DOGFOOD_SIZE=s-1vcpu-1gb-amd \
+SERVERPRO_DOGFOOD_IMAGE=ubuntu-24-04-x64 \
 SERVERPRO_DOGFOOD_SUDOPASS='long unique password here' \
 make test-dogfood-live
+```
+
+On-demand kept test server: create once, run any scenarios later, delete when done
+(each command also needs the create/delete variables above):
+
+```sh
+SERVERPRO_DOGFOOD_KEEP_SERVER=1 SERVERPRO_DOGFOOD_SCENARIOS=create make test-dogfood-live
+SERVERPRO_DOGFOOD_KEEP_SERVER=1 SERVERPRO_DOGFOOD_SCENARIOS=doctor,fix,power,import,identity make test-dogfood-live
+SERVERPRO_DOGFOOD_KEEP_SERVER=1 SERVERPRO_DOGFOOD_SCENARIOS=delete make test-dogfood-live
 ```
 
 Optional Cloudflare Tunnel create path:

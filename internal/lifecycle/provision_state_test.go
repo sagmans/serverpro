@@ -29,7 +29,7 @@ func TestRunCreatesCloudflareTunnelBeforeHetznerResources(t *testing.T) {
 }
 
 func TestInitializeProvisionStateReturnsStatErrors(t *testing.T) {
-	_, err := initializeProvisionState("invalid\x00state", config.ExampleServer("prod", "web"))
+	_, err := initializeProvisionState("invalid\x00state", config.ExampleServer("prod", "web"), "")
 	if err == nil {
 		t.Fatal("expected state stat error")
 	}
@@ -45,7 +45,7 @@ func TestInitializeProvisionStateDoesNotRewriteCurrentState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := initializeProvisionState(path, cfg); err != nil {
+	if _, err := initializeProvisionState(path, cfg, ""); err != nil {
 		t.Fatal(err)
 	}
 	after, err := os.ReadFile(path)
@@ -64,7 +64,7 @@ func TestInitializeProvisionStateMigratesMissingTailnet(t *testing.T) {
 	if err := state.Save(path, state.State{Namespace: "prod", Server: "web", Compute: state.ComputeState{Name: cfg.Compute.Name}, Cloudflare: state.CloudflareState{Name: cfg.Cloudflare.Tunnel.Name}}); err != nil {
 		t.Fatal(err)
 	}
-	got, err := initializeProvisionState(path, cfg)
+	got, err := initializeProvisionState(path, cfg, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestInitializeProvisionStateMigratesTokenDefaultTailnet(t *testing.T) {
 	if err := state.Save(path, state.State{Namespace: "prod", Server: "web", Compute: state.ComputeState{Name: cfg.Compute.Name}, Tailscale: state.TailscaleState{Tailnet: "-"}, Cloudflare: state.CloudflareState{Name: cfg.Cloudflare.Tunnel.Name}}); err != nil {
 		t.Fatal(err)
 	}
-	got, err := initializeProvisionState(path, cfg)
+	got, err := initializeProvisionState(path, cfg, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestInitializeProvisionStateRejectsTailnetConflict(t *testing.T) {
 	if err := state.Save(path, state.State{Namespace: "prod", Server: "web", Compute: state.ComputeState{Name: cfg.Compute.Name}, Tailscale: state.TailscaleState{Tailnet: "other.ts.net"}, Cloudflare: state.CloudflareState{Name: cfg.Cloudflare.Tunnel.Name}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := initializeProvisionState(path, cfg); err == nil || !strings.Contains(err.Error(), "tailnet") {
+	if _, err := initializeProvisionState(path, cfg, ""); err == nil || !strings.Contains(err.Error(), "tailnet") {
 		t.Fatalf("tailnet conflict accepted: %v", err)
 	}
 }
