@@ -23,8 +23,6 @@ HARNESS_ENV_SENTINEL := serverpro-no-token-sentinel
 SHELLCHECK ?= shellcheck
 # ShellCheck reports findings only for the files it is given, so sourced flow
 # files are listed too; -x lets each see the shared lib it sources.
-# scripts/test-release-contract.sh stays out until its literal-brace warnings
-# (SC1083) are resolved.
 SHELL_LINT_SCRIPTS := \
 	scripts/test-dogfood-live.sh \
 	scripts/test-dogfood-live-selftest.sh \
@@ -40,6 +38,7 @@ SHELL_LINT_SCRIPTS := \
 	scripts/test-cli-no-token-surface.sh \
 	scripts/test-coverage-policy.sh \
 	scripts/test-make-gates.sh \
+	scripts/test-release-contract.sh \
 	scripts/validate-release-provenance.sh \
 	scripts/validate-release-tag.sh
 

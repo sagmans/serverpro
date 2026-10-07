@@ -158,8 +158,8 @@ provenance_case() {
 }
 
 MAINTAINER_SIGNER=ahmetsercansagman@gmail.com
-TAG_OBJECT_SHA=$(git -C "${PROV_SANDBOX}/repo" rev-parse rel-main^{tag})
-OFFMAIN_OBJECT_SHA=$(git -C "${PROV_SANDBOX}/repo" rev-parse rel-offmain^{tag})
+TAG_OBJECT_SHA=$(git -C "${PROV_SANDBOX}/repo" rev-parse "rel-main^{tag}")
+OFFMAIN_OBJECT_SHA=$(git -C "${PROV_SANDBOX}/repo" rev-parse "rel-offmain^{tag}")
 
 provenance_case lightweight-tag fail rel-light '' false unsigned ''
 provenance_case annotated-off-main fail rel-offmain "${OFFMAIN_OBJECT_SHA}" true valid "${MAINTAINER_SIGNER}"
