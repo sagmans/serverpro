@@ -13,11 +13,12 @@ validator_script="$script_dir/dogfood_validate.py"
 readonly_flow="$script_dir/dogfood-live-readonly.sh"
 destructive_flow="$script_dir/dogfood-live-create.sh"
 identity_flow="$script_dir/dogfood-live-identity.sh"
+prompt_flow="$script_dir/dogfood-live-prompt.sh"
 if [[ ! -x "$bin" ]]; then
 	printf 'serverpro binary not executable: %s\n' "$bin" >&2
 	exit 2
 fi
-for required_file in "$validator_script" "$readonly_flow" "$destructive_flow" "$identity_flow"; do
+for required_file in "$validator_script" "$readonly_flow" "$destructive_flow" "$identity_flow" "$prompt_flow"; do
 	if [[ ! -r "$required_file" ]]; then
 		printf 'live dogfood support file not readable: %s\n' "$required_file" >&2
 		exit 2
@@ -285,12 +286,17 @@ source "$readonly_flow"
 source "$destructive_flow"
 # shellcheck source=scripts/dogfood-live-identity.sh
 source "$identity_flow"
+# shellcheck source=scripts/dogfood-live-prompt.sh
+source "$prompt_flow"
 
 log "serverpro live dogfood run"
 log "binary: $bin"
 "$bin" --version | tee -a "$results"
 shasum -a 256 "$bin" | tee -a "$results"
 
+# Ask for missing inputs before any API call, so a paid run never starts
+# half-configured.
+prompt_missing_dogfood_inputs
 run_readonly_dogfood
 run_destructive_dogfood
 

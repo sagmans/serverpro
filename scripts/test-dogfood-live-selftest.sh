@@ -359,7 +359,7 @@ run_harness() {
 		SENT_HETZNER="$SENT_HETZNER" SENT_VULTR="$SENT_VULTR" \
 		SENT_DIGITALOCEAN="$SENT_DIGITALOCEAN" SENT_CF="$SENT_CF" SENT_DECOY="$SENT_DECOY" \
 		"$@" \
-		bash "$live_script" >"$stmp/harness.log" 2>&1
+		bash "$live_script" </dev/null >"$stmp/harness.log" 2>&1
 	harness_rc=$?
 	cp "$stmp/harness.log" "$stmp/htmp/"
 	scenario_tmp="$stmp"
@@ -774,6 +774,50 @@ run_harness scenarioM "" env "${create_env[@]}" "${fast_waits[@]}" \
 	SERVERPRO_DOGFOOD_SCENARIOS=create,import,delete FAKE_INVALID_SEMANTIC=import-status
 if [[ "$harness_rc" -ne 0 ]]; then ok "M nonzero exit"; else bad "M nonzero exit"; fi
 check "M import failure recorded" grep -Fq "FAIL | live server import" "$scenario_tmp/harness.log"
+
+note "scenario Q: missing inputs are prompted with masked secrets"
+prompt_base=(SERVERPRO_DOGFOOD_NAMESPACE=spdogfooda SERVERPRO_DOGFOOD_SERVER=web SERVERPRO_DOGFOOD_INGRESS=none)
+prompt_input="$tmp/prompt-q1"
+# The provider token carries a typo erased with backspace to prove editing.
+printf 'y\nserverpro-live-dogfood\n%sZ\177\n%s\nselftest-tailnet\n%s\n%s\n' \
+	"$SENT_DIGITALOCEAN" "$SENT_TS" "$SENT_SUDO" "$SENT_SUDO" >"$prompt_input"
+run_harness scenarioQ1 "" env "${prompt_base[@]}" SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT="$prompt_input" SERVERPRO_KEEP_HARNESS_TEMP=1
+wd="$(work_dir)"
+if [[ "$harness_rc" -eq 0 ]]; then ok "Q1 exit zero"; else bad "Q1 exit zero"; sed 's/^/  log: /' "$scenario_tmp/harness.log"; fi
+check "Q1 defaults to DigitalOcean" grep -Fq "<-p> <digitalocean> <--non-interactive> <--yes> <server> <create> <web>" "$FAKE_ARGV_DIR/serverpro-command.log"
+check "Q1 asked for the provider token" grep -Fq "digitalocean API token: " "$scenario_tmp/harness.log"
+check "Q1 asked for the sudo password twice" grep -Fq "Repeat sudo password" "$scenario_tmp/harness.log"
+check "Q1 masked input echoed" grep -Fq "****" "$scenario_tmp/harness.log"
+for secret in "$SENT_DIGITALOCEAN" "$SENT_TS" "$SENT_SUDO"; do
+	check_absent "Q1 secret never echoed" "$secret" "$scenario_tmp/harness.log"
+	check_absent "Q1 secret not in serverpro argv" "$secret" "$FAKE_ARGV_DIR/serverpro-argv.log"
+done
+[[ -n "$wd" ]] && check "Q1 prompted token reached credentials" grep -Fq "$SENT_DIGITALOCEAN\"" \
+	"$wd/home/.config/serverpro/namespaces/spdogfooda/servers/web/credentials.json"
+
+prompt_input="$tmp/prompt-q2"
+printf 'n\n%s\n' "$SENT_DIGITALOCEAN" >"$prompt_input"
+run_harness scenarioQ2 "" env SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT="$prompt_input"
+if [[ "$harness_rc" -eq 0 ]]; then ok "Q2 decline exit zero"; else bad "Q2 decline exit zero"; fi
+check "Q2 read-only checks use the prompted token" grep -Fq "PASS | live provider doctor digitalocean" "$scenario_tmp/harness.log"
+check "Q2 declined paid run skipped" grep -Fq "SKIP | live create/delete" "$scenario_tmp/harness.log"
+
+prompt_input="$tmp/prompt-q3"
+printf 'y\nserverpro-live-dogfood\n%s\n%s\nselftest-tailnet\nshort\nshort\n%s\nmismatch-but-long-enough\n%s\n%s\n' \
+	"$SENT_DIGITALOCEAN" "$SENT_TS" "$SENT_SUDO" "$SENT_SUDO" "$SENT_SUDO" >"$prompt_input"
+run_harness scenarioQ3 "" env "${prompt_base[@]}" SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT="$prompt_input"
+if [[ "$harness_rc" -eq 0 ]]; then ok "Q3 exit zero after retries"; else bad "Q3 exit zero after retries"; fi
+check "Q3 short password rejected" grep -Fq "Too short." "$scenario_tmp/harness.log"
+check "Q3 mismatch rejected" grep -Fq "Passwords do not match." "$scenario_tmp/harness.log"
+
+prompt_input="$tmp/prompt-q4"
+printf 'y\nserverpro-live-dogfood\n%s\n\n\n\n' "$SENT_DIGITALOCEAN" >"$prompt_input"
+run_harness scenarioQ4 "" env "${prompt_base[@]}" SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT="$prompt_input"
+if [[ "$harness_rc" -eq 2 ]]; then ok "Q4 empty required value exits 2"; else bad "Q4 empty required value exits 2 ($harness_rc)"; fi
+check_no_create_or_credentials "Q4 empty required value"
+
+run_harness scenarioQ5 "" env "${prompt_base[@]}" SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT="$prompt_input" SERVERPRO_DOGFOOD_NO_PROMPT=1
+check "Q5 no-prompt keeps skip behavior" grep -Fq "SKIP | live create/delete" "$scenario_tmp/harness.log"
 
 note "SUMMARY | fails=$fails"
 [[ "$fails" -eq 0 ]]

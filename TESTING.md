@@ -266,6 +266,18 @@ evidence, the harness keeps the created-resource markers, preserves the run
 artifacts, and exits nonzero. SIGINT, SIGTERM, and SIGHUP route through the same
 exit trap, so an interrupted throwaway run still deletes its server.
 
+With a terminal attached, the harness asks for every missing input before any API
+call (`scripts/dogfood-live-prompt.sh`): whether to run paid scenarios, the
+confirmation phrase, the provider token, the Tailscale token, the tailnet, the
+sudo password (entered twice, at least 16 characters), and the Cloudflare token
+and account ID for `cloudflare-tunnel` ingress. Secrets echo `*` per character,
+never reach the screen, logs, or argv, and live only in harness variables.
+Values already set in the environment are not asked for again; without a terminal,
+or with `SERVERPRO_DOGFOOD_NO_PROMPT=1`, nothing is asked and the skip rules
+apply. The default provider is DigitalOcean (`SERVERPRO_DOGFOOD_PROVIDER`).
+`SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT` exists only for the self-test's scripted
+answers.
+
 `SERVERPRO_DOGFOOD_SCENARIOS` selects a comma-separated subset of `create`,
 `status`, `doctor`, `fix`, `bootstrap`, `power`, `import`, `identity`, and
 `delete` (default `create,status,doctor,bootstrap,delete`). Scenarios always run
@@ -308,7 +320,8 @@ transport, and exact fallback cleanup payload/error retention. Fake `tailscale`
 and `curl` binaries extend it to scenario selection, the full ordered run, keep
 mode reuse and deletion, the kept-server age warning, leftover preflight, delete
 after interruption and after a second signal during teardown, home aliases, an SSH hang cut off by the timeout, the sudo command shape, decoy failures with teardown, a recorded-node swap, an
-import failed row hidden behind exit zero, and secrets absent from every argv and
+import failed row hidden behind exit zero, prompted inputs with masking, backspace
+editing, sudo retries, and required-value exhaustion, and secrets absent from every argv and
 artifact. Both run through `make test-dogfood-live-selftest` as part of
 `make check`.
 
@@ -334,13 +347,13 @@ dogfood runs.
 ```sh
 SERVERPRO_DOGFOOD_CREATE=1 \
 SERVERPRO_DOGFOOD_CONFIRM=serverpro-live-dogfood \
-SERVERPRO_DOGFOOD_PROVIDER=hetzner \
-SERVERPRO_DOGFOOD_HETZNER_TOKEN=... \
+SERVERPRO_DOGFOOD_PROVIDER=digitalocean \
+SERVERPRO_DOGFOOD_DIGITALOCEAN_TOKEN=... \
 SERVERPRO_DOGFOOD_TAILSCALE_TOKEN=... \
 SERVERPRO_DOGFOOD_TAILNET=example.ts.net \
-SERVERPRO_DOGFOOD_LOCATION=fsn1 \
-SERVERPRO_DOGFOOD_SIZE=cx23 \
-SERVERPRO_DOGFOOD_IMAGE=ubuntu-24.04 \
+SERVERPRO_DOGFOOD_LOCATION=nyc3 \
+SERVERPRO_DOGFOOD_SIZE=s-1vcpu-1gb \
+SERVERPRO_DOGFOOD_IMAGE=ubuntu-24-04-x64 \
 SERVERPRO_DOGFOOD_SUDOPASS='long unique password here' \
 make test-dogfood-live
 ```

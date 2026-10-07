@@ -4,7 +4,8 @@
 # previous step proved.
 
 DOGFOOD_CREATE_CONFIRMATION="serverpro-live-dogfood"
-DOGFOOD_DEFAULT_PROVIDER="hetzner"
+# DigitalOcean is the default test provider for on-demand dogfood servers.
+DOGFOOD_DEFAULT_PROVIDER="digitalocean"
 DOGFOOD_DEFAULT_SERVER="web"
 # WHY fixed: create adds tailnet policy tag owners and an SSH rule per
 # namespace tag, and delete deliberately leaves tailnet-global policy alone.
