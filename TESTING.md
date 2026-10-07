@@ -281,7 +281,11 @@ call ran.
 
 Create/delete dogfood is destructive and paid-infrastructure creating. It must
 use a supported Ubuntu 24.04 LTS amd64 or arm64 image and requires explicit
-opt-in:
+opt-in. The namespace defaults to the fixed `spdogfood`: create adds tailnet
+policy tag owners and an SSH rule for the namespace tag, and delete never removes
+tailnet-global policy, so a fixed namespace reuses one set of policy entries
+instead of adding new ones on every run. Use a dedicated Tailscale API token for
+dogfood runs.
 
 ```sh
 SERVERPRO_DOGFOOD_CREATE=1 \

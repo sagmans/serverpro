@@ -4,6 +4,11 @@
 DOGFOOD_CREATE_CONFIRMATION="serverpro-live-dogfood"
 DOGFOOD_DEFAULT_PROVIDER="hetzner"
 DOGFOOD_DEFAULT_SERVER="web"
+# WHY fixed: create adds tailnet policy tag owners and an SSH rule per
+# namespace tag, and delete deliberately leaves tailnet-global policy alone.
+# A per-run namespace would add new policy entries to the operator's tailnet
+# on every run; one stable namespace reuses the same entries.
+DOGFOOD_DEFAULT_NAMESPACE="spdogfood"
 DOGFOOD_DEFAULT_ADMIN_USER="deploy"
 DOGFOOD_DEFAULT_INGRESS="none"
 
@@ -30,7 +35,7 @@ run_destructive_dogfood() {
 		return
 	fi
 
-	namespace="${SERVERPRO_DOGFOOD_NAMESPACE:-spdogfood$(date +%s)}"
+	namespace="${SERVERPRO_DOGFOOD_NAMESPACE:-$DOGFOOD_DEFAULT_NAMESPACE}"
 	server="${SERVERPRO_DOGFOOD_SERVER:-$DOGFOOD_DEFAULT_SERVER}"
 	admin_user="${SERVERPRO_DOGFOOD_ADMIN_USER:-$DOGFOOD_DEFAULT_ADMIN_USER}"
 	location="${SERVERPRO_DOGFOOD_LOCATION:-}"

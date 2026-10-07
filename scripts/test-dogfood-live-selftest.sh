@@ -367,6 +367,18 @@ else
 	bad "A work dir preserved for inspection"
 fi
 
+note "scenario N: default namespace stays stable across runs"
+# A per-run namespace would add new tailnet policy entries on every run.
+default_namespace_env=()
+for assignment in "${create_env[@]}"; do
+	[[ "$assignment" == SERVERPRO_DOGFOOD_NAMESPACE=* ]] || default_namespace_env+=("$assignment")
+done
+for run in 1 2; do
+	run_harness "scenarioN-$run" "" env "${default_namespace_env[@]}" SERVERPRO_DOGFOOD_INGRESS=none
+	if [[ "$harness_rc" -eq 0 ]]; then ok "N run $run exit zero"; else bad "N run $run exit zero"; fi
+	check_command "N run $run uses fixed namespace" "CMD <namespace> <create> <spdogfood>"
+done
+
 note "guard scenarios: destructive flow needs every explicit opt-in"
 for guard in no-opt-in wrong-create missing-confirmation wrong-confirmation missing-provider-token missing-tailscale-token missing-tailnet missing-sudopass; do
 	case "$guard" in
