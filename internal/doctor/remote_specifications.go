@@ -70,7 +70,7 @@ func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
 		remoteToolSpecification(user),
 		remoteFixableSpecification("listening ports", "ss -H -tuln", ""),
 		remoteDNSResolutionSpecification(),
-		remoteFixableSpecification("egress positive", "getent hosts ubuntu.com >/dev/null && curl -fsI https://ubuntu.com >/dev/null && curl -fsI https://1.1.1.1 >/dev/null", ""),
+		remoteEgressPositiveSpecification(),
 	)
 	if cfg.Network.Egress.Mode == "restricted" {
 		specifications = append(specifications,
@@ -168,6 +168,27 @@ func remoteDNSResolutionSpecification() remoteCheckSpecification {
 				return []Result{fail("remote", "dns resolution", err.Error(), dnsResolutionRemediation)}
 			}
 			return []Result{pass("remote", "dns resolution", out)}
+		},
+	}
+}
+
+// remoteEgressPositiveSpecification keeps the probe output in failure evidence:
+// the batch error alone ("command N failed with status S") does not say which
+// target or leg failed.
+func remoteEgressPositiveSpecification() remoteCheckSpecification {
+	command := egressPositiveCommand()
+	return remoteCheckSpecification{
+		readCommands: []string{command},
+		run: func(ctx context.Context, runner remote.Runner, user, host string, _ Options) []Result {
+			out, err := runner.Run(ctx, user, host, command)
+			if err != nil {
+				evidence := err.Error()
+				if detail := strings.TrimSpace(out); detail != "" {
+					evidence = detail + " (" + evidence + ")"
+				}
+				return []Result{fail("remote", "egress positive", evidence, egressPositiveRemediation)}
+			}
+			return []Result{pass("remote", "egress positive", out)}
 		},
 	}
 }

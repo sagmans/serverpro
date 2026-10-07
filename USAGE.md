@@ -618,7 +618,10 @@ back to reading host system DNS, which can fail silently and kills all public
 name resolution (observed with tailscaled 1.98.10). `serverpro server doctor`
 covers this with the provider `tailnet dns` check (MagicDNS enabled but zero
 global nameservers warns) and the remote `dns resolution` canary, which
-separates resolver failure from egress failure.
+separates resolver failure from egress failure. The remote `egress positive`
+check passes on any HTTP answer from its targets, because sites may refuse
+datacenter addresses with 403 or 429. It fails only when a target gives no
+answer, and names that target in the evidence.
 
 ## Reconcile tailnet-global policy
 
