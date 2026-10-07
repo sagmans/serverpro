@@ -270,7 +270,7 @@ exit trap, so an interrupted throwaway run still deletes its server.
 
 With a terminal attached, the harness asks for every missing input before any API
 call (`scripts/dogfood-live-prompt.sh`): whether to run paid scenarios, the
-confirmation phrase, the provider token, the Tailscale token, the tailnet, the
+provider token, the Tailscale token, the tailnet, the
 sudo password (entered twice, at least 16 characters), and the Cloudflare token
 and account ID for `cloudflare-tunnel` ingress. Secrets echo `*` per character,
 never reach the screen, logs, or argv, and live only in harness variables.
@@ -348,7 +348,6 @@ dogfood runs.
 
 ```sh
 SERVERPRO_DOGFOOD_CREATE=1 \
-SERVERPRO_DOGFOOD_CONFIRM=serverpro-live-dogfood \
 SERVERPRO_DOGFOOD_PROVIDER=digitalocean \
 SERVERPRO_DOGFOOD_DIGITALOCEAN_TOKEN=... \
 SERVERPRO_DOGFOOD_TAILSCALE_TOKEN=... \

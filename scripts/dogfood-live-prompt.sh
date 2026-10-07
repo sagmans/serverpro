@@ -128,9 +128,6 @@ prompt_missing_dogfood_inputs() {
 	provider_name="${SERVERPRO_DOGFOOD_PROVIDER:-$DOGFOOD_DEFAULT_PROVIDER}"
 	token_var="$(provider_token_var "$provider_name")"
 	if [[ "${SERVERPRO_DOGFOOD_CREATE:-}" == "1" ]]; then
-		if [[ "${SERVERPRO_DOGFOOD_CONFIRM:-}" != "$DOGFOOD_CREATE_CONFIRMATION" ]]; then
-			prompt_plain SERVERPRO_DOGFOOD_CONFIRM "Type $DOGFOOD_CREATE_CONFIRMATION to confirm paid infrastructure"
-		fi
 		[[ -n "${!token_var:-}" ]] || prompt_required secret "$token_var" "$provider_name API token"
 		[[ -n "${SERVERPRO_DOGFOOD_TAILSCALE_TOKEN:-}" ]] || prompt_required secret SERVERPRO_DOGFOOD_TAILSCALE_TOKEN "Tailscale API token"
 		[[ -n "${SERVERPRO_DOGFOOD_TAILNET:-}" ]] || prompt_required plain SERVERPRO_DOGFOOD_TAILNET "Tailnet name (for example example.ts.net)"

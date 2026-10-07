@@ -3,7 +3,6 @@
 # in one fixed order against one server, so each step starts from the state the
 # previous step proved.
 
-DOGFOOD_CREATE_CONFIRMATION="serverpro-live-dogfood"
 # DigitalOcean is the default test provider for on-demand dogfood servers.
 DOGFOOD_DEFAULT_PROVIDER="digitalocean"
 DOGFOOD_DEFAULT_SERVER="web"
@@ -369,11 +368,7 @@ scenario_delete() {
 
 run_destructive_dogfood() {
 	if [[ "${SERVERPRO_DOGFOOD_CREATE:-}" != "1" ]]; then
-		skip_case "live create/delete" "set SERVERPRO_DOGFOOD_CREATE=1 and SERVERPRO_DOGFOOD_CONFIRM=$DOGFOOD_CREATE_CONFIRMATION"
-		return
-	fi
-	if [[ "${SERVERPRO_DOGFOOD_CONFIRM:-}" != "$DOGFOOD_CREATE_CONFIRMATION" ]]; then
-		skip_case "live create/delete" "confirmation token missing"
+		skip_case "live create/delete" "set SERVERPRO_DOGFOOD_CREATE=1"
 		return
 	fi
 

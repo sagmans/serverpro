@@ -380,7 +380,6 @@ create_prerequisites=(
 )
 create_env=(
 	"SERVERPRO_DOGFOOD_CREATE=1"
-	"SERVERPRO_DOGFOOD_CONFIRM=serverpro-live-dogfood"
 	"${create_prerequisites[@]}"
 )
 
@@ -474,7 +473,7 @@ for run in 1 2; do
 done
 
 note "guard scenarios: destructive flow needs every explicit opt-in"
-for guard in no-opt-in wrong-create missing-confirmation wrong-confirmation missing-provider-token missing-tailscale-token missing-tailnet missing-sudopass; do
+for guard in no-opt-in wrong-create missing-provider-token missing-tailscale-token missing-tailnet missing-sudopass; do
 	case "$guard" in
 		no-opt-in)
 			run_harness "guard-$guard" "" env "${create_prerequisites[@]}" \
@@ -483,15 +482,6 @@ for guard in no-opt-in wrong-create missing-confirmation wrong-confirmation miss
 		wrong-create)
 			run_harness "guard-$guard" "" env "${create_prerequisites[@]}" \
 				SERVERPRO_DOGFOOD_CREATE=yes SERVERPRO_KEEP_HARNESS_TEMP=1
-			;;
-		missing-confirmation)
-			run_harness "guard-$guard" "" env "${create_prerequisites[@]}" \
-				SERVERPRO_DOGFOOD_CREATE=1 SERVERPRO_KEEP_HARNESS_TEMP=1
-			;;
-		wrong-confirmation)
-			run_harness "guard-$guard" "" env "${create_prerequisites[@]}" \
-				SERVERPRO_DOGFOOD_CREATE=1 SERVERPRO_DOGFOOD_CONFIRM=wrong \
-				SERVERPRO_KEEP_HARNESS_TEMP=1
 			;;
 		missing-provider-token)
 			run_harness "guard-$guard" "" env "${create_env[@]}" \
@@ -785,7 +775,7 @@ note "scenario Q: missing inputs are prompted with masked secrets"
 prompt_base=(SERVERPRO_DOGFOOD_NAMESPACE=spdogfooda SERVERPRO_DOGFOOD_SERVER=web SERVERPRO_DOGFOOD_INGRESS=none)
 prompt_input="$tmp/prompt-q1"
 # The provider token carries a typo erased with backspace to prove editing.
-printf 'y\nserverpro-live-dogfood\n%sZ\177\n%s\nselftest-tailnet\n%s\n%s\n' \
+printf 'y\n%sZ\177\n%s\nselftest-tailnet\n%s\n%s\n' \
 	"$SENT_DIGITALOCEAN" "$SENT_TS" "$SENT_SUDO" "$SENT_SUDO" >"$prompt_input"
 run_harness scenarioQ1 "" env "${prompt_base[@]}" SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT="$prompt_input" SERVERPRO_KEEP_HARNESS_TEMP=1
 wd="$(work_dir)"
@@ -809,7 +799,7 @@ check "Q2 read-only checks use the prompted token" grep -Fq "PASS | live provide
 check "Q2 declined paid run skipped" grep -Fq "SKIP | live create/delete" "$scenario_tmp/harness.log"
 
 prompt_input="$tmp/prompt-q3"
-printf 'y\nserverpro-live-dogfood\n%s\n%s\nselftest-tailnet\nshort\n%s\nmismatch-but-long-enough\n%s\n%s\n' \
+printf 'y\n%s\n%s\nselftest-tailnet\nshort\n%s\nmismatch-but-long-enough\n%s\n%s\n' \
 	"$SENT_DIGITALOCEAN" "$SENT_TS" "$SENT_SUDO" "$SENT_SUDO" "$SENT_SUDO" >"$prompt_input"
 run_harness scenarioQ3 "" env "${prompt_base[@]}" SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT="$prompt_input"
 if [[ "$harness_rc" -eq 0 ]]; then ok "Q3 exit zero after retries"; else bad "Q3 exit zero after retries"; fi
@@ -817,7 +807,7 @@ check "Q3 short password rejected" grep -Fq "Too short." "$scenario_tmp/harness.
 check "Q3 mismatch rejected" grep -Fq "Passwords do not match." "$scenario_tmp/harness.log"
 
 prompt_input="$tmp/prompt-q4"
-printf 'y\nserverpro-live-dogfood\n%s\n\n\n\n' "$SENT_DIGITALOCEAN" >"$prompt_input"
+printf 'y\n%s\n\n\n\n' "$SENT_DIGITALOCEAN" >"$prompt_input"
 run_harness scenarioQ4 "" env "${prompt_base[@]}" SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT="$prompt_input"
 if [[ "$harness_rc" -eq 2 ]]; then ok "Q4 empty required value exits 2"; else bad "Q4 empty required value exits 2 ($harness_rc)"; fi
 check_no_create_or_credentials "Q4 empty required value"
