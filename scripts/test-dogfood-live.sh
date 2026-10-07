@@ -34,13 +34,16 @@ home_dir="$work_dir/home"
 out_dir="$work_dir/out"
 results="$work_dir/results.txt"
 operator_home="$HOME"
+# WHY resolved for every run: a throwaway run must see state a kept run left,
+# because both use the same namespace and provider resource names.
+kept_dogfood_home="${SERVERPRO_DOGFOOD_HOME:-$operator_home/.local/state/serverpro-dogfood/home}"
 keep_server=0
 if [[ "${SERVERPRO_DOGFOOD_KEEP_SERVER:-}" == "1" ]]; then
 	# WHY a dedicated persistent home: a kept server needs its config, state,
 	# and credentials across runs, but must never share the operator's real
 	# serverpro home, so production namespaces stay out of reach.
 	keep_server=1
-	home_dir="${SERVERPRO_DOGFOOD_HOME:-$operator_home/.local/state/serverpro-dogfood/home}"
+	home_dir="$kept_dogfood_home"
 	if [[ "$home_dir" != /* || -L "$home_dir" ]] || ! mkdir -p "$home_dir"; then
 		printf 'invalid SERVERPRO_DOGFOOD_HOME %q: must be an absolute, dedicated, non-symlink directory\n' "$home_dir" >&2
 		rm -rf "$work_dir"

@@ -707,6 +707,12 @@ if [[ "$harness_rc" -eq 0 ]]; then ok "K reuse exit zero"; else bad "K reuse exi
 check_absent "K reuse never creates" "<server> <create>" "$FAKE_ARGV_DIR/serverpro-command.log"
 check "K reuse ran doctor" grep -Fq "PASS | live server doctor after fix" "$scenario_tmp/harness.log"
 check "K kept server reported" grep -Fq "kept=yes" "$scenario_tmp/harness.log"
+# A throwaway run beside kept state would reuse its provider resource names.
+run_harness scenarioK-collide "" env "${create_env[@]}" "${fast_waits[@]}" SERVERPRO_DOGFOOD_HOME="$keep_home" SERVERPRO_DOGFOOD_SCENARIOS=create
+if [[ "$harness_rc" -ne 0 ]]; then ok "K throwaway beside kept state fails"; else bad "K throwaway beside kept state fails"; fi
+check "K kept state conflict reported" grep -Fq "FAIL | live kept state check" "$scenario_tmp/harness.log"
+check "K kept state left intact" test -f "$keep_home/.local/state/serverpro/namespaces/spdogfooda/servers/web.json"
+check_no_create_or_credentials "K collide"
 run_harness scenarioK-delete "" env "${keep_env[@]}" SERVERPRO_DOGFOOD_SCENARIOS=delete
 check "K delete scenario removes server" grep -Fq "PASS | live server delete" "$scenario_tmp/harness.log"
 check "K state removed" test ! -f "$keep_home/.local/state/serverpro/namespaces/spdogfooda/servers/web.json"

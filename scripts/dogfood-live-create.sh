@@ -90,6 +90,13 @@ run_with_timeout() {
 }
 
 # state_path is the CLI's fixed per-server state location under the harness HOME.
+# kept_state_conflicts reports whether keep-mode state still tracks this
+# server. Its provider resources share names with a throwaway run, so a
+# throwaway create would collide with them instead of failing cleanly.
+kept_state_conflicts() {
+	[[ "$keep_server" -ne 1 && -e "$kept_dogfood_home/.local/state/serverpro/namespaces/$namespace/servers/$server.json" ]]
+}
+
 state_path() {
 	printf '%s/.local/state/serverpro/namespaces/%s/servers/%s.json' "$HOME" "$namespace" "$server"
 }
@@ -453,7 +460,11 @@ run_destructive_dogfood() {
 
 	server_ready=0
 	[[ "$keep_server" -eq 1 && -n "$(state_field compute.id)" ]] && server_ready=1
-	if [[ "$keep_server" -ne 1 && "$server_ready" -eq 0 ]] && ! check_leftovers preflight ""; then
+	if kept_state_conflicts; then
+		log "FAIL | live kept state check | $kept_dogfood_home tracks $provider/$namespace/$server; delete it with SERVERPRO_DOGFOOD_KEEP_SERVER=1 SERVERPRO_DOGFOOD_SCENARIOS=delete"
+		fail=$((fail + 1))
+		skip_case "live create/delete" "kept server state must be removed first"
+	elif [[ "$keep_server" -ne 1 && "$server_ready" -eq 0 ]] && ! check_leftovers preflight ""; then
 		skip_case "live create/delete" "leftover servers must be removed first"
 	elif ! run_live_ok namespace-created "live namespace create" "$bin" namespace create "$namespace"; then
 		skip_case "live create/delete" "namespace create failed"

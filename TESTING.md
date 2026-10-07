@@ -197,7 +197,7 @@ status/count data and failures disguised as success.
 | `internal/hostplatform` | Controller, managed-host, architecture, and direct apt-package support baselines. | Exact support matrix, every direct package floor, package-group composition, package-name/apt-token/manifest rendering, and immutable returned slices. |
 | `internal/importsync` | Discover/import recovery from provider labels through a read-only consumer contract. | Managed/unmanaged filtering, provider-recovered typed access-policy persistence, valid provider-only mesh intent, legacy disabled-mesh repair, omitted-token credential merge, duplicate labels, dry-run, preserving force refresh, malformed-existing-artifact and concurrent-config-drift rejection, same-tunnel provenance retention without ownership transfer, context-cancellable canonical workflow locking and matching-tailnet serialization, stable tailnet persistence, filesystem errors fail closed, injected config/credential/state/registry failures, marker-based retry, state-without-registry discovery, Tailscale/Cloudflare enrichment matchers (`enrich_test.go`). |
 | `internal/ingress` | Generic ingress route model and Cloudflare Tunnel pending adapter. | Add/remove validation, pending status, no public route mutation claims. |
-| `internal/lifecycle` | Provision sequence and state checkpoints through a create-only compute contract. | Narrow compute fakes, typed phase/resource failures, device bind bounded by the bootstrap key time (bounded local-clock fallback) then pinned to the recorded device ID on rerun, leftover device records ignored on fresh compute, checkpoint save-failure matrix, field-preserving concurrent ingress/status checkpoints, persisted tailnet identity plus missing/token-relative migration and conflict rejection, auth-key compensation, Tailscale policy/auth key cleanup, Cloudflare tunnel exact-name adoption/ambiguity/created-vs-adopted provenance/fresh rollback, compute create reconciliation, state stat errors, wait loops, remote bootstrap, omitted-lockdown convergence, shared Ed25519 fresh/rerun/public-key repair, Git deploy access, exact managed deploy-to-account cleanup, PAT stdin isolation, partial failure state. |
+| `internal/lifecycle` | Provision sequence and state checkpoints through a create-only compute contract. | Narrow compute fakes, typed phase/resource failures, device bind bounded by the bootstrap key time (bounded local-clock fallback) then pinned to the recorded device ID on rerun, leftover device records ignored on fresh compute, provider recorded before the first provider call, checkpoint save-failure matrix, field-preserving concurrent ingress/status checkpoints, persisted tailnet identity plus missing/token-relative migration and conflict rejection, auth-key compensation, Tailscale policy/auth key cleanup, Cloudflare tunnel exact-name adoption/ambiguity/created-vs-adopted provenance/fresh rollback, compute create reconciliation, state stat errors, wait loops, remote bootstrap, omitted-lockdown convergence, shared Ed25519 fresh/rerun/public-key repair, Git deploy access, exact managed deploy-to-account cleanup, PAT stdin isolation, partial failure state. |
 | `internal/mesh` | Provider-neutral mesh types, canonical device identity matching, and fail-closed device selection. | Short/FQDN/trailing-dot normalization, required-tag matching, stale same-name devices excluded by enrolment time, undated devices failing closed, ambiguity listing every candidate ID, recorded-device binding with missing/changed rejection and no name fallback, and unknown SSH-rule field preservation through destination rewrites. |
 | `internal/network` | Network policy primitives. | Egress modes and allow-list behavior. |
 | `internal/ownership` | Provider ownership labels/tags. | Reversible encoding, cross-provider label equivalence, live ownership validation. |
@@ -254,7 +254,9 @@ unless `SERVERPRO_KEEP_HARNESS_TEMP=1` is set. Keep mode is the one exception:
 `SERVERPRO_DOGFOOD_KEEP_SERVER=1` uses a dedicated persistent `0700` home
 (`SERVERPRO_DOGFOOD_HOME`, default `~/.local/state/serverpro-dogfood/home`, never
 the operator's own home) so one on-demand test server survives between runs
-until the `delete` scenario removes it. Guard rails: namespace and server
+until the `delete` scenario removes it. A throwaway run refuses to start while
+that home still tracks the same server, because both modes share provider
+resource names. Guard rails: namespace and server
 identifiers must match the CLI's `ValidID` grammar before any path is built,
 `SERVERPRO_DOGFOOD_INGRESS` accepts only `none` or `cloudflare-tunnel` and fails
 closed otherwise, tokens reach helper processes through the environment rather
@@ -318,7 +320,7 @@ wrong-identity, invalid-catalog, and invalid-inventory outputs fail. It also
 proves every provider command path, destructive opt-in guard, Cloudflare token
 transport, and exact fallback cleanup payload/error retention. Fake `tailscale`
 and `curl` binaries extend it to scenario selection, the full ordered run, keep
-mode reuse and deletion, the kept-server age warning, leftover preflight, delete
+mode reuse and deletion, the kept-server age warning, the kept-state collision guard, leftover preflight, delete
 after interruption and after a second signal during teardown, home aliases, an SSH hang cut off by the timeout, the sudo command shape, decoy failures with teardown, a recorded-node swap, an
 import failed row hidden behind exit zero, prompted inputs with masking, backspace
 editing, sudo retries, and required-value exhaustion, and secrets absent from every argv and
