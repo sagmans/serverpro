@@ -276,8 +276,10 @@ Create requires explicit provider, location, size, and image values. Use
 `serverpro location list -p PROVIDER`, `serverpro size list -p PROVIDER`, and
 `serverpro image list -p PROVIDER` first. Select a supported Ubuntu 24.04 image.
 Live
-create verifies that exact image against the current selected-location catalog
-before the first provider mutation. During live create, every externally visible policy, tunnel, auth-key, compute, and device
+create verifies that exact image, and that the location offers the selected
+size, against the current selected-location catalog before the first provider
+mutation. A rerun that resumes a server already recorded in state skips the
+size check, since it orders nothing new. During live create, every externally visible policy, tunnel, auth-key, compute, and device
 mutation is checkpointed. A failed create reports its lifecycle phase and known
 non-secret resource IDs; rerun create to resume from durable checkpoints or use
 `server delete` to clean tracked resources, including access policies recorded
