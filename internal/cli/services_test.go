@@ -2,12 +2,14 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
+	"github.com/sagmans/serverpro/internal/mesh"
 )
 
 func TestPreflightRejectsUnsupportedManagedImageBeforeNetworkChecks(t *testing.T) {
@@ -54,4 +56,37 @@ func TestPreflightRejectsComputeAuthorityBeforeNetworkChecks(t *testing.T) {
 			t.Fatalf("provider diagnostic error = %v", err)
 		}
 	})
+}
+
+// preflightPolicyStub stands in for the tailnet so preflight tests can tell
+// whether the compute checks let the run reach the network checks.
+type preflightPolicyStub struct{ err error }
+
+func (s preflightPolicyStub) Policy(context.Context) (mesh.Policy, error) {
+	return mesh.Policy{}, s.err
+}
+
+// The size offer check guards new orders only: a resumed create must still
+// reach the tailnet checks when the provider has withdrawn the recorded size.
+func TestPreflightSizeOfferCheckSkipsResumedCompute(t *testing.T) {
+	cfg := config.ExampleServer("demo", "web")
+	cfg.Compute.Size = "withdrawn-size"
+	creds := credentials.Set{ServerProvider: "provider-token", Tailscale: "tailscale-token"}
+	reachedTailnet := errors.New("reached tailnet checks")
+	provider := cliFakeProvider{catalog: func(context.Context, compute.CatalogQuery) (compute.Catalog, compute.Diagnostics) {
+		return compute.Catalog{
+			Sizes:  []compute.Size{{Name: "offered-size"}},
+			Images: []compute.Image{{Name: cfg.Compute.Image, Architecture: "x86", OSFlavor: "ubuntu", OSVersion: "24.04"}},
+		}, nil
+	}}
+	a := &app{provider: "hetzner", providers: testRegistryWithProvider(t, provider)}
+	a.services.preflightTailscaleClient = func(string, string) preflightTailscaleClient {
+		return preflightPolicyStub{err: reachedTailnet}
+	}
+	if err := a.preflight(context.Background(), cfg, creds, false); err == nil || !strings.Contains(err.Error(), "is not available in location") {
+		t.Fatalf("new order size error = %v", err)
+	}
+	if err := a.preflight(context.Background(), cfg, creds, true); !errors.Is(err, reachedTailnet) {
+		t.Fatalf("resumed compute error = %v, want tailnet checks reached", err)
+	}
 }

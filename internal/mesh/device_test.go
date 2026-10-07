@@ -81,3 +81,18 @@ func TestSelectDeviceAmbiguityNamesEveryCandidate(t *testing.T) {
 		t.Fatalf("err = %v, want both device ids", err)
 	}
 }
+
+// An open enrolment window means new compute has not bound yet, so a device
+// recorded for an earlier server must not be verified in its place.
+func TestManagedDeviceQueryBindsRecordedDeviceOnlyOutsideEnrolment(t *testing.T) {
+	tags := []string{"tag:serverpro-prod"}
+	bound := ManagedDeviceQuery("prod-01", tags, "n-old", time.Time{})
+	if bound.NodeID != "n-old" || !bound.CreatedNotBefore.IsZero() {
+		t.Fatalf("bound query = %+v, want recorded node verified", bound)
+	}
+	since := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	enrolling := ManagedDeviceQuery("prod-01", tags, "n-old", since)
+	if enrolling.NodeID != "" || !enrolling.CreatedNotBefore.Equal(since) {
+		t.Fatalf("enrolling query = %+v, want recorded node ignored within window", enrolling)
+	}
+}
