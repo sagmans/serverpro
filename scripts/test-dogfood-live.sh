@@ -25,6 +25,10 @@ for required_file in "$validator_script" "$readonly_flow" "$destructive_flow" "$
 	fi
 done
 
+# WHY reset: bash seeds SECONDS from an inherited environment value, so an
+# operator shell that exports it would inflate the reported run duration.
+SECONDS=0
+
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/serverpro-live-dogfood.XXXXXX")"
 home_dir="$work_dir/home"
 out_dir="$work_dir/out"
@@ -105,8 +109,8 @@ valid_dogfood_id() {
 provider_location() {
 	case "$1" in
 		hetzner) printf '%s' "${SERVERPRO_DOGFOOD_HETZNER_LOCATION:-fsn1}" ;;
-		vultr) printf '%s' "${SERVERPRO_DOGFOOD_VULTR_LOCATION:-ewr}" ;;
-		digitalocean) printf '%s' "${SERVERPRO_DOGFOOD_DIGITALOCEAN_LOCATION:-nyc3}" ;;
+		vultr) printf '%s' "${SERVERPRO_DOGFOOD_VULTR_LOCATION:-fra}" ;;
+		digitalocean) printf '%s' "${SERVERPRO_DOGFOOD_DIGITALOCEAN_LOCATION:-fra1}" ;;
 		*) return 1 ;;
 	esac
 }
@@ -115,7 +119,7 @@ provider_size() {
 	case "$1" in
 		hetzner) printf '%s' "${SERVERPRO_DOGFOOD_HETZNER_SIZE:-cx23}" ;;
 		vultr) printf '%s' "${SERVERPRO_DOGFOOD_VULTR_SIZE:-vc2-1c-1gb}" ;;
-		digitalocean) printf '%s' "${SERVERPRO_DOGFOOD_DIGITALOCEAN_SIZE:-s-1vcpu-1gb}" ;;
+		digitalocean) printf '%s' "${SERVERPRO_DOGFOOD_DIGITALOCEAN_SIZE:-s-1vcpu-1gb-amd}" ;;
 		*) return 1 ;;
 	esac
 }

@@ -248,7 +248,8 @@ report_server_facts() {
 	[[ "$keep_server" -eq 1 ]] && kept=yes
 	compute="$(state_field compute.id)"
 	if [[ -z "$compute" ]]; then
-		scenario_summary+=("SERVER | $provider/$namespace/$server | none | kept=$kept")
+		# Without compute nothing billable is kept, even in keep mode.
+		scenario_summary+=("SERVER | $provider/$namespace/$server | compute=none kept=no")
 		return
 	fi
 	node="$(state_field tailscale.node_id)"

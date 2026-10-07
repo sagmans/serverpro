@@ -413,8 +413,8 @@ check "A exact Cloudflare secret reached serverpro environment" grep -Fqx exact 
 for provider in hetzner vultr digitalocean; do
 	case "$provider" in
 		hetzner) location=fsn1 ;;
-		vultr) location=ewr ;;
-		digitalocean) location=nyc3 ;;
+		vultr) location=fra ;;
+		digitalocean) location=fra1 ;;
 	esac
 	check "A $provider provider doctor passed" grep -Fq "PASS | live provider doctor $provider" "$scenario_tmp/harness.log"
 	check "A $provider locations passed" grep -Fq "PASS | live catalog locations $provider" "$scenario_tmp/harness.log"
@@ -803,7 +803,7 @@ check "Q2 read-only checks use the prompted token" grep -Fq "PASS | live provide
 check "Q2 declined paid run skipped" grep -Fq "SKIP | live create/delete" "$scenario_tmp/harness.log"
 
 prompt_input="$tmp/prompt-q3"
-printf 'y\nserverpro-live-dogfood\n%s\n%s\nselftest-tailnet\nshort\nshort\n%s\nmismatch-but-long-enough\n%s\n%s\n' \
+printf 'y\nserverpro-live-dogfood\n%s\n%s\nselftest-tailnet\nshort\n%s\nmismatch-but-long-enough\n%s\n%s\n' \
 	"$SENT_DIGITALOCEAN" "$SENT_TS" "$SENT_SUDO" "$SENT_SUDO" "$SENT_SUDO" >"$prompt_input"
 run_harness scenarioQ3 "" env "${prompt_base[@]}" SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT="$prompt_input"
 if [[ "$harness_rc" -eq 0 ]]; then ok "Q3 exit zero after retries"; else bad "Q3 exit zero after retries"; fi

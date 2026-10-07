@@ -92,10 +92,14 @@ prompt_sudopass() {
 	local attempt first second
 	for ((attempt = 1; attempt <= DOGFOOD_PROMPT_MAX_ATTEMPTS; attempt++)); do
 		prompt_secret first "Sudo password for the test server (min $DOGFOOD_SUDOPASS_MIN_LENGTH characters)"
-		prompt_secret second "Repeat sudo password"
+		# Reject a short value before the repeat prompt so the operator does not
+		# retype a password that can never be accepted.
 		if ((${#first} < DOGFOOD_SUDOPASS_MIN_LENGTH)); then
 			printf 'Too short.\n' >&"$DOGFOOD_PROMPT_OUT_FD"
-		elif [[ "$first" != "$second" ]]; then
+			continue
+		fi
+		prompt_secret second "Repeat sudo password"
+		if [[ "$first" != "$second" ]]; then
 			printf 'Passwords do not match.\n' >&"$DOGFOOD_PROMPT_OUT_FD"
 		else
 			SERVERPRO_DOGFOOD_SUDOPASS="$first"
