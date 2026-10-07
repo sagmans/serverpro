@@ -172,7 +172,7 @@ func dnsResolutionCommand() string {
 }
 
 // egressPositiveCommand accepts any HTTP status as proof of egress. A site may
-// answer 403 or 429 to datacenter ranges (seen live from DigitalOcean fra1
+// answer 403 or 429 to datacenter ranges (seen live from a cloud datacenter
 // after a power cycle), and that is the site's policy, not a broken outbound
 // path. Only no response at all (curl code 000) fails, and the output names
 // the target so the evidence says which leg broke.
