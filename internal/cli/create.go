@@ -61,7 +61,11 @@ func (a *app) runCreateCommand(cmd *cobra.Command) error {
 	if err := progress.emit(progressPhasePreflight); err != nil {
 		return err
 	}
-	if err := a.preflight(cmd.Context(), cfg, creds); err != nil {
+	computeRecorded, err := stateRecordsCompute(stPath)
+	if err != nil {
+		return err
+	}
+	if err := a.preflight(cmd.Context(), cfg, creds, computeRecorded); err != nil {
 		return err
 	}
 	if !a.yes {
@@ -214,4 +218,18 @@ func validateCreatePreviewTarget(cfg config.Config) error {
 		check.Cloudflare.AccountID = "preview"
 	}
 	return check.Validate()
+}
+
+// stateRecordsCompute reports whether a previous create already reached the
+// provider, so preflight can tell a resume from a fresh order.
+func stateRecordsCompute(stPath string) (bool, error) {
+	exists, err := state.Exists(stPath)
+	if err != nil || !exists {
+		return false, err
+	}
+	st, err := state.Load(stPath)
+	if err != nil {
+		return false, err
+	}
+	return st.Compute.ID != "", nil
 }

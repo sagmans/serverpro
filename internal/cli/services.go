@@ -101,7 +101,11 @@ func wireImportEnrichers(opts *importsync.ImportOptions) {
 	}
 }
 
-func (a *app) preflight(ctx context.Context, cfg config.Config, creds credentials.Set) error {
+// preflight validates provider, tailnet, and tunnel access before create
+// mutates anything. computeRecorded skips the size offer check: a rerun that
+// resumes an existing server orders no new size, and a size the provider has
+// since withdrawn from the location must not block finishing that server.
+func (a *app) preflight(ctx context.Context, cfg config.Config, creds credentials.Set, computeRecorded bool) error {
 	if a.services.preflight != nil {
 		return a.services.preflight(ctx, cfg, creds)
 	}
@@ -123,8 +127,10 @@ func (a *app) preflight(ctx context.Context, cfg config.Config, creds credential
 		if err := validateManagedImageCatalog(catalog, cfg.Compute.Image); err != nil {
 			return err
 		}
-		if err := validateManagedSizeCatalog(catalog, cfg.Compute.Size, cfg.Compute.Location); err != nil {
-			return err
+		if !computeRecorded {
+			if err := validateManagedSizeCatalog(catalog, cfg.Compute.Size, cfg.Compute.Location); err != nil {
+				return err
+			}
 		}
 	}
 	var tailscaleClient preflightTailscaleClient = tailscale.New(creds.Tailscale, cfg.Access.Tailscale.Tailnet)

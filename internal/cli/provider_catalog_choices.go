@@ -91,7 +91,9 @@ func validateManagedImageCatalog(catalog compute.Catalog, selected string) error
 
 // validateManagedSizeCatalog rejects a size the location-scoped catalog does
 // not offer, so create fails before minting Tailscale keys or policy instead of
-// at the provider's create call.
+// at the provider's create call. It is only as strict as each provider's
+// location filter: a provider that lists a plan without locations counts it as
+// offered everywhere, and such a sold-out plan still fails at create.
 func validateManagedSizeCatalog(catalog compute.Catalog, selected, location string) error {
 	for _, size := range catalog.Sizes {
 		if size.Name == selected {
