@@ -44,18 +44,85 @@ const (
 	sshdUnitsCheckName = "sshd units"
 	sshSocketUnit      = "ssh.socket"
 	sshServiceUnit     = "ssh.service"
+
+	// sshd file layout on the managed host. The setting reads and the repair
+	// share it so they always judge and write the same files; the repair takes
+	// the directories as parameters so tests can point it at a scratch tree.
+	sshdConfigDir         = "/etc/ssh"
+	sshdPrivsepDir        = "/run/sshd"
+	sshdMainConfigName    = "sshd_config"
+	sshdDropinDirName     = "sshd_config.d"
+	sshdManagedDropinName = "99-serverpro.conf"
+	// sshdDropinGlob is the Include argument stock Ubuntu ships, relative to
+	// sshdConfigDir as sshd resolves it.
+	sshdDropinGlob = sshdDropinDirName + "/*.conf"
+	// sshd refuses to start when this directory is absent, which is the
+	// normal state of a socket-activated host before its first connection.
+	sshdMissingPrivsepMessage = "Missing privilege separation directory: " + sshdPrivsepDir
+	sshdManagedFileMode       = "0644"
+	// Same-directory temp names make each replace a rename, so sshd never
+	// reads a half-written file; cleanup removes them on any exit.
+	sshdStageSuffix   = ".serverpro-new"
+	sshdRestoreSuffix = ".serverpro-restore"
+	// sshdRestoreFailedExit sets a broken rollback apart from an ordinary
+	// failed repair, because only the former can lock out new SSH logins.
+	sshdRestoreFailedExit = 3
 )
 
-var sshdHardeningExpectations = map[string]string{
-	sshdKeywordPermitRootLogin:              sshdValueDisabled,
-	sshdKeywordPasswordAuthentication:       sshdValueDisabled,
-	sshdKeywordKbdInteractiveAuthentication: sshdValueDisabled,
-	sshdKeywordChallengeResponseAuth:        sshdValueDisabled,
-	sshdKeywordX11Forwarding:                sshdValueDisabled,
-	sshdKeywordAllowAgentForwarding:         sshdValueDisabled,
-	sshdKeywordAllowTCPForwarding:           sshdValueDisabled,
-	sshdKeywordPermitTunnel:                 sshdValueDisabled,
-	sshdKeywordPermitOpen:                   sshdValueNone,
+// sshdHardening is the serverpro drop-in in file order. The checks look
+// settings up through sshdHardeningExpectations; the repair writes this list
+// and then confirms each value through sshd -T.
+var sshdHardening = []struct{ keyword, value string }{
+	{sshdKeywordPermitRootLogin, sshdValueDisabled},
+	{sshdKeywordPasswordAuthentication, sshdValueDisabled},
+	{sshdKeywordKbdInteractiveAuthentication, sshdValueDisabled},
+	{sshdKeywordChallengeResponseAuth, sshdValueDisabled},
+	{sshdKeywordX11Forwarding, sshdValueDisabled},
+	{sshdKeywordAllowAgentForwarding, sshdValueDisabled},
+	{sshdKeywordAllowTCPForwarding, sshdValueDisabled},
+	{sshdKeywordPermitTunnel, sshdValueDisabled},
+	{sshdKeywordPermitOpen, sshdValueNone},
+}
+
+var sshdHardeningExpectations = func() map[string]string {
+	expectations := make(map[string]string, len(sshdHardening))
+	for _, setting := range sshdHardening {
+		expectations[setting.keyword] = setting.value
+	}
+	return expectations
+}()
+
+// sshdEffectiveLine is the sshd -T line that proves a hardening setting took
+// effect. ChallengeResponseAuthentication is a deprecated alias that sshd -T
+// never prints, so it is proven through KbdInteractiveAuthentication.
+func sshdEffectiveLine(keyword string) string {
+	if keyword == sshdKeywordChallengeResponseAuth {
+		keyword = sshdKeywordKbdInteractiveAuthentication
+	}
+	return strings.ToLower(keyword) + " " + sshdHardeningExpectations[keyword]
+}
+
+// sshdTopLevelIncludeAwk exits 0 only when the main config includes the
+// drop-in directory before its first Match block. An Include inside a Match
+// block applies the drop-ins to that block alone, so sshd -T would not show
+// them and the repair could never settle the checks. It accepts the absolute
+// and the relative (sshdConfigDir-based) spelling, and compares keywords
+// case-insensitively as sshd does.
+const sshdTopLevelIncludeAwk = `tolower($1) == "match" { exit }
+tolower($1) == "include" { for (i = 2; i <= NF; i++) if ($i == abs || $i == rel) { found = 1; exit } }
+END { exit !found }`
+
+// sshdIncludeRewriteAwk points every Include of the drop-in directory at the
+// private copy, so the candidate is validated against the new drop-in instead
+// of whatever the live directory holds.
+const sshdIncludeRewriteAwk = `tolower($1) == "include" { for (i = 2; i <= NF; i++) if ($i == abs || $i == rel) $i = to }
+{ print }`
+
+// sshdTopLevelIncludeTest is the shell test the setting reads share with the
+// repair, so a Match-scoped Include fails the read fallback too.
+func sshdTopLevelIncludeTest(sshDir string) string {
+	return "awk -v abs=" + shell.Quote(sshDir+"/"+sshdDropinGlob) + " -v rel=" + shell.Quote(sshdDropinGlob) + " " +
+		shell.Quote(sshdTopLevelIncludeAwk) + " " + shell.Quote(sshDir+"/"+sshdMainConfigName)
 }
 
 // sshdSettingValueCommand and sshdChallengeResponseCommand run inside the
@@ -63,26 +130,24 @@ var sshdHardeningExpectations = map[string]string{
 // root-to-root sudo re-enters PAM account checks and fails on hosts whose
 // root password is expired (some provider images), masking the real setting.
 func sshdSettingValueCommand(keyword, value string) string {
-	expected := strings.ToLower(keyword) + " " + value
-	configured := keyword + " " + value
-	return "out=\"$(sshd -T 2>&1)\"; " +
-		"if printf '%s\n' \"$out\" | grep -Fx " + shell.Quote(expected) + "; then exit 0; fi; " +
-		"case \"$out\" in *\"Missing privilege separation directory: /run/sshd\"*) " +
-		"grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config[.]d/[*][.]conf([[:space:]]|$)' /etc/ssh/sshd_config && " +
-		"grep -Fx " + shell.Quote(configured) + " /etc/ssh/sshd_config.d/99-serverpro.conf && " +
-		"printf '%s\n' " + shell.Quote("sshd inactive; /run/sshd absent; serverpro config contains "+configured) + " ;; " +
-		"*) printf '%s\n' \"$out\"; exit 1 ;; esac"
+	return sshdSettingReadCommand(strings.ToLower(keyword)+" "+value, keyword+" "+value)
 }
 
 func sshdChallengeResponseCommand() string {
-	configured := sshdKeywordChallengeResponseAuth + " " + sshdHardeningExpectations[sshdKeywordChallengeResponseAuth]
-	effectiveExpected := strings.ToLower(sshdKeywordKbdInteractiveAuthentication) + " " + sshdHardeningExpectations[sshdKeywordKbdInteractiveAuthentication]
+	return sshdSettingReadCommand(sshdEffectiveLine(sshdKeywordChallengeResponseAuth),
+		sshdKeywordChallengeResponseAuth+" "+sshdHardeningExpectations[sshdKeywordChallengeResponseAuth])
+}
+
+// sshdSettingReadCommand trusts sshd -T first. Only when sshd cannot run
+// because its privilege separation directory is missing (an inactive
+// socket-activated host) does it fall back to the files the repair writes.
+func sshdSettingReadCommand(effective, configured string) string {
 	return "out=\"$(sshd -T 2>&1)\"; " +
-		"if printf '%s\n' \"$out\" | grep -Fx " + shell.Quote(effectiveExpected) + "; then exit 0; fi; " +
-		"case \"$out\" in *\"Missing privilege separation directory: /run/sshd\"*) " +
-		"grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config[.]d/[*][.]conf([[:space:]]|$)' /etc/ssh/sshd_config && " +
-		"grep -Fx " + shell.Quote(configured) + " /etc/ssh/sshd_config.d/99-serverpro.conf && " +
-		"printf '%s\n' " + shell.Quote("sshd inactive; /run/sshd absent; serverpro config contains "+configured) + " ;; " +
+		"if printf '%s\n' \"$out\" | grep -Fx " + shell.Quote(effective) + "; then exit 0; fi; " +
+		"case \"$out\" in *" + shell.Quote(sshdMissingPrivsepMessage) + "*) " +
+		sshdTopLevelIncludeTest(sshdConfigDir) + " && " +
+		"grep -Fx " + shell.Quote(configured) + " " + shell.Quote(sshdConfigDir+"/"+sshdDropinDirName+"/"+sshdManagedDropinName) + " && " +
+		"printf '%s\n' " + shell.Quote("sshd inactive; "+sshdPrivsepDir+" absent; serverpro config contains "+configured) + " ;; " +
 		"*) printf '%s\n' \"$out\"; exit 1 ;; esac"
 }
 
@@ -266,22 +331,41 @@ esac`
 }
 
 // sshdSettingsFixCommand is shared by every sshd hardening check. Doctor runs
-// it at most once per run in practice: later sshd checks re-read the host
-// after it ran (refreshAfterSSHDRepair) instead of repairing again, because
-// back-to-back restarts trip systemd's start rate limit.
+// it at most once per run: later sshd checks re-read the host after it ran
+// (refreshAfterSSHDRepair), and a check it did not settle fails instead of
+// running it again (remoteFixableCheck), because a second run of the same
+// script cannot change the outcome and only reloads sshd once more.
 func sshdSettingsFixCommand() string {
-	return sshdSettingsFixScript("/etc/ssh", "/run/sshd")
+	return sshdSettingsFixScript(sshdConfigDir, sshdPrivsepDir)
 }
 
-// sshdSettingsFixScript validates before it commits and never leaves an
-// invalid config on disk:
-//   - it builds the candidate main config and serverpro drop-in in a private
-//     temp directory and checks them with sshd -t -f against a copy of the
-//     drop-in directory, so the live files stay untouched if that fails;
-//   - it replaces each changed file through a same-directory temp file and
-//     mv, then runs sshd -t on the live config and restores the backups if
-//     that fails (for example when another drop-in changed meanwhile);
-//   - every temp-file step aborts on failure.
+// sshdManagedDropin is the serverpro drop-in body. The repair writes it and
+// compares it byte for byte, so a rerun on a settled host rewrites nothing.
+func sshdManagedDropin() string {
+	var body strings.Builder
+	for _, setting := range sshdHardening {
+		body.WriteString(setting.keyword + " " + setting.value + "\n")
+	}
+	return body.String()
+}
+
+// sshdSettingsFixScript keeps the host's SSH login path working while it
+// changes sshd's config, since a broken config locks out every new session:
+//   - it builds the candidate main config and drop-in in a private temp
+//     directory and validates them with sshd -t -f against a copy of the
+//     drop-in directory, so a rejected candidate never touches the live files;
+//   - it writes the drop-in before the main config. Until the main config
+//     includes the drop-in directory the new drop-in is inert, so a repair
+//     killed between the two writes leaves either the old config or the
+//     validated one, never an unvalidated mix;
+//   - each write goes through a same-directory temp file and mv. After them it
+//     runs sshd -t on the live config and restores the backups if that fails
+//     (for example when another drop-in changed meanwhile). A failed rollback
+//     exits with sshdRestoreFailedExit and names the files to fix by hand,
+//     because only an operator still logged in can repair them then;
+//   - the EXIT trap removes temp files. dash skips EXIT traps on fatal
+//     signals, so the signal traps exit explicitly to run it, for example when
+//     the SSH session drops at the doctor deadline.
 //
 // It then reloads with try-reload-or-restart: that reloads a running
 // ssh.service (sshd supports reload, and reloads do not count towards the
@@ -289,36 +373,43 @@ func sshdSettingsFixCommand() string {
 // inactive, since the next socket-spawned sshd reads the new config. A
 // running daemon is reloaded even when the files already match, because an
 // earlier reload may have failed after its write and sshd -T only proves the
-// on-disk config. With nothing changed and ssh.service inactive it only
-// validates. sshDir and runDir are parameters so tests can run the script
-// against a scratch tree; production passes /etc/ssh and /run/sshd.
+// on-disk config. Last, it checks every managed value through sshd -T: a
+// valid config can still hide the drop-in (a lower-numbered drop-in sets the
+// keyword first, or the Include sits inside a Match block), and reporting
+// success then would leave every sshd check failing with no explanation.
 func sshdSettingsFixScript(sshDir, runDir string) string {
-	return `main=` + shell.Quote(sshDir+"/sshd_config") + `
-dropin_dir=` + shell.Quote(sshDir+"/sshd_config.d") + `
-dropin="$dropin_dir/99-serverpro.conf"
+	var expected strings.Builder
+	for _, setting := range sshdHardening {
+		expected.WriteString(" " + shell.Quote(sshdEffectiveLine(setting.keyword)))
+	}
+	dropinDir := sshDir + "/" + sshdDropinDirName
+	return `main=` + shell.Quote(sshDir+"/"+sshdMainConfigName) + `
+dropin_dir=` + shell.Quote(dropinDir) + `
+dropin=` + shell.Quote(dropinDir+"/"+sshdManagedDropinName) + `
+abs_include=` + shell.Quote(dropinDir+"/*.conf") + `
+rel_include=` + shell.Quote(sshdDropinGlob) + `
+stage=` + shell.Quote(sshdStageSuffix) + `
+restore_suffix=` + shell.Quote(sshdRestoreSuffix) + `
+work=
+cleanup() {
+  if [ -n "$work" ]; then rm -rf "$work"; fi
+  rm -f "$main$stage" "$dropin$stage" "$main$restore_suffix" "$dropin$restore_suffix"
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM PIPE
 mkdir -p "$dropin_dir" ` + shell.Quote(runDir) + ` || exit 1
 work="$(mktemp -d)" || { echo 'sshd repair: cannot create a temp directory; live config unchanged' >&2; exit 1; }
-trap 'rm -rf "$work"' EXIT
-cat > "$work/99-serverpro.conf" <<'EOF' || exit 1
-PermitRootLogin no
-PasswordAuthentication no
-KbdInteractiveAuthentication no
-ChallengeResponseAuthentication no
-X11Forwarding no
-AllowAgentForwarding no
-AllowTcpForwarding no
-PermitTunnel no
-PermitOpen none
-EOF
+cat > "$work/managed" <<'EOF' || exit 1
+` + sshdManagedDropin() + `EOF
 main_changed=0
 dropin_changed=0
-if grep -Eq '^[[:space:]]*Include[[:space:]]+'"$dropin_dir"'/[*][.]conf([[:space:]]|$)' "$main"; then
+if awk -v abs="$abs_include" -v rel="$rel_include" ` + shell.Quote(sshdTopLevelIncludeAwk) + ` "$main"; then
   cp "$main" "$work/main" || exit 1
 else
-  { printf 'Include %s/*.conf\n' "$dropin_dir"; cat "$main"; } > "$work/main" || exit 1
+  { printf 'Include %s\n' "$abs_include"; cat "$main"; } > "$work/main" || exit 1
   main_changed=1
 fi
-cmp -s "$work/99-serverpro.conf" "$dropin" || dropin_changed=1
+cmp -s "$work/managed" "$dropin" || dropin_changed=1
 changed=0
 if [ "$main_changed" -eq 1 ] || [ "$dropin_changed" -eq 1 ]; then
   changed=1
@@ -327,8 +418,8 @@ if [ "$main_changed" -eq 1 ] || [ "$dropin_changed" -eq 1 ]; then
     [ -e "$conf" ] || continue
     cp "$conf" "$work/d/" || exit 1
   done
-  cp "$work/99-serverpro.conf" "$work/d/99-serverpro.conf" || exit 1
-  sed "s#^\([[:space:]]*Include[[:space:]]\{1,\}\)$dropin_dir/[*][.]conf#\1$work/d/*.conf#" "$work/main" > "$work/candidate" || exit 1
+  cp "$work/managed" "$work/d/` + sshdManagedDropinName + `" || exit 1
+  awk -v abs="$abs_include" -v rel="$rel_include" -v to="$work/d/*.conf" ` + shell.Quote(sshdIncludeRewriteAwk) + ` "$work/main" > "$work/candidate" || exit 1
   if ! sshd -t -f "$work/candidate"; then
     echo 'sshd repair: candidate config failed sshd -t; live config unchanged' >&2
     exit 1
@@ -336,29 +427,54 @@ if [ "$main_changed" -eq 1 ] || [ "$dropin_changed" -eq 1 ]; then
   cp -p "$main" "$work/main.bak" || exit 1
   had_dropin=0
   if [ -e "$dropin" ]; then cp -p "$dropin" "$work/dropin.bak" || exit 1; had_dropin=1; fi
-  restore() {
-    cp -p "$work/main.bak" "$main.serverpro-restore" && mv -f "$main.serverpro-restore" "$main"
-    if [ "$had_dropin" -eq 1 ]; then
-      cp -p "$work/dropin.bak" "$dropin.serverpro-restore" && mv -f "$dropin.serverpro-restore" "$dropin"
-    else
-      rm -f "$dropin"
-    fi
-  }
   commit() {
-    cp "$1" "$2.serverpro-new" && chmod 0644 "$2.serverpro-new" && mv -f "$2.serverpro-new" "$2"
+    cp "$1" "$2$stage" && chmod ` + sshdManagedFileMode + ` "$2$stage" && mv -f "$2$stage" "$2"
   }
-  if [ "$main_changed" -eq 1 ]; then
-    commit "$work/main" "$main" || { rm -f "$main.serverpro-new"; restore; exit 1; }
-  fi
-  if [ "$dropin_changed" -eq 1 ]; then
-    commit "$work/99-serverpro.conf" "$dropin" || { rm -f "$dropin.serverpro-new"; restore; exit 1; }
-  fi
-  if ! sshd -t; then
-    restore
-    echo 'sshd repair: live config failed sshd -t after the write; restored the previous files' >&2
+  put_back() {
+    cp -p "$1" "$2$restore_suffix" && mv -f "$2$restore_suffix" "$2"
+  }
+  restore() {
+    rc=0
+    put_back "$work/main.bak" "$main" || rc=1
+    if [ "$had_dropin" -eq 1 ]; then
+      put_back "$work/dropin.bak" "$dropin" || rc=1
+    else
+      rm -f "$dropin" || rc=1
+    fi
+    return "$rc"
+  }
+  abort() {
+    if ! restore; then
+      printf 'sshd repair: %s; restoring the previous files FAILED: check %s and %s with sshd -t before closing this session\n' "$1" "$main" "$dropin" >&2
+      exit ` + strconv.Itoa(sshdRestoreFailedExit) + `
+    fi
+    if ! sshd -t; then
+      printf 'sshd repair: %s; restored the previous files, but they fail sshd -t too: check %s and %s before closing this session\n' "$1" "$main" "$dropin" >&2
+      exit ` + strconv.Itoa(sshdRestoreFailedExit) + `
+    fi
+    printf 'sshd repair: %s; restored the previous files\n' "$1" >&2
     exit 1
+  }
+  if [ "$dropin_changed" -eq 1 ]; then
+    commit "$work/managed" "$dropin" || abort 'cannot write the serverpro drop-in'
   fi
+  if [ "$main_changed" -eq 1 ]; then
+    commit "$work/main" "$main" || abort 'cannot write the main config'
+  fi
+  sshd -t || abort 'live config failed sshd -t after the write'
 fi
-if [ "$changed" -eq 0 ] && ! systemctl is-active --quiet ` + sshServiceUnit + `; then sshd -t; exit; fi
-sshd -t && systemctl try-reload-or-restart ssh`
+if [ "$changed" -eq 1 ] || systemctl is-active --quiet ` + sshServiceUnit + `; then
+  sshd -t && systemctl try-reload-or-restart ` + sshServiceUnit + ` || exit 1
+else
+  sshd -t || exit 1
+fi
+effective="$(sshd -T 2>&1)" || { printf '%s\n' "$effective" >&2; exit 1; }
+missing=
+for want in` + expected.String() + `; do
+  printf '%s\n' "$effective" | grep -Fxq "$want" || missing="$missing [$want]"
+done
+if [ -n "$missing" ]; then
+  printf 'sshd repair: config is valid but sshd -T lacks%s: a lower-numbered drop-in or an Include inside a Match block overrides %s\n' "$missing" "$dropin" >&2
+  exit 1
+fi`
 }

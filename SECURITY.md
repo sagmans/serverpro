@@ -285,8 +285,12 @@ Managed host tools install through integrity-checked sources, not
   version that any other configured repository also offers, so another source
   cannot supply the connector even with a higher version.
 - The doctor sshd repair validates a candidate config with `sshd -t -f`
-  before it touches the live files and restores them if the live config then
-  fails `sshd -t`, so a repair cannot leave sshd unable to start.
+  before it touches the live files, writes the drop-in before the `Include`
+  that activates it, and restores the previous files if the live config then
+  fails `sshd -t`. It validates the restored files again, and a restore that
+  fails or leaves an invalid config exits with a distinct status that names
+  the files, so the operator fixes them while a session is still open. It
+  reports success only when `sshd -T` shows every hardened value.
 - Every directly installed Ubuntu, Docker, and Cloudflare apt package has a
   reviewed minimum in `internal/hostplatform`. Installs preflight signed current
   candidates before package scripts run, reject missing/below-floor packages,
