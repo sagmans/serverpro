@@ -40,6 +40,32 @@ printf 'deploy:x:1000:1000::%s:/bin/bash\n' "$FAKE_HOME"`,
 	return binDir, logPath
 }
 
+// sha256sumCandidates lists the host commands that hash like GNU sha256sum:
+// Linux and macOS 15+ ship sha256sum (macOS under /sbin), while older macOS
+// hosts only get it from Homebrew coreutils as gsha256sum.
+var sha256sumCandidates = []string{"sha256sum", "gsha256sum"}
+
+// sha256sumBinDir exposes the host's real sha256sum, under that name, in a
+// private directory. Tests that pin PATH to a minimal base (to keep host tools
+// such as a stray herdr out of reach) still need genuine hashing, and the
+// minimal base misses macOS /sbin and Homebrew prefixes.
+func sha256sumBinDir(t *testing.T) string {
+	t.Helper()
+	for _, name := range sha256sumCandidates {
+		path, err := exec.LookPath(name)
+		if err != nil {
+			continue
+		}
+		binDir := t.TempDir()
+		if err := os.Symlink(path, filepath.Join(binDir, sha256sumCandidates[0])); err != nil {
+			t.Fatal(err)
+		}
+		return binDir
+	}
+	t.Skip("sha256sum-compatible command not available on this host")
+	return ""
+}
+
 func readCallLog(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -131,7 +157,7 @@ func TestHerdrCheckReportsUnverifiedInstallVersion(t *testing.T) {
 				t.Fatal(err)
 			}
 			cmd := exec.Command("bash", "-c", "set -euo pipefail; "+herdrVerifiedCommand())
-			cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin"}
+			cmd.Env = []string{"HOME=" + home, "PATH=" + sha256sumBinDir(t) + ":/usr/bin:/bin"}
 			out, err := cmd.CombinedOutput()
 			if err == nil {
 				t.Fatalf("unverified herdr accepted:\n%s", out)
