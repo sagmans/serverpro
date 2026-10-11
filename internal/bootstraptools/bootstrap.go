@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/sagmans/serverpro/internal/hostplatform"
@@ -136,6 +137,9 @@ func manifestEnvPairs() [][2]string {
 		{"SERVERPRO_BOOTSTRAP_HOST_CODENAME", hostplatform.ManagedHostCodename},
 		{"SERVERPRO_BOOTSTRAP_HOST_ARCHITECTURES", strings.Join(hostplatform.ManagedHostKernelArchitectures(), " ")},
 		{"SERVERPRO_BOOTSTRAP_PACKAGE_BASELINES", hostplatform.PackageBaselineManifest(hostplatform.BootstrapPackageBaselines())},
+		{"SERVERPRO_BOOTSTRAP_APT_LOCK_TIMEOUT", strconv.Itoa(hostplatform.APTLockTimeoutSeconds)},
+		{"SERVERPRO_BOOTSTRAP_APT_LISTS_LOCK_RETRY_SECONDS", strconv.Itoa(hostplatform.APTListsLockRetrySeconds)},
+		{"SERVERPRO_BOOTSTRAP_APT_LISTS_LOCK_ERROR", hostplatform.APTListsLockError},
 		{"SERVERPRO_BOOTSTRAP_MIN_MISE_VERSION", MinimumMiseVersion},
 		{"SERVERPRO_BOOTSTRAP_BUILDX_VERSION", BuildxVersion},
 		{"SERVERPRO_BOOTSTRAP_BUILDX_SHA256_AMD64", BuildxLinuxAMD64SHA256},
@@ -243,8 +247,11 @@ func Checks(user string) []Check {
 	)
 }
 
+// ManagedPackageRefreshCommand refreshes apt metadata before doctor trusts a
+// clean package simulation. It reuses the host-wide apt_update so a doctor run
+// that meets apt-daily waits for the package-lists lock instead of failing.
 func ManagedPackageRefreshCommand() string {
-	return "DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 update"
+	return hostplatform.APTUpdateShellFunction() + "apt_update"
 }
 
 func managedPackageUpdatesCommand() string {

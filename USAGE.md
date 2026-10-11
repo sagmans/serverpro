@@ -574,7 +574,15 @@ generic host-tool repair. Instead, `--fix` runs a dedicated cloudflared repair.
 It upgrades from the Cloudflare apt repository that provisioning trusted, then
 enables and restarts the service. It does not change the tunnel token. It fails
 with a "reprovision the server" message when the service unit, token file,
-pinned keyring, or exact apt source line is missing or changed. Bootstrap reruns managed host-tool setup through Tailscale SSH with
+pinned keyring, or exact apt source line is missing or changed.
+Provisioning, bootstrap, and `--fix` apt work waits up to 5 minutes for each
+apt lock that a concurrent apt run holds, such as apt-daily refreshing package
+lists or unattended upgrades installing packages, and prints a
+`waiting up to 300 seconds` notice on stderr. If the package lists stay locked
+past that budget, the step fails with apt's lock error and
+`apt package lists stayed locked for 300 seconds; another apt run still holds them`;
+rerun once the other apt run finishes. Repository and other apt errors fail at
+once with apt's own output. Bootstrap reruns managed host-tool setup through Tailscale SSH with
 password-required sudo. The default `all` target
 installs the full managed toolset; run `serverpro server bootstrap --help` for
 the canonical list and pinned versions. Focused targets stay `git`, `docker`,

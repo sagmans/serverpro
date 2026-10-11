@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -140,7 +141,7 @@ func TestUpgradeScriptGatesTrustBeforeApt(t *testing.T) {
 		t.Fatalf("upgrade script has no main\n%s", s)
 	}
 	body := s[mainStart:]
-	aptUpdate := strings.Index(body, "apt_get update")
+	aptUpdate := strings.Index(body, "apt_update")
 	if aptUpdate < 0 {
 		t.Fatalf("upgrade script never refreshes apt\n%s", body)
 	}
@@ -272,13 +273,14 @@ func writeFakeCommand(t *testing.T, dir, name, body string) {
 
 // TestScriptsPinCloudflaredOriginAndWaitForAptLock covers both apt paths:
 // provisioning and the doctor repair write the origin pin before apt runs,
-// install only the verified candidate version, and wait on the dpkg lock.
+// install only the verified candidate version, wait on the dpkg lock, and
+// refresh lists through the host-wide lists-lock wait.
 func TestScriptsPinCloudflaredOriginAndWaitForAptLock(t *testing.T) {
 	for name, s := range map[string]string{"install": InstallScript("cf-tunnel-token"), "upgrade": UpgradeScript()} {
 		t.Run(name, func(t *testing.T) {
 			body := s[strings.Index(s, "main() {"):]
 			pin := strings.Index(body, "write_cloudflared_apt_pin")
-			update := strings.Index(body, "apt_get update")
+			update := strings.Index(body, "apt_update")
 			candidate := strings.Index(body, "verify_cloudflared_candidate")
 			install := strings.Index(body, "install_cloudflared_candidate")
 			if pin < 0 || update < 0 || candidate < 0 || install < 0 || pin > update || update > candidate || candidate > install {
@@ -289,7 +291,8 @@ func TestScriptsPinCloudflaredOriginAndWaitForAptLock(t *testing.T) {
 			}
 			for _, want := range []string{
 				`apt-get -o DPkg::Lock::Timeout="${APT_LOCK_TIMEOUT}"`,
-				"APT_LOCK_TIMEOUT=300",
+				"APT_LOCK_TIMEOUT=" + strconv.Itoa(hostplatform.APTLockTimeoutSeconds),
+				hostplatform.APTUpdateShellFunction(),
 				`apt_get install -y "${CLOUDFLARED_PACKAGE}=${candidate_version}"`,
 				"CLOUDFLARED_APT_PREFERENCES_PATH=/etc/apt/preferences.d/serverpro-cloudflared",
 				"CLOUDFLARED_APT_REPOSITORY_URL=" + cloudflareAPTRepositoryURL,
@@ -328,5 +331,43 @@ func TestWriteCloudflaredAptPinWritesOriginPreference(t *testing.T) {
 	}
 	if _, err := os.Stat(prefs + ".serverpro-new"); !os.IsNotExist(err) {
 		t.Fatalf("temp preferences file left behind: %v", err)
+	}
+}
+
+// TestUpgradeScriptAPTUpdateWaitsForListsLock runs the rendered helper under
+// dash, as the sudo transport does, so a held lists lock delays the repair's
+// refresh instead of failing it.
+func TestUpgradeScriptAPTUpdateWaitsForListsLock(t *testing.T) {
+	if _, err := exec.LookPath("dash"); err != nil {
+		t.Skip("dash is required to mirror supported Ubuntu/Debian /bin/sh")
+	}
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "upgrade.sh")
+	if err := os.WriteFile(scriptPath, []byte(UpgradeScript()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	binDir := t.TempDir()
+	callsPath := filepath.Join(dir, "calls")
+	writeFakeCommand(t, binDir, "apt-get", `count=$(cat "$APT_CALLS" 2>/dev/null || printf 0)
+count=$((count + 1))
+printf '%s' "$count" > "$APT_CALLS"
+if [ "$count" -eq 1 ]; then
+  printf 'E: %s. It is held by process 42 (apt-get)\n' "$LOCK_ERROR" >&2
+  exit 100
+fi
+`)
+	writeFakeCommand(t, binDir, "sleep", "exit 0\n")
+	cmd := exec.Command("dash", "-c", `. "$1"; apt_update`, "test", scriptPath)
+	cmd.Env = append(os.Environ(),
+		"SERVERPRO_TUNNEL_SOURCE_ONLY=1",
+		"PATH="+binDir+":"+os.Getenv("PATH"),
+		"APT_CALLS="+callsPath,
+		"LOCK_ERROR="+hostplatform.APTListsLockError,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("apt_update after a released lists lock: %v\n%s", err, out)
+	}
+	if calls, err := os.ReadFile(callsPath); err != nil || string(calls) != "2" {
+		t.Fatalf("apt-get calls = %q, %v; want one retry after the lock error", calls, err)
 	}
 }

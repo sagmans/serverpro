@@ -469,10 +469,73 @@ TARGET_HOME=
 TARGET_GID=
 TARGET_PATH=
 
+# bootstrap_seconds_env reads one apt wait setting as positive whole seconds:
+# zero would let the lists-lock retry spin without spending its budget, and a
+# leading zero would be read as octal by shell arithmetic.
+bootstrap_seconds_env() {
+  local name="$1"
+  local value
+  value=$(required_env "${name}")
+  case "${value}" in
+    *[!0-9]*|0*)
+      printf '%s must be a positive whole number of seconds: %s\n' "${name}" "${value}" >&2
+      exit 1
+      ;;
+  esac
+  printf '%s' "${value}"
+}
+
+# apt_get waits for a concurrent apt or unattended-upgrades run instead of
+# failing on the dpkg lock, and never prompts. Package-list refreshes go
+# through apt_update because that lock is not covered here.
+apt_get() {
+  local timeout
+  timeout=$(bootstrap_seconds_env SERVERPRO_BOOTSTRAP_APT_LOCK_TIMEOUT) || return 1
+  DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout="${timeout}" "$@"
+}
+
+# apt_update waits while apt-daily or another apt run holds the package-lists
+# lock: apt-get update takes only that lock and DPkg::Lock::Timeout does not
+# cover it, so the refresh would otherwise fail at once. Only that lock error
+# is retried within the shared budget; apt's stdout streams, its stderr is
+# replayed after each attempt, and any other failure keeps apt's status.
+apt_update() {
+  local budget retry lock_error waited=0 status errors
+  budget=$(bootstrap_seconds_env SERVERPRO_BOOTSTRAP_APT_LOCK_TIMEOUT) || return 1
+  retry=$(bootstrap_seconds_env SERVERPRO_BOOTSTRAP_APT_LISTS_LOCK_RETRY_SECONDS) || return 1
+  lock_error=$(required_env SERVERPRO_BOOTSTRAP_APT_LISTS_LOCK_ERROR) || return 1
+  while :; do
+    status=0
+    # stderr is captured for the lock match while stdout streams through fd 3.
+    { errors=$(DEBIAN_FRONTEND=noninteractive apt-get update 2>&1 1>&3 3>&-); } 3>&1 || status=$?
+    if [[ ${status} -eq 0 ]]; then
+      if [[ -n ${errors} ]]; then
+        printf '%s\n' "${errors}" >&2
+      fi
+      return 0
+    fi
+    if [[ ${errors} != *"${lock_error}"* ]]; then
+      printf '%s\n' "${errors}" >&2
+      return "${status}"
+    fi
+    if [[ ${waited} -ge ${budget} ]]; then
+      printf '%s\n' "${errors}" >&2
+      log "apt package lists stayed locked for ${waited} seconds; another apt run still holds them"
+      return "${status}"
+    fi
+    if [[ ${waited} -eq 0 ]]; then
+      printf '%s\n' "${errors}" >&2
+      log "waiting up to ${budget} seconds for the apt package lists lock"
+    fi
+    sleep "${retry}"
+    waited=$((waited + retry))
+  done
+}
+
 apt_update_once() {
   if [[ ${APT_UPDATED} -eq 0 ]]; then
     log 'updating apt package index'
-    apt-get -o DPkg::Lock::Timeout=300 update || return 1
+    apt_update || return 1
     APT_UPDATED=1
   fi
 }
@@ -480,7 +543,7 @@ apt_update_once() {
 apt_install() {
   apt_update_once || return 1
   verify_package_candidates "$@" || return 1
-  DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends "$@" || return 1
+  apt_get install -y --no-install-recommends "$@" || return 1
   verify_package_minimums "$@"
 }
 
@@ -642,6 +705,9 @@ validate_bootstrap_env() {
     validate_user_token SERVERPRO_BOOTSTRAP_HOST_ARCHITECTURES "${host_arch}"
   done
   validate_package_baseline_manifest
+  bootstrap_seconds_env SERVERPRO_BOOTSTRAP_APT_LOCK_TIMEOUT >/dev/null
+  bootstrap_seconds_env SERVERPRO_BOOTSTRAP_APT_LISTS_LOCK_RETRY_SECONDS >/dev/null
+  required_env SERVERPRO_BOOTSTRAP_APT_LISTS_LOCK_ERROR >/dev/null
   bootstrap_version_env SERVERPRO_BOOTSTRAP_BUILDX_VERSION >/dev/null
   bootstrap_sha256_env SERVERPRO_BOOTSTRAP_BUILDX_SHA256_AMD64 >/dev/null
   bootstrap_sha256_env SERVERPRO_BOOTSTRAP_BUILDX_SHA256_ARM64 >/dev/null
@@ -973,7 +1039,7 @@ install_htop() {
 
 remove_docker_conflicts() {
   # Official Docker docs require removing distro packages before using Docker's apt repository.
-  DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y \
+  apt_get remove -y \
     docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc \
     >/dev/null 2>&1 || true
 }
@@ -1106,7 +1172,7 @@ install_docker() {
   remove_docker_conflicts
   if [[ ${fallback} == 1 ]]; then
     if installed=$(installed_package_version "${BUILDX_PACKAGE}"); then
-      DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y "${BUILDX_PACKAGE}" || return 1
+      apt_get remove -y "${BUILDX_PACKAGE}" || return 1
     fi
     # Optional apt recommendations must not pull the rejected old plugin back in.
     apt_install "${selected[@]#apt:}" || return 1

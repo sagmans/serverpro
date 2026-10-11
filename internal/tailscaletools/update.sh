@@ -123,14 +123,68 @@ verify_package_candidates() {
   done
 }
 
+# seconds_env reads one apt wait setting as positive whole seconds: zero would
+# let the lists-lock retry spin without spending its budget, and a leading zero
+# would be read as octal by shell arithmetic.
+seconds_env() {
+  local name=$1 value
+  value=$(required_env "${name}")
+  case "${value}" in
+    *[!0-9]*|0*)
+      printf '%s must be a positive whole number of seconds: %s\n' "${name}" "${value}" >&2
+      exit 1
+      ;;
+  esac
+  printf '%s' "${value}"
+}
+
+# apt_update waits while apt-daily or another apt run holds the package-lists
+# lock: apt-get update takes only that lock and DPkg::Lock::Timeout does not
+# cover it, so the refresh would otherwise fail at once. Only that lock error
+# is retried within the shared budget; apt's stdout streams, its stderr is
+# replayed after each attempt, and any other failure keeps apt's status.
+apt_update() {
+  local budget retry lock_error waited=0 status errors
+  budget=$(seconds_env SERVERPRO_TAILSCALE_APT_LOCK_TIMEOUT)
+  retry=$(seconds_env SERVERPRO_TAILSCALE_APT_LISTS_LOCK_RETRY_SECONDS)
+  lock_error=$(required_env SERVERPRO_TAILSCALE_APT_LISTS_LOCK_ERROR)
+  while :; do
+    status=0
+    # stderr is captured for the lock match while stdout streams through fd 3.
+    { errors=$(DEBIAN_FRONTEND=noninteractive apt-get update 2>&1 1>&3 3>&-); } 3>&1 || status=$?
+    if [[ ${status} -eq 0 ]]; then
+      if [[ -n ${errors} ]]; then
+        printf '%s\n' "${errors}" >&2
+      fi
+      return 0
+    fi
+    if [[ ${errors} != *"${lock_error}"* ]]; then
+      printf '%s\n' "${errors}" >&2
+      return "${status}"
+    fi
+    if [[ ${waited} -ge ${budget} ]]; then
+      printf '%s\n' "${errors}" >&2
+      printf 'apt package lists stayed locked for %s seconds; another apt run still holds them\n' "${waited}" >&2
+      return "${status}"
+    fi
+    if [[ ${waited} -eq 0 ]]; then
+      printf '%s\n' "${errors}" >&2
+      printf 'waiting up to %s seconds for the apt package lists lock\n' "${budget}" >&2
+    fi
+    sleep "${retry}"
+    waited=$((waited + retry))
+  done
+}
+
 install_prerequisites() {
-  local package_list
+  local package_list lock_timeout
   local -a packages
   package_list=$(required_env SERVERPRO_TAILSCALE_PACKAGES)
+  lock_timeout=$(seconds_env SERVERPRO_TAILSCALE_APT_LOCK_TIMEOUT)
   read -r -a packages <<<"${package_list}"
-  apt-get -o DPkg::Lock::Timeout=300 update
+  apt_update
   verify_package_candidates "${packages[@]}"
-  DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends "${packages[@]}"
+  DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout="${lock_timeout}" install -y --no-install-recommends "${packages[@]}"
   verify_package_minimums "${packages[@]}"
 }
 

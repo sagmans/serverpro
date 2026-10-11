@@ -3,7 +3,6 @@ package doctor
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/sagmans/serverpro/internal/bootstraptools"
 	"github.com/sagmans/serverpro/internal/config"
@@ -17,9 +16,9 @@ import (
 
 const (
 	supportedPlatformCheckName = "supported platform"
-	// cloudflaredFixTimeout covers apt metadata refresh plus the package
-	// download, which outlast the default per-command SSH deadline.
-	cloudflaredFixTimeout = 10 * time.Minute
+	// cloudflaredFixTimeout is the connector script deadline; the tunnel
+	// package owns it so provisioning and the repair cannot drift apart.
+	cloudflaredFixTimeout = tunnel.ScriptTimeout
 )
 
 // remoteCheckSpecification keeps batch authority inseparable from the check

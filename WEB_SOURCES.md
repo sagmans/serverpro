@@ -423,12 +423,22 @@ lexical order and the first value obtained wins). Checked against OpenSSH
 https://manpages.ubuntu.com/manpages/noble/en/man5/apt_preferences.5.html
 https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=864681
 https://bugs.launchpad.net/cloud-init/+bug/1693361
+https://salsa.debian.org/apt-team/apt/-/blob/2.8.3/apt-pkg/deb/debsystem.cc
+https://salsa.debian.org/apt-team/apt/-/blob/2.8.3/apt-pkg/acquire.cc
 ```
 
 Use: `Pin: origin "pkg.cloudflare.com"` for the cloudflared pin (priorities
-above 500 win over default repositories), and `-o DPkg::Lock::Timeout=300`,
-which apt-get honours since apt 1.9.11 to wait for the dpkg lock instead of
-failing while apt-daily or unattended-upgrades runs.
+above 500 win over default repositories), and `-o DPkg::Lock::Timeout`, which
+apt-get honours since apt 1.9.11 (Debian bug 864681) to wait for the dpkg lock
+instead of failing while unattended-upgrades runs. In apt 2.8.3 (noble),
+`debSystem::Lock` applies that timeout only to `/var/lib/dpkg/lock-frontend`
+and `/var/lib/dpkg/lock`; `pkgAcquire::GetLock` takes
+`/var/lib/apt/lists/lock` with a single attempt. apt-daily holds that lists
+lock while it refreshes indexes (Launchpad bug 1693361), so `apt-get update`
+fails at once with "Could not get lock /var/lib/apt/lists/lock" and the host
+scripts retry only that C-locale error within the same budget. Checked against
+apt 2.8.3 on Ubuntu 24.04 on 2026-10-11, including a container run where
+`apt-get update` succeeded while another process held the dpkg frontend lock.
 
 ### sudo
 

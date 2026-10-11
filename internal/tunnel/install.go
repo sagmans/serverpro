@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/sagmans/serverpro/internal/hostplatform"
 	"github.com/sagmans/serverpro/internal/shell"
@@ -17,6 +18,16 @@ const (
 	// CheckName is the doctor result name; doctor evidence summaries and
 	// specifications key on it, so it lives next to the check it names.
 	CheckName = "cloudflared"
+
+	// scriptTransferMargin covers the connector script's own apt work: index
+	// download, package download, and install once the locks are free.
+	scriptTransferMargin = 5 * time.Minute
+	// ScriptTimeout is the SSH deadline for the install and repair scripts.
+	// Both may spend the full shared apt wait on the package-lists lock and
+	// again on the dpkg lock before their own work, so provisioning and doctor
+	// wrap them in this deadline instead of the short default, which would cut
+	// off a wait the script would survive.
+	ScriptTimeout = 2*hostplatform.APTLockTimeout + scriptTransferMargin
 
 	cloudflareAPTKeyFingerprint = "CC94B39C77AE7342A68B89628A682D308D4E5E73"
 	cloudflareAPTKeyURL         = "https://pkg.cloudflare.com/cloudflare-main.gpg"
@@ -28,15 +39,12 @@ const (
 	// Cloudflare origin so no other configured repository can supply it.
 	cloudflaredAPTPreferencesPath = "/etc/apt/preferences.d/serverpro-cloudflared"
 	cloudflareAPTOrigin           = "pkg.cloudflare.com"
-	// aptLockTimeoutSeconds lets apt wait for a concurrent unattended-upgrades
-	// run instead of failing on the dpkg lock.
-	aptLockTimeoutSeconds  = "300"
-	cloudflaredServiceName = "cloudflared"
-	cloudflaredServiceUser = "cloudflared"
-	cloudflaredConfigDir   = "/etc/cloudflared"
-	cloudflaredTokenPath   = cloudflaredConfigDir + "/token"
-	cloudflaredUnitPath    = "/etc/systemd/system/cloudflared.service"
-	cloudflaredBinaryPath  = "/usr/bin/cloudflared"
+	cloudflaredServiceName        = "cloudflared"
+	cloudflaredServiceUser        = "cloudflared"
+	cloudflaredConfigDir          = "/etc/cloudflared"
+	cloudflaredTokenPath          = cloudflaredConfigDir + "/token"
+	cloudflaredUnitPath           = "/etc/systemd/system/cloudflared.service"
+	cloudflaredBinaryPath         = "/usr/bin/cloudflared"
 )
 
 // cloudflaredAPTSource is the exact source line provisioning writes. The
@@ -109,7 +117,7 @@ CLOUDFLARED_APT_SOURCE=%s
 CLOUDFLARED_APT_REPOSITORY_URL=%s
 CLOUDFLARED_APT_PREFERENCES_PATH=%s
 CLOUDFLARED_APT_PREFERENCES=%s
-APT_LOCK_TIMEOUT=%s
+APT_LOCK_TIMEOUT=%d
 CLOUDFLARED_UNIT=%s
 CLOUDFLARED_TOKEN=%s
 `,
@@ -128,7 +136,7 @@ CLOUDFLARED_TOKEN=%s
 		cloudflareAPTRepositoryURL,
 		cloudflaredAPTPreferencesPath,
 		shell.Quote(cloudflaredAPTPreferences()),
-		aptLockTimeoutSeconds,
+		hostplatform.APTLockTimeoutSeconds,
 		cloudflaredUnitPath,
 		cloudflaredTokenPath,
 	)
@@ -184,7 +192,8 @@ verify_cloudflared_minimum() {
 }
 
 # apt_get waits for a concurrent apt or unattended-upgrades run instead of
-# failing on the dpkg lock, and never prompts.
+# failing on the dpkg lock, and never prompts. Package-list refreshes go
+# through apt_update because that lock is not covered here.
 apt_get() {
   DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout="${APT_LOCK_TIMEOUT}" "$@"
 }
@@ -309,6 +318,13 @@ require_cloudflared_service_setup() {
 }
 `
 
+// scriptPreamble joins the pinned values, the connector helpers, and the
+// host-wide apt_update so install and repair refresh package lists with the
+// same lists-lock wait as every other managed-host script.
+func scriptPreamble() string {
+	return scriptHeader() + scriptHelpers + "\n" + hostplatform.APTUpdateShellFunction()
+}
+
 // scriptFooter keeps sourcing side-effect free.
 const scriptFooter = `
 # The guard lets tests execute trust helpers without running privileged setup.
@@ -321,7 +337,7 @@ fi
 // key, installs the connector at or above the floor, and writes the token and
 // unit that the doctor repair later relies on but never rewrites.
 func InstallScript(token string) string {
-	return scriptHeader() + scriptHelpers + fmt.Sprintf(`
+	return scriptPreamble() + fmt.Sprintf(`
 main() {
   require_supported_host
   trap cleanup EXIT
@@ -331,7 +347,7 @@ main() {
   printf '%%s\n' "${CLOUDFLARED_APT_SOURCE}" > %[5]s
   chmod 0644 %[5]s
   write_cloudflared_apt_pin
-  apt_get update
+  apt_update
   verify_cloudflared_candidate
   install_cloudflared_candidate
   verify_cloudflared_minimum
@@ -382,7 +398,7 @@ UNIT
 // reaches existing hosts. It reuses provisioning's trusted repository and
 // never touches the tunnel token, so it cannot rotate or leak credentials.
 func UpgradeScript() string {
-	return scriptHeader() + scriptHelpers + `
+	return scriptPreamble() + `
 main() {
   require_supported_host
   require_cloudflared_service_setup
@@ -390,7 +406,7 @@ main() {
     verify_trusted_cloudflare_apt_key
     verify_cloudflared_apt_source
     write_cloudflared_apt_pin
-    apt_get update
+    apt_update
     verify_cloudflared_candidate
     install_cloudflared_candidate
     verify_cloudflared_minimum

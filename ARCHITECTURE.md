@@ -242,7 +242,8 @@ access paths for app-owned deployment flows.
 
 ## Runtime support contract
 
-`internal/hostplatform` owns the runtime matrix and package floors used by code.
+`internal/hostplatform` owns the runtime matrix, package floors, and apt lock
+wait policy used by code.
 Documentation mirrors that source; it does not independently define executable
 values. The controller support target is macOS 27 arm64. Managed-host support is
 Ubuntu 24.04 LTS (`noble`) on amd64 or arm64. Provider image IDs remain explicit
@@ -262,10 +263,30 @@ raised floor reaches existing hosts only through `doctor --fix`. Both the
 install and the repair write `/etc/apt/preferences.d/serverpro-cloudflared`,
 which pins the `cloudflared` package to origin `pkg.cloudflare.com` at
 priority 990, then install only a candidate version that every offering
-repository lists as `https://pkg.cloudflare.com/cloudflared`. Their apt calls,
-and those of cloud-init, the bootstrap script, the managed-package refresh,
-and the Tailscale updater, pass `-o DPkg::Lock::Timeout=300` so a concurrent
-unattended-upgrades run delays them instead of failing them.
+repository lists as `https://pkg.cloudflare.com/cloudflared`.
+
+Every managed-host apt call shares one lock wait budget,
+`hostplatform.APTLockTimeoutSeconds` (300 seconds), so a concurrent
+apt-daily, unattended-upgrades, or operator apt run delays provisioning and
+repair instead of failing them. apt guards two different locks.
+`DPkg::Lock::Timeout` waits only for the dpkg frontend and admin locks, which
+install, upgrade, and remove take. `apt-get update` takes only the package
+lists lock (`/var/lib/apt/lists/lock`), which apt-daily holds while it
+refreshes indexes and which apt never waits for. Cloud-init, the cloudflared
+install and repair, the bootstrap script, the managed-package refresh, and the
+Tailscale updater therefore refresh lists through an `apt_update` helper. The
+helper runs `apt-get update` under `LC_ALL=C`, retries only on apt's
+"Could not get lock /var/lib/apt/lists/lock" error every
+`hostplatform.APTListsLockRetrySeconds` (5 seconds) within the same budget,
+and returns apt's status and error output at once for any other failure.
+Go-rendered POSIX scripts embed `hostplatform.APTUpdateShellFunction`; the
+standalone bash bootstrap and Tailscale scripts carry an equivalent bash
+helper fed by manifest values. Their install, upgrade, and remove calls pass
+`-o DPkg::Lock::Timeout` with the same budget. Provisioning's cloudflared
+install and the doctor cloudflared repair share one SSH deadline
+(`tunnel.ScriptTimeout`) instead of the 2-minute transport default. It covers
+one full wait on each lock plus the script's own apt transfer time, because
+first-boot apt-daily runs often hold both locks.
 
 ## Runtime flow
 

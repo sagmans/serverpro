@@ -169,7 +169,7 @@ func TestUpdateScriptPreflightsCandidatesBeforeInstall(t *testing.T) {
 	script := UpdateScript()
 	functionStart := strings.Index(script, "install_prerequisites() {")
 	candidateCheck := strings.Index(script[functionStart:], `verify_package_candidates "${packages[@]}"`)
-	install := strings.Index(script[functionStart:], `apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends "${packages[@]}"`)
+	install := strings.Index(script[functionStart:], `apt-get -o DPkg::Lock::Timeout="${lock_timeout}" install -y --no-install-recommends "${packages[@]}"`)
 	if functionStart < 0 || candidateCheck < 0 || install < 0 || candidateCheck > install {
 		t.Fatalf("candidate floors must be checked before prerequisite installation")
 	}
@@ -182,7 +182,7 @@ func TestUpdateScriptPinsArtifactsAndDelaysDaemonRestart(t *testing.T) {
 		AMD64SHA256,
 		ARM64SHA256,
 		"https://pkgs.tailscale.com/stable/",
-		`apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends "${packages[@]}"`,
+		`apt-get -o DPkg::Lock::Timeout="${lock_timeout}" install -y --no-install-recommends "${packages[@]}"`,
 		"sha256sum -c",
 		"--no-same-owner",
 		`GODEBUG="tlsmlkem=1"`,
