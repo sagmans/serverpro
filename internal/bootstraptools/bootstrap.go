@@ -272,8 +272,18 @@ func managedPackageUpdatesCommand() string {
 	return baselineChecks.String() + "set -- " + strings.Join(quoted, " ") + `; if test "$buildx_source" = apt; then set -- "$@" ` + shell.Quote(BuildxPackage) + `; fi; out=$(apt-get -s -o Debug::NoLocking=1 --no-install-recommends install "$@" 2>&1) || { printf '%s\n' "$out" >&2; exit 1; }; if printf '%s\n' "$out" | grep -q '^Inst '; then printf 'managed package updates available\n' >&2; exit 1; fi; printf 'current\n'`
 }
 
+// herdrMiseInstallRoot is mise's per-version install root for the herdr tool
+// key. The doctor probe reads the version directory from the resolved binary
+// path, so a stale pin is named without executing an unverified binary.
+const herdrMiseInstallRoot = `$HOME/.local/share/mise/installs/herdr/`
+
+// herdrVerifiedCommand keeps the digest gate ahead of any herdr execution,
+// matching the bootstrap readiness probe and the inspect check. A digest
+// mismatch from an older pinned install (for example after a serverpro
+// upgrade) is reported as a version mismatch from the install path, so
+// operators do not read routine drift as tampering.
 func herdrVerifiedCommand() string {
-	return `herdr_bin=$("$HOME/.local/bin/mise" exec -- sh -c 'command -v herdr'); test -f "$herdr_bin" && test -x "$herdr_bin"; case "$(uname -m)" in x86_64) expected_sha=` + HerdrLinuxX64SHA256 + ` ;; aarch64|arm64) expected_sha=` + HerdrLinuxArm64SHA256 + ` ;; *) printf 'unsupported architecture for Herdr release: %s\n' "$(uname -m)" >&2; exit 1 ;; esac; actual_sha=$(sha256sum "$herdr_bin" | awk '{print $1}'); test "$actual_sha" = "$expected_sha" || { printf 'Herdr SHA-256 mismatch: expected %s, got %s\n' "$expected_sha" "$actual_sha" >&2; exit 1; }; herdr_version=$("$HOME/.local/bin/mise" exec -- herdr --version); test "$herdr_version" = "herdr ` + HerdrVersion + `" || { printf 'expected herdr ` + HerdrVersion + `, got %s\n' "$herdr_version" >&2; exit 1; }`
+	return `herdr_bin=$("$HOME/.local/bin/mise" exec -- sh -c 'command -v herdr'); test -f "$herdr_bin" && test -x "$herdr_bin"; case "$(uname -m)" in x86_64) expected_sha=` + HerdrLinuxX64SHA256 + ` ;; aarch64|arm64) expected_sha=` + HerdrLinuxArm64SHA256 + ` ;; *) printf 'unsupported architecture for Herdr release: %s\n' "$(uname -m)" >&2; exit 1 ;; esac; actual_sha=$(sha256sum "$herdr_bin" | awk '{print $1}'); if test "$actual_sha" != "$expected_sha"; then installed_version=; case "$herdr_bin" in "` + herdrMiseInstallRoot + `"*) installed_version=${herdr_bin#"` + herdrMiseInstallRoot + `"}; installed_version=${installed_version%%/*} ;; esac; if test -n "$installed_version" && test "$installed_version" != "` + HerdrVersion + `"; then printf 'expected herdr ` + HerdrVersion + `, got herdr %s (unverified install path); rerun managed bootstrap\n' "$installed_version" >&2; else printf 'Herdr SHA-256 mismatch: expected %s, got %s\n' "$expected_sha" "$actual_sha" >&2; fi; exit 1; fi; herdr_version=$("$HOME/.local/bin/mise" exec -- herdr --version); test "$herdr_version" = "herdr ` + HerdrVersion + `" || { printf 'expected herdr ` + HerdrVersion + `, got %s\n' "$herdr_version" >&2; exit 1; }`
 }
 
 func miseCheckCommand() string {
