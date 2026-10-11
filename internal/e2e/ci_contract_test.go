@@ -21,7 +21,7 @@ func TestFullChainE2EHasDistinctFailureArtifactCIJob(t *testing.T) {
 		"full-chain-e2e:",
 		"run: make test-full-chain-e2e",
 		"if: failure()",
-		"actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+		"actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
 		"path: .artifacts/full-chain-e2e",
 		"retention-days: 3",
 	} {
