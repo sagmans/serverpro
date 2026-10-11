@@ -13,7 +13,7 @@ other environments cannot run the binary.
 | --- | --- | --- | --- |
 | Controller CLI | macOS 27 | arm64 | Runs provider APIs, local state, Tailscale SSH, and remote orchestration. |
 | Managed host | Ubuntu 24.04 LTS (`noble`) | amd64, arm64 | Cloud-init, bootstrap, Tailscale, Docker, and Cloudflare Tunnel target. |
-| Source build toolchain | Go 1.26.6 or newer | arm64 | Runs on the supported controller; Go 1.26.6 is the development, CI, and release baseline. |
+| Source build toolchain | Go 1.26.9 or newer | arm64 | Runs on the supported controller; Go 1.26.9 is the development, CI, and release baseline. |
 
 Live create refetches the selected provider location's catalog and rejects a
 missing image or any image outside this OS/release/architecture matrix before
@@ -113,7 +113,7 @@ security updates therefore continue normally.
 ## Requirements
 
 - A supported controller from the matrix above
-- Go 1.26.6+
+- Go 1.26.9+
 - Git
 - `ssh`
 - `tailscale` CLI for local SSH checks and `serverpro server ssh`

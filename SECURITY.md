@@ -11,7 +11,7 @@ The supported controller is macOS 27 arm64. Managed hosts are Ubuntu 24.04 LTS
 (`noble`) on amd64 or arm64. Live create validates the selected provider catalog
 image before provider mutation; repair scripts validate the actual host before
 managed mutation. Cloud-init repeats the host check as defense in depth rather
-than acting as the sole gate. Go 1.26.6 is the
+than acting as the sole gate. Go 1.26.9 is the
 source-build, development, CI, and release floor. `INSTALLATION.md` records the
 complete reviewed tool and package baseline.
 
@@ -290,7 +290,7 @@ coverage, and landing code plus documentation together. A changed remote key or
 artifact fails closed until that review completes.
 
 Release tags run the reusable non-live check gate on the exact tagged commit and
-use the same Go 1.26.6 pin as local development. Release publication rejects
+use the same Go 1.26.9 pin as local development. Release publication rejects
 non-SemVer tags and existing releases, never clobbers assets, smoke-tests native
 binaries, and pairs every target archive with checksums, an SPDX SBOM, and
 signed Sigstore provenance and SBOM attestations. SemVer prerelease tags are
