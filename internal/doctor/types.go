@@ -42,6 +42,11 @@ type Options struct {
 	// refreshBaseline makes a check skip its batch baseline and read live,
 	// because a repair earlier in the same run may have changed the host.
 	refreshBaseline bool
+	// fixRan reports whether a repair script already ran in this doctor run.
+	// Repairs are idempotent, so one that did not settle its check the first
+	// time cannot settle a later check either; running it again would only
+	// reload services once more and hide the first, explanatory failure.
+	fixRan func(script string) bool
 }
 
 type InventoryItem struct {

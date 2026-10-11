@@ -25,6 +25,7 @@ func remoteChecksSequential(ctx context.Context, cfg config.Config, r remote.Run
 		// A repair earlier in this run can change what a later check reads, and
 		// the batch baseline was captured before it ran; such checks re-read live.
 		specificationOptions.refreshBaseline = tracker.ranAny(specification.refreshAfterLive)
+		specificationOptions.fixRan = tracker.ranScript
 		current := specification.run(ctx, tracker, cfg.Admin.Username, host, specificationOptions)
 		results = append(results, current...)
 		if specification.blocksFixesOnFailure && resultsContainFailure(current) {

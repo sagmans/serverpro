@@ -662,6 +662,31 @@ func exitCode(err error) int {
 	return -1
 }
 
+// TestRemoteChecksDoNotRerunUnsettledSSHDRepair is the non-convergence case:
+// the shared repair ran but the host still fails, so every later sshd check
+// must fail without running the repair again.
+func TestRemoteChecksDoNotRerunUnsettledSSHDRepair(t *testing.T) {
+	cfg := config.Example("prod")
+	root := sshdSettingValueCommand(sshdKeywordPermitRootLogin, sshdValueDisabled)
+	password := sshdSettingValueCommand(sshdKeywordPasswordAuthentication, sshdValueDisabled)
+	stuck := remoteCall{out: "passwordauthentication yes", err: errBaselineFail}
+	runner := &staleBatchRemote{
+		baselineFail: map[string]string{root: "permitrootlogin yes", password: "passwordauthentication yes"},
+		live: map[string][]remoteCall{
+			root:     {{out: "permitrootlogin yes", err: errBaselineFail}},
+			password: {stuck, stuck, stuck},
+		},
+	}
+	results := remoteChecksWithOptions(context.Background(), cfg, runner, "prod-01", Options{Fix: true})
+	if got := countCommand(runner.runScripts, sshdSettingsFixCommand()); got != 1 {
+		t.Fatalf("sshd repair ran %d times, want once", got)
+	}
+	res := resultByName(t, results, "sshd password auth")
+	if res.Status != Fail || !strings.Contains(res.Evidence, repairAlreadyRanEvidence) || res.Remediation != repairAlreadyRanRemediation {
+		t.Fatalf("unsettled check = %+v, want a failure pointing at the first repair", res)
+	}
+}
+
 func assertNoLeftovers(t *testing.T, tree sshdFixTree) {
 	t.Helper()
 	for _, pattern := range []string{filepath.Join(tree.root, "tmp.*"), filepath.Join(tree.sshDir, "*.serverpro-*"), filepath.Join(tree.sshDir, "sshd_config.d", "*.serverpro-*")} {

@@ -191,8 +191,10 @@ access paths for app-owned deployment flows.
     later sshd settings, `sshd units`, and `listening ports`) declare it in
     `refreshAfterLive`: once it ran in a doctor run they skip their batch
     baseline and read the host live, so a unit the repair broke is not hidden
-    by a stale baseline. Remote checks already run in a root shell and never
-    call sudo again.
+    by a stale baseline. No repair script runs twice in one doctor run: a
+    check that still fails after its shared repair already ran fails and
+    points at the first failure, whose output explains why. Remote checks
+    already run in a root shell and never call sudo again.
     A separate `sshd units` check fails while `ssh.socket` or `ssh.service`
     is failed, or enabled but not running; its fix resets them and starts
     the enabled unit unless it already runs.

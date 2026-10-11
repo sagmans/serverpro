@@ -9,6 +9,14 @@ import (
 	"github.com/sagmans/serverpro/internal/remote"
 )
 
+// A repair that already ran in this doctor run and still left a check failing
+// is reported once, pointing at the first failure, whose repair output says
+// why the repair could not settle the host.
+const (
+	repairAlreadyRanEvidence    = "; its repair already ran earlier in this doctor run and did not settle it"
+	repairAlreadyRanRemediation = "see the first failing check that shares this repair for its output"
+)
+
 func remoteSudoPasswordRequiredCheck(ctx context.Context, r remote.Runner, user, host string, opt Options) Result {
 	command := sudoPasswordRequiredCommand(user)
 	out, err := r.Run(ctx, user, host, command)
@@ -99,6 +107,7 @@ func runRemoteWithInput(ctx context.Context, r remote.Runner, user, host, script
 // a check whose output could hold a secret must not use this path.
 func remoteFixableCheck(ctx context.Context, r remote.Runner, user, host, name, command, fixCommand string, opt Options) Result {
 	if opt.refreshBaseline {
+		// The batch baseline predates an earlier repair in this run.
 		discardBaseline(r, command)
 	}
 	out, err := r.Run(ctx, user, host, command)
@@ -111,6 +120,9 @@ func remoteFixableCheck(ctx context.Context, r remote.Runner, user, host, name, 
 	}
 	if !opt.Fix {
 		return fail("remote", name, evidence, "run serverpro server doctor --fix")
+	}
+	if opt.fixRan != nil && opt.fixRan(fixCommand) {
+		return fail("remote", name, evidence+repairAlreadyRanEvidence, repairAlreadyRanRemediation)
 	}
 	if fixOut, fixErr := r.Run(ctx, user, host, fixCommand); fixErr != nil {
 		return fail("remote", name, evidence+"; fix failed: "+remoteFailureEvidence(fixOut, fixErr), "inspect remote command")
