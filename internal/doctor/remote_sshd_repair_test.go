@@ -2,6 +2,7 @@ package doctor
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -317,20 +318,72 @@ func newSSHDFixTree(t *testing.T, main, dropin string, active bool) sshdFixTree 
 	}
 	writeFile(t, filepath.Join(tree.state, sshServiceUnit+".active"), serviceState)
 	writeExecutable(t, tree.bin, "systemctl", fakeSystemctl)
+	// FAIL_LIVE_VALIDATION=1 fails the first live sshd -t only, as a drop-in
+	// changing under the repair would; =always keeps failing after a restore.
 	// The fake sshd -t reads the main config (-f or the live one) plus its
-	// Include globs, logs what it read, and rejects any BADCONF line.
-	writeExecutable(t, tree.bin, "sshd", `[ "$1" = -t ] || exit 2
-cfg="$LIVE_MAIN"
-if [ "${2:-}" = -f ]; then cfg=$3; elif [ -n "${FAIL_LIVE_VALIDATION:-}" ]; then echo 'live validation failed' >&2; exit 1; fi
-printf 'sshd -t %s\n' "$cfg" >>"$STATE/sshd.log"
-files="$cfg $(awk '$1 == "Include" { print $2 }' "$cfg")"
-for f in $files; do
-  [ -e "$f" ] || continue
-  printf 'read %s\n' "$f" >>"$STATE/sshd.log"
-  if grep -q BADCONF "$f"; then echo "$f: bad configuration" >&2; exit 1; fi
-done`)
+	// Include globs, logs what it read, and rejects any BADCONF line. sshd -T
+	// prints the first value of each keyword, follows Includes (relative ones
+	// from the config directory) and stops at the first Match block, as sshd
+	// does for the global settings.
+	writeExecutable(t, tree.bin, "sshd", fakeSSHD)
+	// Some mktemp builds ignore TMPDIR without a template; pinning the scratch
+	// root keeps the leftover checks honest on every platform.
+	writeExecutable(t, tree.bin, "mktemp", `exec /usr/bin/mktemp -d "$TMPDIR/tmp.XXXXXXXXXX"`)
+	writeExecutable(t, tree.bin, "mv", `printf 'mv %s\n' "$*" >>"$STATE/mv.log"
+for arg; do case "$arg" in ${FAIL_MV_MATCH:-/nonexistent/}) echo "mv: simulated failure for $arg" >&2; exit 1 ;; esac; done
+exec /bin/mv "$@"`)
 	return tree
 }
+
+const fakeSSHD = `case "$1" in
+-T)
+  set -f
+  seen=' '
+  read_cfg() {
+    while IFS= read -r line || [ -n "$line" ]; do
+      set -- $line
+      [ $# -ge 2 ] || continue
+      key=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+      case "$key" in
+        match) return 1 ;;
+        include)
+          shift
+          for pat; do
+            case "$pat" in /*) ;; *) pat="$(dirname "$LIVE_MAIN")/$pat" ;; esac
+            set +f
+            for f in $pat; do
+              if [ -e "$f" ]; then read_cfg "$f" || return 1; fi
+            done
+            set -f
+          done
+          continue ;;
+        challengeresponseauthentication) key=kbdinteractiveauthentication ;;
+      esac
+      case "$seen" in *" $key "*) continue ;; esac
+      seen="$seen$key "
+      printf '%s %s\n' "$key" "$2"
+    done <"$1"
+  }
+  read_cfg "$LIVE_MAIN"
+  exit 0 ;;
+-t) ;;
+*) exit 2 ;;
+esac
+cfg="$LIVE_MAIN"
+if [ "${2:-}" = -f ]; then cfg=$3; [ -z "${SIGNAL_ON_CANDIDATE:-}" ] || kill -s "$SIGNAL_ON_CANDIDATE" "$PPID"
+elif [ "${FAIL_LIVE_VALIDATION:-}" = always ] || { [ -n "${FAIL_LIVE_VALIDATION:-}" ] && [ ! -e "$STATE/live-failed" ]; }; then
+  : >"$STATE/live-failed"; echo 'live validation failed' >&2; exit 1
+fi
+printf 'sshd -t %s\n' "$cfg" >>"$STATE/sshd.log"
+files="$cfg $(awk 'tolower($1) == "include" { print $2 }' "$cfg")"
+for f in $files; do
+  case "$f" in /*) ;; *) f="$(dirname "$LIVE_MAIN")/$f" ;; esac
+  for g in $f; do
+    [ -e "$g" ] || continue
+    printf 'read %s\n' "$g" >>"$STATE/sshd.log"
+    if grep -q BADCONF "$g"; then echo "$g: bad configuration" >&2; exit 1; fi
+  done
+done`
 
 func writeFile(t *testing.T, path, body string) {
 	t.Helper()
@@ -370,11 +423,7 @@ func (tree sshdFixTree) stateFile(name string) string {
 
 func managedDropin(t *testing.T) string {
 	t.Helper()
-	script := sshdSettingsFixCommand()
-	start := strings.Index(script, "<<'EOF'")
-	start = strings.Index(script[start:], "\n") + start + 1
-	end := strings.Index(script, "\nEOF\n")
-	return script[start:end] + "\n"
+	return sshdManagedDropin()
 }
 
 const includedMain = "Include /ETC/sshd_config.d/*.conf\nPort 22\n"
@@ -491,6 +540,151 @@ func TestSSHDSettingsFixIdempotenceScript(t *testing.T) {
 		}
 		assertNoLeftovers(t, tree)
 	})
+}
+
+// TestSSHDSettingsFixFailSafeScript covers the paths that decide whether a
+// broken repair can lock out new SSH logins or report success while the
+// checks still fail.
+func TestSSHDSettingsFixFailSafeScript(t *testing.T) {
+	dropinPath := func(tree sshdFixTree) string { return filepath.Join(tree.sshDir, "sshd_config.d", "99-serverpro.conf") }
+	t.Run("writes-dropin-before-main", func(t *testing.T) {
+		tree := newSSHDFixTree(t, "Port 22\n", "", true)
+		if out, err := tree.run(t); err != nil {
+			t.Fatalf("fix failed: %v\n%s", err, out)
+		}
+		log := tree.stateFile("mv.log")
+		dropin := strings.Index(log, " "+dropinPath(tree)+"\n")
+		main := strings.Index(log, " "+filepath.Join(tree.sshDir, "sshd_config")+"\n")
+		if dropin < 0 || main < 0 || dropin > main {
+			t.Fatalf("the drop-in must land before the main config includes it:\n%s", log)
+		}
+	})
+	t.Run("restores-existing-dropin", func(t *testing.T) {
+		tree := newSSHDFixTree(t, "Port 22\n", "PermitRootLogin yes\n", true)
+		out, err := tree.run(t, "FAIL_LIVE_VALIDATION=1")
+		if exitCode(err) != 1 || !strings.Contains(out, "live config failed sshd -t after the write; restored the previous files") {
+			t.Fatalf("live validation failure = %v %q", err, out)
+		}
+		if tree.read(t, "sshd_config") != "Port 22\n" || tree.read(t, "sshd_config.d/99-serverpro.conf") != "PermitRootLogin yes\n" {
+			t.Fatalf("previous files not restored: main=%q dropin=%q", tree.read(t, "sshd_config"), tree.read(t, "sshd_config.d/99-serverpro.conf"))
+		}
+		assertNoLeftovers(t, tree)
+	})
+	t.Run("write-failure-restores", func(t *testing.T) {
+		tree := newSSHDFixTree(t, "Port 22\n", "PermitRootLogin yes\n", true)
+		out, err := tree.run(t, "FAIL_MV_MATCH=*sshd_config"+sshdStageSuffix)
+		if exitCode(err) != 1 || !strings.Contains(out, "cannot write the main config; restored the previous files") {
+			t.Fatalf("main write failure = %v %q", err, out)
+		}
+		if tree.read(t, "sshd_config") != "Port 22\n" || tree.read(t, "sshd_config.d/99-serverpro.conf") != "PermitRootLogin yes\n" {
+			t.Fatal("a failed write left a changed config")
+		}
+		if tree.stateFile("reloads") != "" {
+			t.Fatal("a failed write reloaded ssh")
+		}
+		assertNoLeftovers(t, tree)
+	})
+	t.Run("restore-failure-is-distinct", func(t *testing.T) {
+		tree := newSSHDFixTree(t, "Port 22\n", "", true)
+		out, err := tree.run(t, "FAIL_LIVE_VALIDATION=1", "FAIL_MV_MATCH=*sshd_config"+sshdRestoreSuffix)
+		if exitCode(err) != sshdRestoreFailedExit || !strings.Contains(out, "restoring the previous files FAILED") || strings.Contains(out, "; restored the previous files") {
+			t.Fatalf("restore failure = %v %q, want exit %d and no restored claim", err, out, sshdRestoreFailedExit)
+		}
+		assertNoLeftovers(t, tree)
+	})
+	t.Run("restored-files-still-invalid-is-distinct", func(t *testing.T) {
+		tree := newSSHDFixTree(t, "Port 22\n", "", true)
+		out, err := tree.run(t, "FAIL_LIVE_VALIDATION=always")
+		if exitCode(err) != sshdRestoreFailedExit || !strings.Contains(out, "restored the previous files, but they fail sshd -t too") {
+			t.Fatalf("still-invalid restore = %v %q, want exit %d", err, out, sshdRestoreFailedExit)
+		}
+		if tree.read(t, "sshd_config") != "Port 22\n" {
+			t.Fatal("previous main config not restored")
+		}
+	})
+	t.Run("signal-cleans-up-before-any-write", func(t *testing.T) {
+		tree := newSSHDFixTree(t, "Port 22\n", "", true)
+		out, err := tree.run(t, "SIGNAL_ON_CANDIDATE=TERM")
+		if err == nil {
+			t.Fatalf("killed repair reported success: %q", out)
+		}
+		if tree.read(t, "sshd_config") != "Port 22\n" || tree.read(t, "sshd_config.d/99-serverpro.conf") != "<absent>" {
+			t.Fatal("killed repair changed the live config")
+		}
+		assertNoLeftovers(t, tree)
+	})
+	t.Run("match-scoped-include-gains-top-level-include", func(t *testing.T) {
+		tree := newSSHDFixTree(t, "", managedDropin(t), true)
+		scoped := "Port 22\nMatch User nobody\n  Include " + tree.sshDir + "/sshd_config.d/*.conf\n"
+		writeFile(t, filepath.Join(tree.sshDir, "sshd_config"), scoped)
+		if out, err := tree.run(t); err != nil {
+			t.Fatalf("fix failed: %v\n%s", err, out)
+		}
+		if got, want := tree.read(t, "sshd_config"), "Include "+tree.sshDir+"/sshd_config.d/*.conf\n"+scoped; got != want {
+			t.Fatalf("main config = %q, want %q", got, want)
+		}
+	})
+	t.Run("relative-include-is-kept-and-validated-from-copy", func(t *testing.T) {
+		tree := newSSHDFixTree(t, "Include sshd_config.d/*.conf\nPort 22\n", "PermitRootLogin yes\n", true)
+		if out, err := tree.run(t); err != nil {
+			t.Fatalf("fix failed: %v\n%s", err, out)
+		}
+		if got := tree.read(t, "sshd_config"); got != "Include sshd_config.d/*.conf\nPort 22\n" {
+			t.Fatalf("relative Include gained a duplicate: %q", got)
+		}
+		if !regexp.MustCompile(`read \S+/tmp\.\w+/d/99-serverpro\.conf`).MatchString(tree.stateFile("sshd.log")) {
+			t.Fatalf("candidate not validated against its drop-in copy:\n%s", tree.stateFile("sshd.log"))
+		}
+	})
+	t.Run("overridden-dropin-fails-loudly", func(t *testing.T) {
+		tree := newSSHDFixTree(t, "", "", true)
+		writeFile(t, filepath.Join(tree.sshDir, "sshd_config"), tree.includeMain())
+		writeFile(t, filepath.Join(tree.sshDir, "sshd_config.d", "50-cloud-init.conf"), "PasswordAuthentication yes\n")
+		out, err := tree.run(t)
+		if exitCode(err) != 1 || !strings.Contains(out, "sshd -T lacks [passwordauthentication no]") {
+			t.Fatalf("overridden drop-in = %v %q, want a failure naming the setting", err, out)
+		}
+		if tree.read(t, "sshd_config.d/99-serverpro.conf") != managedDropin(t) {
+			t.Fatal("the valid drop-in should stay written")
+		}
+		assertNoLeftovers(t, tree)
+	})
+}
+
+func exitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode()
+	}
+	return -1
+}
+
+// TestRemoteChecksDoNotRerunUnsettledSSHDRepair is the non-convergence case:
+// the shared repair ran but the host still fails, so every later sshd check
+// must fail without running the repair again.
+func TestRemoteChecksDoNotRerunUnsettledSSHDRepair(t *testing.T) {
+	cfg := config.Example("prod")
+	root := sshdSettingValueCommand(sshdKeywordPermitRootLogin, sshdValueDisabled)
+	password := sshdSettingValueCommand(sshdKeywordPasswordAuthentication, sshdValueDisabled)
+	stuck := remoteCall{out: "passwordauthentication yes", err: errBaselineFail}
+	runner := &staleBatchRemote{
+		baselineFail: map[string]string{root: "permitrootlogin yes", password: "passwordauthentication yes"},
+		live: map[string][]remoteCall{
+			root:     {{out: "permitrootlogin yes", err: errBaselineFail}},
+			password: {stuck, stuck, stuck},
+		},
+	}
+	results := remoteChecksWithOptions(context.Background(), cfg, runner, "prod-01", Options{Fix: true})
+	if got := countCommand(runner.runScripts, sshdSettingsFixCommand()); got != 1 {
+		t.Fatalf("sshd repair ran %d times, want once", got)
+	}
+	res := resultByName(t, results, "sshd password auth")
+	if res.Status != Fail || !strings.Contains(res.Evidence, repairAlreadyRanEvidence) || res.Remediation != repairAlreadyRanRemediation {
+		t.Fatalf("unsettled check = %+v, want a failure pointing at the first repair", res)
+	}
 }
 
 func assertNoLeftovers(t *testing.T, tree sshdFixTree) {

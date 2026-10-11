@@ -173,17 +173,28 @@ access paths for app-owned deployment flows.
     main config and serverpro drop-in in a private temp directory, validates
     them with `sshd -t -f` against a copy of the drop-in directory, and only
     then replaces the live files (same-directory temp file and `mv`). It
+    writes the drop-in before the main config, so until the main config
+    includes the drop-in directory the new drop-in is inert and an
+    interrupted repair leaves either the old or the validated config. It
     re-runs `sshd -t` on the live config and restores the previous files if
-    that fails, so an invalid config never stays on disk. It writes only when
-    the managed config differs and then uses `try-reload-or-restart`, which
+    that fails, then validates the restored files too. A failed or invalid
+    restore exits with a distinct status and names the files to fix. Signal
+    traps run the cleanup that dash otherwise skips on a dropped session. The
+    drop-in directory counts as included only before the first `Match`
+    block, in absolute or `/etc/ssh`-relative form. It writes only when the
+    managed config differs and then uses `try-reload-or-restart`, which
     reloads a running `ssh.service` and leaves an inactive, socket-activated
     one alone; a running daemon is also reloaded when nothing changed, in case
-    an earlier reload failed. Checks the repair can change (the later sshd
-    settings, `sshd units`, and `listening ports`) declare it in
+    an earlier reload failed. Last, it confirms every managed value through
+    `sshd -T` and fails, naming the values, when a lower-numbered drop-in or
+    a `Match`-scoped `Include` hides them. Checks the repair can change (the
+    later sshd settings, `sshd units`, and `listening ports`) declare it in
     `refreshAfterLive`: once it ran in a doctor run they skip their batch
-    baseline and read the host live, so one repair settles them and a unit
-    the repair broke is not hidden by a stale baseline. Remote checks already
-    run in a root shell and never call sudo again.
+    baseline and read the host live, so a unit the repair broke is not hidden
+    by a stale baseline. No repair script runs twice in one doctor run: a
+    check that still fails after its shared repair already ran fails and
+    points at the first failure, whose output explains why. Remote checks
+    already run in a root shell and never call sudo again.
     A separate `sshd units` check fails while `ssh.socket` or `ssh.service`
     is failed, or enabled but not running; its fix resets them and starts
     the enabled unit unless it already runs.

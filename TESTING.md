@@ -188,6 +188,40 @@ Ubuntu 24.04 chroot with the real `openssh-server` (OpenSSH 9.6p1) and a fake
 - The cloudflared candidate-origin parser accepted and rejected correctly
   against real noble `apt-cache policy` output with an origin pin in place.
 
+### sshd repair fail-safe dogfood
+
+On 2026-10-11 the rendered sshd fix, sshd read, and ssh unit scripts ran in a
+disposable privileged Ubuntu 24.04 container booted with systemd, with
+socket-activated `ssh.socket` and OpenSSH 9.6p1. Each repair ran over a real
+SSH login through `sudo -n sh`, as doctor's transport does. After every case a
+fresh key login was tried and succeeded, except where noted. The container
+and keys were deleted afterwards.
+
+- Stock config: the fix exited 0. `sshd -T` showed every hardened value. The
+  server stopped offering password auth, a root key login was refused, and a
+  rerun rewrote nothing.
+- Socket activation: `ssh.socket` stayed the listener and `ssh.service`
+  stayed disabled. With `ssh.service` running instead, the fix reloaded it
+  and kept the same main PID, so it did not restart.
+- With the only `Include` inside a trailing `Match` block, the fix added a
+  top-level `Include` and the hardened values applied globally.
+- A lower-numbered drop-in that set `PasswordAuthentication yes` made the fix
+  exit 1. The error named the missing `sshd -T` value and the overriding
+  drop-in.
+- A live `sshd -t` failure after the write restored both files, removed the
+  new drop-in, and exited 1. When the restore `mv` also failed, the fix exited
+  3 with the "restoring the previous files FAILED" message. No staging or
+  restore temp files remained in either case.
+- When the SSH client was killed during candidate validation with a TTY, the
+  hangup trap removed the temp directory and left the live config unchanged.
+  Without a TTY the repair received no signal and completed with a valid
+  config. A script fed through `sh -s` on a TTY can leak its temp directory
+  when killed, but doctor never uses that form because it runs a script file.
+- A `failed` `ssh.socket` failed the unit read check. The unit fix reset it
+  and started it, the read check passed, and SSH logins worked again.
+  `start-limit-hit` could not be reproduced for a socket unit in the
+  container.
+
 ### Cloudflared check and repair dogfood
 
 The 2026-10-11 cloudflared repair ran the rendered check and repair scripts
@@ -275,7 +309,7 @@ captured output showed the old bare `remote batch command N failed with status
 | `internal/compute` | Full registry-facing provider facade, catalogs, diagnostics, registry. Consumer packages own narrower discovery/create contracts. | Registry validation/sorting, diagnostics semantics and wrapped-cause identity, managed-resource typed/legacy canonicalization and conflict rejection, provider account tokens excluded from all request JSON, full adapters composing through narrow consumer fakes. |
 | `internal/config` | Defaults, paths, names, validation, YAML IO. | Strict supported-key decoding, byte-snapshot parsing, conditional locked publication, locked read-modify-write preservation, source appearance/removal/edit rejection, retired inert-key rejection, namespace/server validity, explicit create catalog requirements, typed Git access values, deploy repository scope rules and round trips, omitted lockdown defaults to enabled while explicit false is preserved, Tailscale mandatory defaults, ingress choices, private paths, schema stamping with legacy `store_console_password: false` migrated to stored, stamped opt-outs honored, unknown schema versions rejected. |
 | `internal/credentials` | Server-scoped credential IO and validation. | 0700/0600 permissions, symlink rejection, shared local-artifact cleanup coordination, scoped incomplete import sets, missing-secret matrix per ingress, no global token storage, stored operator auth (sudo password, GitHub PAT, Tailscale auth key) round trips and redaction inclusion, auth-key acceptance, locked read-modify-write merges that keep a credential another run just rotated, refused mutations leave the file untouched, credential writer serialization. |
-| `internal/doctor` | Local/provider/remote validation report. | Local tool checks, sshd checks without nested sudo (a guard fails if sudo returns to any sshd command, and a read runs against a sudo that fails as root), the sshd fix executed against a scratch `/etc/ssh` (no change with the service inactive or active, a change, a `mktemp` failure, an invalid candidate that leaves the live files untouched, and a live `sshd -t` failure that restores them), the `sshd units` read and fix executed against a fake `systemctl` (failed, enabled but inactive, socket active with the service inactive, `start-limit-hit`, failed socket), live re-reads after the sshd repair including the stale-baseline unit case and a single repair for several failing settings, the cloudflared repair wiring and its 10-minute deadline, one-call compute/mesh/explicit Cloudflare tunnel snapshot fakes, injected public-SSH probes, exact Git identity/signing reads and fixes with first-failure preservation, first-in-plan supported-platform authority, no sequential or batched fixes after platform failure, explicit batched read plans with conditional reads, strict baseline replay, no fixes after per-command output overflow, planned fix/recheck delegation including package-refresh authority, sequential fallback, captured package/tool failure output, terminal repair causes after noisy progress, credential redaction before 4 KiB head/tail truncation, UTF-8 boundaries, remote-only sudo retry, Tailscale node checked by recorded device ID with `tailscale_device_identity` coding for identity conflicts that blocks every remote command and sudo retry, bootstrap tools, Cloudflare connector, `gh token parity` verdicts sourced from GitHub (accepted, rejected, unanswered, absent) with no credential write on an unanswered or silent probe, deploy recheck outcomes, PAT-on-stdin probe header, strict curl stdin-config consumption, real-curl loopback Authorization delivery without token arguments. |
+| `internal/doctor` | Local/provider/remote validation report. | Local tool checks, sshd checks without nested sudo (a guard fails if sudo returns to any sshd command, and a read runs against a sudo that fails as root), the sshd fix executed against a scratch `/etc/ssh` (no change with the service inactive or active, a change, a `mktemp` failure, an invalid candidate that leaves the live files untouched, a live `sshd -t` failure that restores a new or an existing drop-in, a failed write, a failed or still-invalid restore with its distinct exit status, a signal before any write, the drop-in written before the main config, a `Match`-scoped and a relative `Include`, and a lower-numbered drop-in that hides a value), no second run of an unsettled shared repair, the `sshd units` read and fix executed against a fake `systemctl` (failed, enabled but inactive, socket active with the service inactive, `start-limit-hit`, failed socket), live re-reads after the sshd repair including the stale-baseline unit case and a single repair for several failing settings, the cloudflared repair wiring and its 10-minute deadline, one-call compute/mesh/explicit Cloudflare tunnel snapshot fakes, injected public-SSH probes, exact Git identity/signing reads and fixes with first-failure preservation, first-in-plan supported-platform authority, no sequential or batched fixes after platform failure, explicit batched read plans with conditional reads, strict baseline replay, no fixes after per-command output overflow, planned fix/recheck delegation including package-refresh authority, sequential fallback, captured package/tool failure output, terminal repair causes after noisy progress, credential redaction before 4 KiB head/tail truncation, UTF-8 boundaries, remote-only sudo retry, Tailscale node checked by recorded device ID with `tailscale_device_identity` coding for identity conflicts that blocks every remote command and sudo retry, bootstrap tools, Cloudflare connector, `gh token parity` verdicts sourced from GitHub (accepted, rejected, unanswered, absent) with no credential write on an unanswered or silent probe, deploy recheck outcomes, PAT-on-stdin probe header, strict curl stdin-config consumption, real-curl loopback Authorization delivery without token arguments. |
 | `internal/filedescriptor` | File descriptor safety helper. | Descriptor limits and error cases. |
 | `internal/hostplatform` | Controller, managed-host, architecture, and direct apt-package support baselines. | Exact support matrix, every direct package floor, package-group composition, package-name/apt-token/manifest rendering, and immutable returned slices. |
 | `internal/importsync` | Discover/import recovery from provider labels through a read-only consumer contract. | Managed/unmanaged filtering, provider-recovered typed access-policy persistence, valid provider-only mesh intent, legacy disabled-mesh repair, omitted-token credential merge, duplicate labels, dry-run, preserving force refresh, malformed-existing-artifact and concurrent-config-drift rejection, same-tunnel provenance retention without ownership transfer, context-cancellable canonical workflow locking and matching-tailnet serialization, stable tailnet persistence, filesystem errors fail closed, injected config/credential/state/registry failures, marker-based retry, state-without-registry discovery, Tailscale/Cloudflare enrichment matchers (`enrich_test.go`). |

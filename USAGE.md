@@ -521,9 +521,13 @@ The sshd hardening checks share one `--fix` action. It validates the new sshd
 config with `sshd -t` before writing it, restores the previous files if the
 live config then fails validation, changes the config only when the serverpro
 sshd config differs, and never starts an inactive, socket-activated
-`ssh.service`. After it runs, the remaining sshd checks, `sshd units`, and
+`ssh.service`. It fails when `sshd -T` still does not show a hardened value,
+for example because a lower-numbered file in `/etc/ssh/sshd_config.d` sets it
+first. If its output says `restoring the previous files FAILED` or `they fail
+sshd -t too`, keep the current session open and fix the named files until
+`sshd -t` passes. After it runs, the remaining sshd checks, `sshd units`, and
 `listening ports` read the host again instead of reusing the start-of-run
-baseline. The `sshd units` check reports an `ssh.socket` or `ssh.service` that
+baseline, and a check it did not settle fails without running it again. The `sshd units` check reports an `ssh.socket` or `ssh.service` that
 is failed, or enabled but not running; `--fix` clears the failure and starts
 the unit the host enables.
 Doctor redacts known credentials before it limits failure evidence to 4 KiB.
