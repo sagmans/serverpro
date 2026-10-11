@@ -185,8 +185,6 @@ Ubuntu 24.04 chroot with the real `openssh-server` (OpenSSH 9.6p1) and a fake
   main config and drop-in stayed unchanged.
 - With the `Include` line removed, the fix restored it at the top and kept
   both files `0644 root`. No temp files remained.
-- The cloudflared candidate-origin parser accepted and rejected correctly
-  against real noble `apt-cache policy` output with an origin pin in place.
 
 ### sshd repair fail-safe dogfood
 
@@ -288,6 +286,32 @@ apt-daily.
   174 seconds. That run outlasts the 2-minute transport default, which is why
   provisioning now runs the install under the shared connector deadline.
 
+### Cloudflared candidate-origin gate dogfood
+
+On 2026-10-11 the rendered repair script's candidate gate ran in a disposable
+`ubuntu:24.04` arm64 container with apt 2.8.3. The rendered install helpers
+fetched the Cloudflare key (fingerprint verified), wrote the noble source and
+the origin pin, and `apt-get update` read `pkg.cloudflare.com`. The candidate
+was `2026.10.0`, listed as `2026.10.0 990` with the Cloudflare source at 500.
+A local `file:` repository (built with `apt-ftparchive`) stood in for another
+configured source.
+
+- Cloudflare only: the gate accepted `2026.10.0`.
+- The local repository also offered `2026.10.0`: the gate rejected it.
+- The local repository offered only `2099.1.0`, with the pin: apt kept the
+  Cloudflare `2026.10.0` as candidate and the gate accepted it.
+- The same without the pin: apt chose `2099.1.0` and the gate rejected it.
+- Cloudflare source removed, pin kept: apt chose `2099.1.0` and the gate
+  rejected it, so the pin alone excludes no source.
+- After the repair installed `2026.10.0`, the table showed ` *** 2026.10.0
+  990`, the Cloudflare source, and `100 /var/lib/dpkg/status`. The origin
+  check accepted it. With the local repository offering the same version
+  again, it rejected it.
+- With a newer `2099.1.0` from the local repository installed, apt kept it as
+  candidate despite the pin and the origin check rejected it. The gate still
+  passed, because a connector at or above the floor needs no install. The gate
+  does not judge where an installed connector came from.
+
 ## Command surface matrix
 
 | Command | Capability | Unit/integration proof | Smoke/e2e proof | Dogfood proof |
@@ -369,7 +393,7 @@ apt-daily.
 | `internal/tailscaletools` | Shared Tailscale release manifest, remote version check, and live updater. | Exact version/digest pins, Ubuntu 24.04/codename/architecture gate before apt mutation, prerequisite candidate floors before install plus post-install floors, removed-`config-files` state rejection, client plus daemon checks, the bash `apt_update` lists-lock retry, budget exhaustion, and immediate non-lock failure, shared wait values in the script env, syntax, production `/bin/sh`/POSIX-mode delivery with bounded Bash re-exec, checksum extraction markers, TLS hybrid-default retention, and delayed restart that preserves the updating SSH command. |
 | `internal/state` | Provider-neutral state/registry IO, workflow lock ownership, and shared local-artifact coordination. | Schema normalization, Cloudflare tunnel provenance ownership matrix, canonical/legacy registry union and conflict rejection, typed-only managed-resource writes with legacy-key migration/conflict rejection, per-server locked read-modify-write concurrency, cross-process registry updates, context cancellation/deadline behavior, partial-acquisition release, canonical namespace-before-server ordering, shared/exclusive namespace and tailnet locks, token-relative global policy exclusion, propagated save errors, missing-vs-stat-error checks, durable private writes. |
 | `internal/testhttp` | Concurrency-safe HTTP fixture failure recorder. | Concurrent recording and outer-test-goroutine assertions; handlers record and return instead of calling fatal test methods. |
-| `internal/tunnel` | Cloudflared install, diagnostic, and doctor repair scripts. | Ubuntu 24.04/codename/architecture gate before mutation, explicit noble apt source, candidate floor before install plus post-install minimum and service check, removed-`config-files` state rejection in install and diagnosis, the `pkg.cloudflare.com` origin pin written before apt in install and repair, candidate-origin rejection when another repository offers the version, exact-version install, package-list refresh through the shared lists-lock `apt_update` helper (executed in the upgrade script with one lock failure, then success), the shared `DPkg::Lock::Timeout` budget on every install, executable exact-primary-key acceptance, mismatch/additional-primary rejection before trusted install, and shell syntax. Container dogfood covers check reasons and repair trust gates (see Cloudflared check and repair dogfood). |
+| `internal/tunnel` | Cloudflared install, diagnostic, and doctor repair scripts. | Ubuntu 24.04/codename/architecture gate before mutation, explicit noble apt source, candidate floor before install plus post-install minimum and service check, removed-`config-files` state rejection in install and diagnosis, the `pkg.cloudflare.com` origin pin written before apt in install and repair, candidate-origin rejection when another repository offers the version (real-compare floor including one step below it, the `***` installed marker, the dpkg status line before or after another source, an unrecognised source line, and replayed apt 2.8.3 output; see Cloudflared candidate-origin gate dogfood), exact-version install, package-list refresh through the shared lists-lock `apt_update` helper (executed in the upgrade script with one lock failure, then success), the shared `DPkg::Lock::Timeout` budget on every install, executable exact-primary-key acceptance, mismatch/additional-primary rejection before trusted install, and shell syntax. Container dogfood covers check reasons and repair trust gates (see Cloudflared check and repair dogfood). |
 
 ## Feature/use-case matrix
 

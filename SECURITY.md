@@ -281,9 +281,10 @@ Managed host tools install through integrity-checked sources, not
   uses the explicit noble repository and requires cloudflared `2026.9.3` or
   newer; ingress-enabled doctor runs verify both that floor and service state.
   Install and repair pin the `cloudflared` package to origin
-  `pkg.cloudflare.com` (apt preferences, priority 990) and refuse a candidate
-  version that any other configured repository also offers, so another source
-  cannot supply the connector even with a higher version.
+  `pkg.cloudflare.com` (apt preferences, priority 990) so apt prefers it. The
+  pin only ranks sources. The control is the candidate gate: every repository
+  offering the candidate version must be the Cloudflare origin, so a candidate
+  offered only or also by another source is refused, even at a higher version.
 - The doctor sshd repair validates a candidate config with `sshd -t -f`
   before it touches the live files, writes the drop-in before the `Include`
   that activates it, and restores the previous files if the live config then
