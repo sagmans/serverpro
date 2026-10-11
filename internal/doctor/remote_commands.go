@@ -37,6 +37,13 @@ const (
 	sshdKeywordAllowTCPForwarding           = "AllowTcpForwarding"
 	sshdKeywordPermitTunnel                 = "PermitTunnel"
 	sshdKeywordPermitOpen                   = "PermitOpen"
+
+	// sshd units check: a failed ssh unit is invisible to the sshd -T
+	// setting checks, and earlier repairs that restarted ssh once per failing
+	// setting left both units failed on start-limit-hit.
+	sshdUnitsCheckName = "sshd units"
+	sshSocketUnit      = "ssh.socket"
+	sshServiceUnit     = "ssh.service"
 )
 
 var sshdHardeningExpectations = map[string]string{
@@ -51,14 +58,18 @@ var sshdHardeningExpectations = map[string]string{
 	sshdKeywordPermitOpen:                   sshdValueNone,
 }
 
+// sshdSettingValueCommand and sshdChallengeResponseCommand run inside the
+// remote runner's root shell, so they call sshd and grep directly: a nested
+// root-to-root sudo re-enters PAM account checks and fails on hosts whose
+// root password is expired (some provider images), masking the real setting.
 func sshdSettingValueCommand(keyword, value string) string {
 	expected := strings.ToLower(keyword) + " " + value
 	configured := keyword + " " + value
-	return "out=\"$(sudo sshd -T 2>&1)\"; " +
+	return "out=\"$(sshd -T 2>&1)\"; " +
 		"if printf '%s\n' \"$out\" | grep -Fx " + shell.Quote(expected) + "; then exit 0; fi; " +
 		"case \"$out\" in *\"Missing privilege separation directory: /run/sshd\"*) " +
-		"sudo grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config[.]d/[*][.]conf([[:space:]]|$)' /etc/ssh/sshd_config && " +
-		"sudo grep -Fx " + shell.Quote(configured) + " /etc/ssh/sshd_config.d/99-serverpro.conf && " +
+		"grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config[.]d/[*][.]conf([[:space:]]|$)' /etc/ssh/sshd_config && " +
+		"grep -Fx " + shell.Quote(configured) + " /etc/ssh/sshd_config.d/99-serverpro.conf && " +
 		"printf '%s\n' " + shell.Quote("sshd inactive; /run/sshd absent; serverpro config contains "+configured) + " ;; " +
 		"*) printf '%s\n' \"$out\"; exit 1 ;; esac"
 }
@@ -66,13 +77,42 @@ func sshdSettingValueCommand(keyword, value string) string {
 func sshdChallengeResponseCommand() string {
 	configured := sshdKeywordChallengeResponseAuth + " " + sshdHardeningExpectations[sshdKeywordChallengeResponseAuth]
 	effectiveExpected := strings.ToLower(sshdKeywordKbdInteractiveAuthentication) + " " + sshdHardeningExpectations[sshdKeywordKbdInteractiveAuthentication]
-	return "out=\"$(sudo sshd -T 2>&1)\"; " +
+	return "out=\"$(sshd -T 2>&1)\"; " +
 		"if printf '%s\n' \"$out\" | grep -Fx " + shell.Quote(effectiveExpected) + "; then exit 0; fi; " +
 		"case \"$out\" in *\"Missing privilege separation directory: /run/sshd\"*) " +
-		"sudo grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config[.]d/[*][.]conf([[:space:]]|$)' /etc/ssh/sshd_config && " +
-		"sudo grep -Fx " + shell.Quote(configured) + " /etc/ssh/sshd_config.d/99-serverpro.conf && " +
+		"grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config[.]d/[*][.]conf([[:space:]]|$)' /etc/ssh/sshd_config && " +
+		"grep -Fx " + shell.Quote(configured) + " /etc/ssh/sshd_config.d/99-serverpro.conf && " +
 		"printf '%s\n' " + shell.Quote("sshd inactive; /run/sshd absent; serverpro config contains "+configured) + " ;; " +
 		"*) printf '%s\n' \"$out\"; exit 1 ;; esac"
+}
+
+// sshdUnitsReadCommand fails while an ssh unit is failed, or enabled but not
+// running, and names each unit so the evidence points at the recovery target.
+// ssh.service stays inactive by design while ssh.socket listens, so that case
+// passes.
+func sshdUnitsReadCommand() string {
+	return "bad=''\n" +
+		"for unit in " + sshSocketUnit + " " + sshServiceUnit + "; do\n" +
+		"  if systemctl is-failed --quiet \"$unit\"; then bad=\"$bad $unit:failed\"; continue; fi\n" +
+		"  if [ \"$unit\" = " + sshServiceUnit + " ] && systemctl is-active --quiet " + sshSocketUnit + "; then continue; fi\n" +
+		"  if systemctl is-enabled --quiet \"$unit\" && ! systemctl is-active --quiet \"$unit\"; then bad=\"$bad $unit:inactive\"; fi\n" +
+		"done\n" +
+		"if [ -n \"$bad\" ]; then printf 'unhealthy ssh units:%s\\n' \"$bad\"; exit 1; fi\n" +
+		"printf '%s\\n' 'ssh units healthy'"
+}
+
+// sshdUnitsFixCommand clears the failed state and starts whichever unit the
+// host enables, preferring the socket so a socket-activated host does not
+// also gain a standalone daemon. It never enables a disabled unit, so it only
+// returns the host to its own configured listener; the ufw checks earlier in
+// the same plan are what keep public port 22 denied.
+func sshdUnitsFixCommand() string {
+	return "for unit in " + sshSocketUnit + " " + sshServiceUnit + "; do\n" +
+		"  if systemctl is-failed --quiet \"$unit\"; then systemctl reset-failed \"$unit\"; fi\n" +
+		"done\n" +
+		"if systemctl is-enabled --quiet " + sshSocketUnit + "; then systemctl start " + sshSocketUnit + "\n" +
+		"elif systemctl is-enabled --quiet " + sshServiceUnit + "; then systemctl start " + sshServiceUnit + "\n" +
+		"fi"
 }
 
 const gitSigningPublicKeyRelativePath = ".ssh/id_ed25519_sign.pub"
@@ -225,16 +265,28 @@ case "$hash" in
 esac`
 }
 
+// sshdSettingsFixCommand is shared by every sshd hardening check, so one
+// doctor --fix run can invoke it once per failing setting. It therefore only
+// rewrites and reloads when the managed config actually differs: back-to-back
+// restarts trip systemd's start rate limit and leave ssh.service failed.
+// try-reload-or-restart applies a change to a running daemon without a new
+// start and leaves a socket-activated, inactive ssh.service inactive; the next
+// socket-spawned sshd reads the new config. A running daemon is reloaded even
+// when the files already match, because an earlier reload may have failed
+// after the write and sshd -T only proves the on-disk config. Every temp-file
+// step exits on failure, since an empty path would truncate the target.
 func sshdSettingsFixCommand() string {
 	return `mkdir -p /etc/ssh/sshd_config.d /run/sshd
+changed=0
 if ! grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config[.]d/[*][.]conf([[:space:]]|$)' /etc/ssh/sshd_config; then
-  tmp="$(mktemp)"
-  printf 'Include /etc/ssh/sshd_config.d/*.conf\n' > "$tmp"
-  cat /etc/ssh/sshd_config >> "$tmp"
-  cat "$tmp" > /etc/ssh/sshd_config
+  tmp="$(mktemp)" || exit 1
+  { printf 'Include /etc/ssh/sshd_config.d/*.conf\n'; cat /etc/ssh/sshd_config; } > "$tmp" || { rm -f "$tmp"; exit 1; }
+  cat "$tmp" > /etc/ssh/sshd_config || { rm -f "$tmp"; exit 1; }
   rm -f "$tmp"
+  changed=1
 fi
-cat > /etc/ssh/sshd_config.d/99-serverpro.conf <<'EOF'
+desired="$(mktemp)" || exit 1
+cat > "$desired" <<'EOF' || { rm -f "$desired"; exit 1; }
 PermitRootLogin no
 PasswordAuthentication no
 KbdInteractiveAuthentication no
@@ -245,5 +297,11 @@ AllowTcpForwarding no
 PermitTunnel no
 PermitOpen none
 EOF
-sshd -t && systemctl restart ssh`
+if ! cmp -s "$desired" /etc/ssh/sshd_config.d/99-serverpro.conf; then
+  cat "$desired" > /etc/ssh/sshd_config.d/99-serverpro.conf || { rm -f "$desired"; exit 1; }
+  changed=1
+fi
+rm -f "$desired"
+if [ "$changed" -eq 0 ] && ! systemctl is-active --quiet ` + sshServiceUnit + `; then sshd -t; exit; fi
+sshd -t && systemctl try-reload-or-restart ssh`
 }

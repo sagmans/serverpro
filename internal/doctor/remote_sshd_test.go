@@ -47,10 +47,10 @@ func TestRemoteChecksUseSSHDConfigFallback(t *testing.T) {
 
 func TestSSHDSettingsFixRestartsOnlyAfterValidConfig(t *testing.T) {
 	command := sshdSettingsFixCommand()
-	if !strings.Contains(command, "sshd -t && systemctl restart ssh") {
+	if !strings.Contains(command, "sshd -t && systemctl try-reload-or-restart ssh") {
 		t.Fatalf("sshd fix must validate config before restart:\n%s", command)
 	}
-	if strings.Contains(command, "sshd -t\nsystemctl restart ssh") {
+	if strings.Contains(command, "sshd -t\nsystemctl try-reload-or-restart ssh") {
 		t.Fatalf("sshd fix must not restart after failed validation:\n%s", command)
 	}
 }
@@ -65,7 +65,7 @@ func TestRemoteChecksWithFixAppliesFailedFixableSSHDSetting(t *testing.T) {
 	if !hasResult(Report{Results: results}, "sshd agent forwarding", Pass, "fixed") {
 		t.Fatalf("missing fixed agent-forwarding result: %+v", results)
 	}
-	for _, want := range []string{"AllowAgentForwarding no", "AllowTcpForwarding no", "PermitTunnel no", "PermitOpen none", "systemctl restart ssh"} {
+	for _, want := range []string{"AllowAgentForwarding no", "AllowTcpForwarding no", "PermitTunnel no", "PermitOpen none", "systemctl try-reload-or-restart ssh"} {
 		if !hasCommand(r.commands, want) {
 			t.Fatalf("missing sshd fix command %q in %#v", want, r.commands)
 		}

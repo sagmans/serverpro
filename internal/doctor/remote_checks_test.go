@@ -153,7 +153,7 @@ func TestRemoteChecksBatchDelegatesFixAndRecheck(t *testing.T) {
 	if runner.batchCalls != 1 || runner.runCalls != 4 {
 		t.Fatalf("remote calls batch=%d sequential=%d scripts=%+v", runner.batchCalls, runner.runCalls, runner.runScripts)
 	}
-	if !hasCommand(runner.runScripts, "systemctl restart ssh") ||
+	if !hasCommand(runner.runScripts, "systemctl try-reload-or-restart ssh") ||
 		!hasCommand(runner.runScripts, check) ||
 		!hasCommand(runner.runScripts, bootstraptools.ManagedPackageRefreshCommand()) {
 		t.Fatalf("fix, package refresh, and rechecks not delegated: %+v", runner.runScripts)

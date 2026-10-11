@@ -298,7 +298,8 @@ Managed host tools install through integrity-checked sources, not
   upgrading the declared package set. Final user-home installation runs as the
   target user through `runuser`; root does not write into user home paths. The
   drop does not use sudo, because sudo checks root's own account and fails on
-  hosts that ship root with an expired password.
+  hosts that ship root with an expired password. For the same reason, remote
+  doctor checks, which already run as root, never call sudo again.
 
 Treat fingerprints, versions, and checksums as reviewed trust roots. Rotate them
 only after checking the new value through the official source recorded in
