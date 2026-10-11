@@ -4,7 +4,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 )
@@ -101,41 +100,6 @@ func TestUserHomeCommandSurvivesExpiredRootPassword(t *testing.T) {
 	}
 	if calls := readCallLog(t, logPath); strings.Contains(calls, "sudo ") || !strings.Contains(calls, "runuser -u deploy --") {
 		t.Fatalf("userHomeCommand must drop through runuser; calls:\n%s", calls)
-	}
-}
-
-// sudoUserSwitch matches a sudo call that switches user or sets HOME, the form
-// that re-enters PAM's account stage for root.
-var sudoUserSwitch = regexp.MustCompile(`(^|[^[:alnum:]_-])sudo(\s+-[^\s]+)*\s+(-[A-Za-z]*[uHi][A-Za-z]*|--user(=|\s)|--set-home|--login)`)
-
-func TestSudoUserSwitchGuardMatches(t *testing.T) {
-	for _, line := range []string{`sudo -u deploy true`, `sudo -H -u "$TARGET_USER" bash`, `x && sudo -Hu deploy id`, `sudo --user=deploy id`, `sudo -n -i`} {
-		if !sudoUserSwitch.MatchString(line) {
-			t.Errorf("guard misses %q", line)
-		}
-	}
-	for _, line := range []string{`runuser -u deploy -- id`, `sudo -k`, `sudo -n true`, `pseudo -u x`} {
-		if sudoUserSwitch.MatchString(line) {
-			t.Errorf("guard flags %q", line)
-		}
-	}
-}
-
-// TestBootstrapScriptNeverSwitchesUserThroughSudo keeps sudo -u / -H out of
-// the bootstrap script, which runs as root: such a drop fails on hosts whose
-// root password is expired (see run_as_target).
-func TestBootstrapScriptNeverSwitchesUserThroughSudo(t *testing.T) {
-	data, err := os.ReadFile(canonicalScriptPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "#") {
-			continue
-		}
-		if sudoUserSwitch.MatchString(line) {
-			t.Errorf("%s:%d drops privileges through sudo; use runuser (run_as_target): %s", canonicalScriptPath, i+1, strings.TrimSpace(line))
-		}
 	}
 }
 

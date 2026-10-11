@@ -6,6 +6,7 @@ package tunnel
 
 import (
 	"fmt"
+	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -35,16 +36,27 @@ const (
 	cloudflareAPTComponent      = "main"
 	cloudflareKeyringPath       = "/usr/share/keyrings/cloudflare-main.gpg"
 	cloudflaredAPTSourcePath    = "/etc/apt/sources.list.d/cloudflared.list"
-	// cloudflaredAPTPreferencesPath pins the cloudflared package to the
-	// Cloudflare origin so no other configured repository can supply it.
+	// cloudflaredAPTPreferencesPath holds the origin pin rendered by
+	// cloudflaredAPTPreferences; install and repair both (re)write it.
 	cloudflaredAPTPreferencesPath = "/etc/apt/preferences.d/serverpro-cloudflared"
-	cloudflareAPTOrigin           = "pkg.cloudflare.com"
-	cloudflaredServiceName        = "cloudflared"
-	cloudflaredServiceUser        = "cloudflared"
-	cloudflaredConfigDir          = "/etc/cloudflared"
-	cloudflaredTokenPath          = cloudflaredConfigDir + "/token"
-	cloudflaredUnitPath           = "/etc/systemd/system/cloudflared.service"
-	cloudflaredBinaryPath         = "/usr/bin/cloudflared"
+	// cloudflaredAPTPinPriority ranks the Cloudflare origin above the default
+	// 500 of every other repository yet below 1000, so the pin never asks apt
+	// to downgrade an installed newer connector.
+	cloudflaredAPTPinPriority = "990"
+	// cloudflaredAPTPinStagingSuffix names the sibling file the pin is staged
+	// in, so the rename that publishes it is atomic and apt never reads a
+	// half-written preference.
+	cloudflaredAPTPinStagingSuffix = ".serverpro-new"
+	// dpkgStatusPath is the pseudo-repository apt-cache policy lists for the
+	// installed version. The origin gate skips it: it records what is already
+	// on disk, not a source apt can fetch the candidate from.
+	dpkgStatusPath         = "/var/lib/dpkg/status"
+	cloudflaredServiceName = "cloudflared"
+	cloudflaredServiceUser = "cloudflared"
+	cloudflaredConfigDir   = "/etc/cloudflared"
+	cloudflaredTokenPath   = cloudflaredConfigDir + "/token"
+	cloudflaredUnitPath    = "/etc/systemd/system/cloudflared.service"
+	cloudflaredBinaryPath  = "/usr/bin/cloudflared"
 )
 
 // cloudflaredAPTSource is the exact source line provisioning writes. The
@@ -54,12 +66,26 @@ func cloudflaredAPTSource() string {
 	return "deb [signed-by=" + cloudflareKeyringPath + "] " + cloudflareAPTRepositoryURL + " " + hostplatform.ManagedHostCodename + " " + cloudflareAPTComponent
 }
 
-// cloudflaredAPTPreferences pins cloudflared to the Cloudflare origin at a
-// priority above every default (500) repository, so a higher cloudflared
-// version from another configured source can never become the candidate.
-// verify_cloudflared_candidate still checks the candidate's origin.
+// cloudflareAPTOrigin is the apt origin the pin names. apt takes a
+// repository's origin from its URL host, so deriving it from
+// cloudflareAPTRepositoryURL keeps the pin and the source line on one host.
+func cloudflareAPTOrigin() string {
+	repository, err := url.Parse(cloudflareAPTRepositoryURL)
+	if err != nil || repository.Hostname() == "" {
+		panic(fmt.Sprintf("invalid Cloudflare apt repository URL %q: %v", cloudflareAPTRepositoryURL, err))
+	}
+	return repository.Hostname()
+}
+
+// cloudflaredAPTPreferences makes apt prefer Cloudflare's cloudflared over
+// the same package from any other configured repository. A pin only ranks
+// versions; it excludes no source. Another repository's version still becomes
+// the candidate when Cloudflare offers none or when the installed version is
+// newer than Cloudflare's (a pin below 1000 never downgrades), so
+// verify_cloudflared_candidate's origin gate is the control that refuses such
+// a candidate.
 func cloudflaredAPTPreferences() string {
-	return "Package: " + hostplatform.CloudflaredPackageBaseline().Name + "\nPin: origin \"" + cloudflareAPTOrigin + "\"\nPin-Priority: 990\n"
+	return "Package: " + hostplatform.CloudflaredPackageBaseline().Name + "\nPin: origin \"" + cloudflareAPTOrigin() + "\"\nPin-Priority: " + cloudflaredAPTPinPriority + "\n"
 }
 
 // CheckCommand prints exactly one reason when the connector is unhealthy.
@@ -116,6 +142,8 @@ CLOUDFLARED_APT_SOURCE_PATH=%s
 CLOUDFLARED_APT_SOURCE=%s
 CLOUDFLARED_APT_REPOSITORY_URL=%s
 CLOUDFLARED_APT_PREFERENCES_PATH=%s
+CLOUDFLARED_APT_PIN_STAGING_SUFFIX=%s
+DPKG_STATUS_PATH=%s
 CLOUDFLARED_APT_PREFERENCES=%s
 APT_LOCK_TIMEOUT=%d
 CLOUDFLARED_UNIT=%s
@@ -135,6 +163,8 @@ CLOUDFLARED_TOKEN=%s
 		shell.Quote(cloudflaredAPTSource()),
 		cloudflareAPTRepositoryURL,
 		cloudflaredAPTPreferencesPath,
+		cloudflaredAPTPinStagingSuffix,
+		dpkgStatusPath,
 		shell.Quote(cloudflaredAPTPreferences()),
 		hostplatform.APTLockTimeoutSeconds,
 		cloudflaredUnitPath,
@@ -198,31 +228,43 @@ apt_get() {
   DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout="${APT_LOCK_TIMEOUT}" "$@"
 }
 
-# write_cloudflared_apt_pin narrows trust: it only restricts which repository
-# may supply cloudflared, so the repair may (re)write it too.
+# write_cloudflared_apt_pin makes apt prefer the Cloudflare origin. The pin
+# ranks repositories but excludes none, so it cannot widen trust and the
+# repair may (re)write it; verify_cloudflared_candidate's origin gate is what
+# refuses a candidate from another repository.
 write_cloudflared_apt_pin() {
+  pin_staging_path=${CLOUDFLARED_APT_PREFERENCES_PATH}${CLOUDFLARED_APT_PIN_STAGING_SUFFIX}
   install -d -m 0755 "$(dirname "${CLOUDFLARED_APT_PREFERENCES_PATH}")"
-  printf '%s' "${CLOUDFLARED_APT_PREFERENCES}" > "${CLOUDFLARED_APT_PREFERENCES_PATH}.serverpro-new"
-  chmod 0644 "${CLOUDFLARED_APT_PREFERENCES_PATH}.serverpro-new"
-  mv -f "${CLOUDFLARED_APT_PREFERENCES_PATH}.serverpro-new" "${CLOUDFLARED_APT_PREFERENCES_PATH}"
+  printf '%s' "${CLOUDFLARED_APT_PREFERENCES}" > "${pin_staging_path}"
+  chmod 0644 "${pin_staging_path}"
+  mv -f "${pin_staging_path}" "${CLOUDFLARED_APT_PREFERENCES_PATH}"
 }
 
 # cloudflared_candidate_from_trusted_origin succeeds only when every
-# repository offering the candidate version is the pinned Cloudflare one, so
-# apt cannot fetch that version from anywhere else.
+# repository offering the candidate version is the Cloudflare one, so apt
+# cannot fetch that version from anywhere else. It is the enforcing control:
+# the origin pin only ranks repositories.
+#
+# In the version table a version line is "[***] <version> <priority>" and each
+# source under it is "<priority> <url> <suite> <arch> Packages" or
+# "<priority> <dpkg status path>". The status line also has two fields, so it
+# is matched before the version line or it would end the version being read.
+# Any other line under the wanted version counts as an untrusted source, so an
+# unexpected format fails closed.
 cloudflared_candidate_from_trusted_origin() {
-  apt-cache policy "${CLOUDFLARED_PACKAGE}" | awk -v want="$1" -v repo="${CLOUDFLARED_APT_REPOSITORY_URL}" '
+  apt-cache policy "${CLOUDFLARED_PACKAGE}" | awk -v want="$1" -v repo="${CLOUDFLARED_APT_REPOSITORY_URL}" -v status="${DPKG_STATUS_PATH}" '
     /Version table:/ { table = 1; next }
     !table { next }
     {
       line = $0
       sub(/^[[:space:]]*[*][*][*][[:space:]]+/, "", line)
       n = split(line, field, " ")
-      if (n == 2) { current = field[1]; next }
-      if (current != want || n < 2) { next }
-      if (field[2] == "/var/lib/dpkg/status") { next }
+      if (n == 0) { next }
+      if (n == 2 && field[1] ~ /^-?[0-9]+$/ && field[2] == status) { next }
+      if (n == 2 && field[2] ~ /^-?[0-9]+$/) { current = field[1]; next }
+      if (current != want) { next }
       total++
-      if (field[2] == repo) { trusted++ }
+      if (field[1] ~ /^-?[0-9]+$/ && field[2] == repo && field[n] == "Packages") { trusted++ }
     }
     END { exit !(total > 0 && total == trusted) }
   '
