@@ -282,7 +282,8 @@ and returns apt's status and error output at once for any other failure.
 Go-rendered POSIX scripts embed `hostplatform.APTUpdateShellFunction`; the
 standalone bash bootstrap and Tailscale scripts carry an equivalent bash
 helper fed by manifest values. Their install, upgrade, and remove calls pass
-`-o DPkg::Lock::Timeout` with the same budget.
+`-o DPkg::Lock::Timeout` with the same budget. The doctor cloudflared repair
+deadline covers one full wait on each lock plus its own apt transfer time.
 
 ## Runtime flow
 

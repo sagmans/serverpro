@@ -17,9 +17,13 @@ import (
 
 const (
 	supportedPlatformCheckName = "supported platform"
-	// cloudflaredFixTimeout covers apt metadata refresh plus the package
-	// download, which outlast the default per-command SSH deadline.
-	cloudflaredFixTimeout = 10 * time.Minute
+	// cloudflaredFixTransferMargin covers the repair's own apt work: index
+	// download, package download, and install once the locks are free.
+	cloudflaredFixTransferMargin = 5 * time.Minute
+	// cloudflaredFixTimeout lets the repair spend the full shared apt wait on
+	// the package-lists lock and again on the dpkg lock before its own work,
+	// so the SSH deadline never cuts off a wait the script would survive.
+	cloudflaredFixTimeout = 2*hostplatform.APTLockTimeout + cloudflaredFixTransferMargin
 )
 
 // remoteCheckSpecification keeps batch authority inseparable from the check
