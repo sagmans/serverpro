@@ -21,6 +21,7 @@ const (
 	ProvisionPhaseCompute                   ProvisionPhase = "compute"
 	ProvisionPhaseTailscaleDevice           ProvisionPhase = "tailscale_device"
 	ProvisionPhaseRemoteReady               ProvisionPhase = "remote_ready"
+	ProvisionPhaseRemoteAdminPassword       ProvisionPhase = "remote_admin_password"
 	ProvisionPhaseRemoteBootstrap           ProvisionPhase = "remote_bootstrap"
 	ProvisionPhaseComplete                  ProvisionPhase = "complete"
 )

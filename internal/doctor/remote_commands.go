@@ -201,63 +201,28 @@ func sudoPasswordRequiredCommand(user string) string {
 		"printf '%s\n' 'admin sudo requires password'"
 }
 
-func sudoPasswordFixInput(hash, password string) string {
-	return hash + "\n" + password + "\n"
+// sudoPasswordFixInput and sudoPasswordFixCommand reuse the provision script,
+// so doctor --fix repairs a host through the same SSH path that set it up.
+func sudoPasswordFixInput(password string) string {
+	return lifecycle.AdminPasswordInput(password)
 }
 
 func sudoPasswordFixCommand(user string) string {
-	return `set -eu
-admin_user=` + shell.Quote(user) + `
-IFS= read -r hash
-IFS= read -r sudo_password
-if [ -z "$hash" ]; then
-  echo 'admin password hash required' >&2
-  exit 1
-fi
-if [ -z "$sudo_password" ]; then
-  echo 'admin sudo password required' >&2
-  exit 1
-fi
-sudoers='/etc/sudoers.d/90-cloud-init-users'
-backup_dir='/var/backups/serverpro'
-backup="$backup_dir/90-cloud-init-users.before-password-sudo"
-tmp="$(mktemp)"
-cleanup() { rm -f "$tmp"; }
-restore() {
-  if [ -f "$backup" ]; then
-    install -o root -g root -m 0440 "$backup" "$sudoers"
-  fi
+	return lifecycle.AdminPasswordScript(user)
 }
-fail_after_backup() {
-  restore
-  exit 1
-}
-trap cleanup EXIT
-printf '%s:%s\n' "$admin_user" "$hash" | chpasswd --encrypted
-if [ -f "$sudoers" ]; then
-  mkdir -p "$backup_dir"
-  chmod 0700 "$backup_dir"
-  install -o root -g root -m 0400 "$sudoers" "$backup"
-  grep -Ev '^[[:space:]]*[^#].*NOPASSWD:ALL' "$sudoers" > "$tmp" || true
-  if [ -s "$tmp" ]; then
-    visudo -cf "$tmp" || fail_after_backup
-    install -o root -g root -m 0440 "$tmp" "$sudoers" || fail_after_backup
-  else
-    rm -f "$sudoers" || fail_after_backup
-  fi
-  visudo -c || fail_after_backup
-fi
-runuser -u "$admin_user" -- sudo -k || true
-if ! printf '%s\n' "$sudo_password" | runuser -u "$admin_user" -- sudo -S -p '' -v >/dev/null 2>&1; then
-  echo 'admin sudo password validation failed after fix' >&2
-  fail_after_backup
-fi
-runuser -u "$admin_user" -- sudo -k || true
-if runuser -u "$admin_user" -- sudo -n true >/dev/null 2>&1; then
-  echo 'admin sudo still permits NOPASSWD:ALL after fix' >&2
-  fail_after_backup
-fi
-printf '%s\n' 'admin sudo password requirement fixed'`
+
+// adminPasswordHashCommand reports only the crypt scheme of the admin shadow
+// entry, never the hash. SHA-crypt and older schemes fail so doctor --fix can
+// re-set the password and let the host hash it with its default (yescrypt).
+func adminPasswordHashCommand(user string) string {
+	return `entry="$(getent shadow ` + shell.Quote(user) + `)" || { echo 'admin user has no shadow entry'; exit 1; }
+hash="$(printf '%s' "$entry" | cut -d: -f2)"
+case "$hash" in
+  '$y$'*|'$gy$'*|'$7$'*|'$2b$'*|'$2y$'*) printf 'admin password uses crypt scheme $%s$\n' "$(printf '%s' "$hash" | cut -d'$' -f2)" ;;
+  ''|'!'*|'*'*) echo 'admin password is locked or not set'; exit 1 ;;
+  '$'*) printf 'admin password uses legacy crypt scheme $%s$\n' "$(printf '%s' "$hash" | cut -d'$' -f2)"; exit 1 ;;
+  *) echo 'admin password uses legacy DES crypt'; exit 1 ;;
+esac`
 }
 
 func sshdSettingsFixCommand() string {

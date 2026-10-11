@@ -16,7 +16,6 @@ import (
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/doctor"
-	"github.com/sagmans/serverpro/internal/passwordhash"
 	"github.com/sagmans/serverpro/internal/state"
 )
 
@@ -89,7 +88,7 @@ func TestCreateDefaultNoIngressAllowsTailscaleOnlyServiceCredentials(t *testing.
 			}
 			return nil
 		},
-		runProvision: func(context.Context, config.Config, string, compute.Account, credentials.Set, string, string) (state.State, error) {
+		runProvision: func(context.Context, config.Config, string, compute.Account, credentials.Set, string) (state.State, error) {
 			return state.State{}, errors.New("stop after credential check")
 		},
 	}}
@@ -112,7 +111,7 @@ func TestCreateCommandUsesServerScopedComputeToken(t *testing.T) {
 			}
 			return nil
 		},
-		runProvision: func(_ context.Context, _ config.Config, _ string, providerAccount compute.Account, creds credentials.Set, _, _ string) (state.State, error) {
+		runProvision: func(_ context.Context, _ config.Config, _ string, providerAccount compute.Account, creds credentials.Set, _ string) (state.State, error) {
 			if providerAccount.Name != "demo/web" || providerAccount.Provider != "hetzner" || providerAccount.Token != accountToken {
 				t.Fatalf("create did not pass server credential to provisioning: %+v", providerAccount)
 			}
@@ -156,17 +155,15 @@ func TestCreateCommandWritesSecretSafeProgressToStderr(t *testing.T) {
 	var progress bytes.Buffer
 	base := time.Date(2026, time.July, 23, 17, 0, 0, 0, time.UTC)
 	tick := -1
-	var adminPasswordHash string
 	a := &app{configPath: cfgPath, provider: "hetzner", nonInteractive: true, yes: true, stdout: &out, stderr: &progress, now: func() time.Time {
 		tick++
 		return base.Add(time.Duration(tick) * time.Second)
 	}, services: serviceHooks{
 		preflight: func(context.Context, config.Config, credentials.Set) error { return nil },
-		runProvision: func(_ context.Context, cfg config.Config, _ string, _ compute.Account, _ credentials.Set, _ string, hash string) (state.State, error) {
-			adminPasswordHash = hash
+		runProvision: func(_ context.Context, cfg config.Config, _ string, _ compute.Account, _ credentials.Set, _ string) (state.State, error) {
 			return state.State{Namespace: cfg.Namespace, Server: cfg.Server}, nil
 		},
-		doctorReport: func(context.Context, config.Config, state.State, credentials.Set, string, string) doctor.Report {
+		doctorReport: func(context.Context, config.Config, state.State, credentials.Set, string) doctor.Report {
 			return doctor.Report{Results: []doctor.Result{{Name: "smoke", Scope: "test", Status: doctor.Pass, Evidence: "ok"}}}
 		},
 	}}
@@ -189,7 +186,7 @@ func TestCreateCommandWritesSecretSafeProgressToStderr(t *testing.T) {
 			t.Fatalf("progress missing %q:\n%s", want, got)
 		}
 	}
-	for _, secret := range []string{"acct", "ts", "cf", sudoPassword, adminPasswordHash} {
+	for _, secret := range []string{"acct", "ts", "cf", sudoPassword} {
 		if secret != "" && strings.Contains(got, secret) {
 			t.Fatalf("progress leaked secret %q:\n%s", secret, got)
 		}
@@ -205,7 +202,7 @@ func TestCreateCommandWaitsForExistingServerOperation(t *testing.T) {
 	}
 	a := &app{configPath: cfgPath, provider: "hetzner", nonInteractive: true, yes: true, stdout: io.Discard, stderr: io.Discard, create: createOverrides{ComputeName: "replacement-name"}, services: serviceHooks{
 		preflight: func(context.Context, config.Config, credentials.Set) error { return nil },
-		runProvision: func(context.Context, config.Config, string, compute.Account, credentials.Set, string, string) (state.State, error) {
+		runProvision: func(context.Context, config.Config, string, compute.Account, credentials.Set, string) (state.State, error) {
 			return state.State{}, errors.New("provision reached")
 		},
 	}}
@@ -249,7 +246,7 @@ func TestCreateCommandWaitsForNamespaceOperation(t *testing.T) {
 	reachedProvision := make(chan struct{})
 	a := &app{configPath: cfgPath, provider: "hetzner", nonInteractive: true, yes: true, stdout: io.Discard, stderr: io.Discard, services: serviceHooks{
 		preflight: func(context.Context, config.Config, credentials.Set) error { return nil },
-		runProvision: func(context.Context, config.Config, string, compute.Account, credentials.Set, string, string) (state.State, error) {
+		runProvision: func(context.Context, config.Config, string, compute.Account, credentials.Set, string) (state.State, error) {
 			close(reachedProvision)
 			return state.State{}, errors.New("provision reached")
 		},
@@ -291,7 +288,7 @@ func TestCreateCommandRejectsRawSourceConfigDriftWhileWaitingForLock(t *testing.
 	provisioned := false
 	a := &app{configPath: cfgPath, provider: "hetzner", nonInteractive: true, yes: true, stdout: io.Discard, stderr: io.Discard, create: createOverrides{ComputeName: "requested-name"}, services: serviceHooks{
 		preflight: func(context.Context, config.Config, credentials.Set) error { return nil },
-		runProvision: func(context.Context, config.Config, string, compute.Account, credentials.Set, string, string) (state.State, error) {
+		runProvision: func(context.Context, config.Config, string, compute.Account, credentials.Set, string) (state.State, error) {
 			provisioned = true
 			return state.State{}, errors.New("provision reached")
 		},
@@ -371,7 +368,7 @@ func TestCreateCommandWithTokenRelativeTailnetWaitsForExplicitPolicyOperation(t 
 	reachedProvision := make(chan struct{})
 	a := &app{configPath: cfgPath, provider: "hetzner", nonInteractive: true, yes: true, stdout: io.Discard, stderr: io.Discard, services: serviceHooks{
 		preflight: func(context.Context, config.Config, credentials.Set) error { return nil },
-		runProvision: func(context.Context, config.Config, string, compute.Account, credentials.Set, string, string) (state.State, error) {
+		runProvision: func(context.Context, config.Config, string, compute.Account, credentials.Set, string) (state.State, error) {
 			close(reachedProvision)
 			return state.State{}, errors.New("provision reached")
 		},
@@ -411,10 +408,10 @@ func TestCreateCommandRunsSetupProvisionDoctor(t *testing.T) {
 			}
 			return nil
 		},
-		runProvision: func(_ context.Context, got config.Config, stPath string, _ compute.Account, creds credentials.Set, sudoPassword, adminPasswordHash string) (state.State, error) {
+		runProvision: func(_ context.Context, got config.Config, stPath string, _ compute.Account, creds credentials.Set, sudoPassword string) (state.State, error) {
 			calls = append(calls, "runProvision")
-			if sudoPassword != "correct horse battery staple" || !passwordhash.ValidSHA512(adminPasswordHash) {
-				t.Fatalf("bad sudo material: password=%q hash=%q", sudoPassword, adminPasswordHash)
+			if sudoPassword != "correct horse battery staple" {
+				t.Fatalf("bad sudo material: password=%q", sudoPassword)
 			}
 			st := state.State{Namespace: got.Namespace, Server: got.Server, Compute: state.ComputeState{ID: "123", Name: got.Compute.Name}, Cloudflare: state.CloudflareState{Name: got.Cloudflare.Tunnel.Name}}
 			if err := state.Save(stPath, st); err != nil {
@@ -422,10 +419,10 @@ func TestCreateCommandRunsSetupProvisionDoctor(t *testing.T) {
 			}
 			return st, nil
 		},
-		doctorReport: func(_ context.Context, got config.Config, st state.State, creds credentials.Set, sudoPassword, adminPasswordHash string) doctor.Report {
+		doctorReport: func(_ context.Context, got config.Config, st state.State, creds credentials.Set, sudoPassword string) doctor.Report {
 			calls = append(calls, "doctorReport")
-			if sudoPassword != "correct horse battery staple" || !passwordhash.ValidSHA512(adminPasswordHash) {
-				t.Fatalf("bad sudo material for doctor: password=%q hash=%q", sudoPassword, adminPasswordHash)
+			if sudoPassword != "correct horse battery staple" {
+				t.Fatalf("bad sudo material for doctor: password=%q", sudoPassword)
 			}
 			if st.Compute.ID != "123" || creds.Cloudflare != "cf" {
 				t.Fatalf("bad doctor args: cfg=%+v st=%+v creds=%+v", got, st, creds)

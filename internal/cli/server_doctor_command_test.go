@@ -15,7 +15,6 @@ import (
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/doctor"
-	"github.com/sagmans/serverpro/internal/passwordhash"
 	"github.com/sagmans/serverpro/internal/state"
 )
 
@@ -30,10 +29,10 @@ func TestServerDoctorFixRunsFullDoctorReport(t *testing.T) {
 	t.Setenv("DEMO_WEB_SUDOPASS", "correct horse battery staple")
 	calls := 0
 	a := &app{project: "demo", provider: "hetzner", nonInteractive: true, stdout: io.Discard, providers: readProviderRegistry(t), services: serviceHooks{
-		doctorReport: func(_ context.Context, cfg config.Config, st state.State, _ credentials.Set, sudoPassword, adminPasswordHash string) doctor.Report {
+		doctorReport: func(_ context.Context, cfg config.Config, st state.State, _ credentials.Set, sudoPassword string) doctor.Report {
 			calls++
-			if cfg.Namespace != "demo" || st.Server != "web" || sudoPassword != "correct horse battery staple" || !passwordhash.ValidSHA512(adminPasswordHash) {
-				t.Fatalf("bad doctor args cfg=%+v st=%+v sudo=%q hash=%q", cfg, st, sudoPassword, adminPasswordHash)
+			if cfg.Namespace != "demo" || st.Server != "web" || sudoPassword != "correct horse battery staple" {
+				t.Fatalf("bad doctor args cfg=%+v st=%+v sudo=%q", cfg, st, sudoPassword)
 			}
 			return doctor.Report{Results: []doctor.Result{{Name: "sudo", Scope: "remote", Status: doctor.Pass, Evidence: "password sudo enforced"}}}
 		},
@@ -65,7 +64,7 @@ func TestDoctorReportUsesInjectedClientsWithProductionOrchestration(t *testing.T
 			},
 		}, compute.Account{Provider: "hetzner", Token: gotCreds.ServerProvider}, nil
 	}}}
-	report := a.doctorReport(context.Background(), cfg, st, creds, "sudo-secret", "")
+	report := a.doctorReport(context.Background(), cfg, st, creds, "sudo-secret")
 	if !called {
 		t.Fatal("doctor client seam was not used")
 	}
@@ -84,7 +83,7 @@ func TestServerDoctorSudoRetryRefreshesOnlyRemoteReport(t *testing.T) {
 	retryCalls := 0
 	providerResult := doctor.Result{Name: "compute server", Scope: "provider", Status: doctor.Pass, Evidence: "id=42"}
 	a := &app{project: "demo", provider: "hetzner", stdin: strings.NewReader("correct horse battery staple\n"), stdout: &out, stderr: io.Discard, providers: readProviderRegistry(t), services: serviceHooks{
-		doctorReport: func(context.Context, config.Config, state.State, credentials.Set, string, string) doctor.Report {
+		doctorReport: func(context.Context, config.Config, state.State, credentials.Set, string) doctor.Report {
 			initialCalls++
 			return doctor.Report{Results: []doctor.Result{
 				providerResult,

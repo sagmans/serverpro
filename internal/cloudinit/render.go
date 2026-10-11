@@ -7,13 +7,13 @@ import (
 	"text/template"
 
 	"github.com/sagmans/serverpro/internal/config"
-	"github.com/sagmans/serverpro/internal/passwordhash"
 )
 
+// Input carries no admin password material: user data is readable from the
+// provider metadata service, so the password is set over SSH after first boot.
 type Input struct {
-	Config            config.Config
-	TailscaleAuthKey  string
-	AdminPasswordHash string
+	Config           config.Config
+	TailscaleAuthKey string
 }
 
 func Render(in Input) (string, error) {
@@ -22,9 +22,6 @@ func Render(in Input) (string, error) {
 	}
 	if in.TailscaleAuthKey == "" {
 		return "", fmt.Errorf("tailscale auth key required")
-	}
-	if !passwordhash.ValidSHA512(in.AdminPasswordHash) {
-		return "", fmt.Errorf("admin password hash required")
 	}
 	var b bytes.Buffer
 	t, err := template.New("cloudinit").Funcs(templateFuncs()).Parse(cloudInitTemplate)

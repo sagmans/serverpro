@@ -104,7 +104,9 @@ serverpro server create web -n mynamespace -p hetzner \
 - Public SSH disabled.
 - Public app ingress defaults to `none`.
 - Remote root actions require admin sudo password.
-- No unrestricted `NOPASSWD:ALL` managed state.
+- No unrestricted `NOPASSWD:ALL` managed state (the first-boot grant is removed
+  as soon as create can reach the host).
+- No admin password or password hash in cloud-init user data.
 - Tokens never appear in output, logs, errors, state, docs, or tests.
 - Destructive operations require confirmation, complete local authority, and
   live ownership validation.

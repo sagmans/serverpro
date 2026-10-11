@@ -17,7 +17,7 @@ func TestRunReportsPartialComputeCheckpointSaveFailure(t *testing.T) {
 	path := provisionStatePath(t)
 	provider := &checkpointSaveFailCompute{path: path}
 
-	_, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, ComputeAccount: compute.Account{Name: "prod", Provider: "hetzner", Token: "h"}, Creds: credentials.Set{Tailscale: "ts-api", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: provider, Tailscale: &fakeTailscale{}, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
+	_, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, ComputeAccount: compute.Account{Name: "prod", Provider: "hetzner", Token: "h"}, Creds: credentials.Set{Tailscale: "ts-api", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: provider, Tailscale: &fakeTailscale{}, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
 	if err == nil || !strings.Contains(err.Error(), "server create failed") || !strings.Contains(err.Error(), "partial compute checkpoint failed") {
 		t.Fatalf("expected provider and checkpoint errors, got %v", err)
 	}

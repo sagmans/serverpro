@@ -12,7 +12,6 @@ import (
 	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
-	"github.com/sagmans/serverpro/internal/passwordhash"
 	"github.com/sagmans/serverpro/internal/state"
 )
 
@@ -24,7 +23,7 @@ func TestCreateNonInteractiveRequiresSudoPasswordBeforeProvision(t *testing.T) {
 			calls = append(calls, "preflight")
 			return nil
 		},
-		runProvision: func(context.Context, config.Config, string, compute.Account, credentials.Set, string, string) (state.State, error) {
+		runProvision: func(context.Context, config.Config, string, compute.Account, credentials.Set, string) (state.State, error) {
 			calls = append(calls, "runProvision")
 			return state.State{}, nil
 		},
@@ -48,7 +47,7 @@ func TestCreatePromptClarifiesPasswordIsForNewAdminUser(t *testing.T) {
 	var out bytes.Buffer
 	a := &app{configPath: cfgPath, provider: "hetzner", yes: true, stdin: strings.NewReader("correct horse battery staple\n"), stdout: &out, services: serviceHooks{
 		preflight: func(context.Context, config.Config, credentials.Set) error { return nil },
-		runProvision: func(context.Context, config.Config, string, compute.Account, credentials.Set, string, string) (state.State, error) {
+		runProvision: func(context.Context, config.Config, string, compute.Account, credentials.Set, string) (state.State, error) {
 			return state.State{}, errors.New("stop after prompt")
 		},
 	}}
@@ -63,17 +62,14 @@ func TestCreatePromptClarifiesPasswordIsForNewAdminUser(t *testing.T) {
 	}
 }
 
-func TestCreateCommandPassesSudoPasswordHashToProvision(t *testing.T) {
+func TestCreateCommandPassesSudoPasswordToProvision(t *testing.T) {
 	cfgPath := createTestConfig(t)
 	t.Setenv("DEMO_WEB_SUDOPASS", "correct horse battery staple")
 	a := &app{configPath: cfgPath, provider: "hetzner", nonInteractive: true, yes: true, stdout: io.Discard, services: serviceHooks{
 		preflight: func(context.Context, config.Config, credentials.Set) error { return nil },
-		runProvision: func(_ context.Context, got config.Config, stPath string, _ compute.Account, creds credentials.Set, sudoPassword, adminPasswordHash string) (state.State, error) {
+		runProvision: func(_ context.Context, got config.Config, stPath string, _ compute.Account, creds credentials.Set, sudoPassword string) (state.State, error) {
 			if sudoPassword != "correct horse battery staple" {
 				t.Fatalf("sudo password = %q", sudoPassword)
-			}
-			if !passwordhash.ValidSHA512(adminPasswordHash) || strings.Contains(adminPasswordHash, sudoPassword) {
-				t.Fatalf("bad admin password hash %q", adminPasswordHash)
 			}
 			st := state.State{Namespace: got.Namespace, Server: got.Server, Compute: state.ComputeState{ID: "123", Name: got.Compute.Name}, Cloudflare: state.CloudflareState{Name: got.Cloudflare.Tunnel.Name}}
 			if err := state.Save(stPath, st); err != nil {

@@ -13,8 +13,8 @@ import (
 	"github.com/sagmans/serverpro/internal/state"
 )
 
-func renderProvisionUserData(cfg config.Config, tailscaleKey, adminPasswordHash string) (string, error) {
-	return cloudinit.Render(cloudinit.Input{Config: cfg, TailscaleAuthKey: tailscaleKey, AdminPasswordHash: adminPasswordHash})
+func renderProvisionUserData(cfg config.Config, tailscaleKey string) (string, error) {
+	return cloudinit.Render(cloudinit.Input{Config: cfg, TailscaleAuthKey: tailscaleKey})
 }
 
 func ensureComputeServer(ctx context.Context, st *state.State, stPath string, cfg config.Config, account compute.Account, provider ComputeCreator, userData string, save provisionStateSaver) error {

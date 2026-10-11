@@ -17,6 +17,7 @@ const (
 	SudoPasswordCheckName       = "sudo password required"
 	SudoPasswordAuthRemediation = "inspect remote sudo password authentication"
 	SudoPasswordAuthFailureCode = ResultCode("sudo_password_auth_failure")
+	AdminPasswordHashCheckName  = "admin password hash"
 	// TailscaleDeviceIdentityCode marks a tailnet node check that found the
 	// recorded device missing or changed, or several devices claiming the
 	// server's identity. Automation can tell it apart from a plain offline node.
@@ -32,10 +33,9 @@ const (
 )
 
 type Options struct {
-	Fix              bool
-	SudoPassword     string
-	SudoPasswordHash string
-	ComputeAccount   compute.Account
+	Fix            bool
+	SudoPassword   string
+	ComputeAccount compute.Account
 	// GitHubPAT reaches remote checks so parity can compare the locally
 	// stored copy with remote hosts.yml; only fingerprints ever enter evidence.
 	GitHubPAT string

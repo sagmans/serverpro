@@ -91,7 +91,18 @@ default.
   must save it for later serverpro operations.
 - Users should change or disable default provider root credentials after first
   access, according to provider recovery and console guidance.
-- Unrestricted `NOPASSWD:ALL` sudo is a failing managed-state condition.
+- Unrestricted `NOPASSWD:ALL` sudo is a failing managed-state condition. The
+  only exception is the first-boot grant in
+  `/etc/sudoers.d/90-serverpro-bootstrap`, which create removes over Tailscale
+  SSH right after the host is reachable and before any other remote step.
+- Cloud-init user data never carries the admin password or a hash of it, since
+  any process on the host can read user data from the provider metadata
+  service. The admin account starts locked; serverpro sets the password after
+  first boot with plain `chpasswd` over protected stdin, so the host stores it
+  with its default scheme (yescrypt). Doctor fails `admin password hash` when
+  the stored hash uses SHA-crypt (`$6$`, written by older releases) or another
+  legacy scheme, or when the password is unset; `doctor --fix` re-sets it the
+  same way.
 - Tailnet DNS is part of the access path: with MagicDNS enabled, the tailnet
   must define global nameservers and enable Override DNS servers, or managed
   hosts can lose all public name resolution without any local change.

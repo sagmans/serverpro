@@ -15,7 +15,7 @@ import (
 
 func TestRunRequiresComputeProvider(t *testing.T) {
 	cfg := config.ExampleServer("prod", "web")
-	_, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api"}, StatePath: provisionStatePath(t), Clients: Clients{Tailscale: &fakeTailscale{}, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
+	_, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts-api"}, StatePath: provisionStatePath(t), Clients: Clients{Tailscale: &fakeTailscale{}, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
 	if err == nil || !strings.Contains(err.Error(), "compute provider required") {
 		t.Fatalf("expected compute provider required error, got %v", err)
 	}
@@ -26,7 +26,7 @@ func TestRunCreatesServerThroughComputeProviderAndWritesGenericState(t *testing.
 	cfg.Cloudflare.AccountID = "acc"
 	path := provisionStatePath(t)
 	provider := &recordingCompute{}
-	st, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, ComputeAccount: compute.Account{Name: "prod", Provider: "hetzner", Token: "h"}, Creds: credentials.Set{Tailscale: testTailscaleAPIToken, Cloudflare: testCloudflareAPIToken}, StatePath: path, Clients: Clients{Compute: provider, Tailscale: &fakeTailscale{}, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
+	st, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, ComputeAccount: compute.Account{Name: "prod", Provider: "hetzner", Token: "h"}, Creds: credentials.Set{Tailscale: testTailscaleAPIToken, Cloudflare: testCloudflareAPIToken}, StatePath: path, Clients: Clients{Compute: provider, Tailscale: &fakeTailscale{}, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestRunCreatesServerThroughComputeProviderAndWritesGenericState(t *testing.
 	if provider.request.Intent.Labels["project"] != "" {
 		t.Fatalf("ambiguous project label leaked into compute intent: %+v", provider.request.Intent.Labels)
 	}
-	if !strings.Contains(provider.request.BootstrapData, "tskey-auth-created") || !strings.Contains(provider.request.BootstrapData, testAdminPasswordHash) {
+	if !strings.Contains(provider.request.BootstrapData, "tskey-auth-created") || strings.Contains(provider.request.BootstrapData, testAdminPassword) {
 		t.Fatalf("bootstrap data missing secure access setup")
 	}
 	if strings.Contains(provider.request.BootstrapData, testTailscaleAPIToken) || strings.Contains(provider.request.BootstrapData, testCloudflareAPIToken) {
@@ -96,7 +96,7 @@ func TestRunMigratesLegacyManagedResourceWhenComputeCreateFails(t *testing.T) {
 	path := provisionStatePath(t)
 	provider := &failingCheckpointCompute{}
 
-	_, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, ComputeAccount: compute.Account{Name: "prod", Provider: "hetzner", Token: "h"}, Creds: credentials.Set{Tailscale: "ts-api", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: provider, Tailscale: &fakeTailscale{}, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
+	_, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, ComputeAccount: compute.Account{Name: "prod", Provider: "hetzner", Token: "h"}, Creds: credentials.Set{Tailscale: "ts-api", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: provider, Tailscale: &fakeTailscale{}, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
 	if err == nil || !strings.Contains(err.Error(), "server create failed") {
 		t.Fatalf("expected compute create failure, got %v", err)
 	}

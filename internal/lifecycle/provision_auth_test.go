@@ -17,7 +17,7 @@ func TestRunRejectsProvidedAuthKey(t *testing.T) {
 	cfg.Cloudflare.AccountID = "acc"
 	h := &fakeHetzner{}
 	ts := &fakeTailscale{}
-	_, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{TSAuthKey: "tskey-auth-provided", Cloudflare: "cf"}, StatePath: provisionStatePath(t), Clients: Clients{Compute: h, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
+	_, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{TSAuthKey: "tskey-auth-provided", Cloudflare: "cf"}, StatePath: provisionStatePath(t), Clients: Clients{Compute: h, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
 	if err == nil || !strings.Contains(err.Error(), "namespace-scoped") {
 		t.Fatalf("expected namespace-scoped auth key error, got %v", err)
 	}
@@ -37,7 +37,7 @@ func TestRunRejectsProvidedAuthKeyWithAPIToken(t *testing.T) {
 	cfg.Cloudflare.AccountID = "acc"
 	h := &fakeHetzner{}
 	ts := &fakeTailscale{}
-	_, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api-token", TSAuthKey: "tskey-auth-provided", Cloudflare: "cf"}, StatePath: provisionStatePath(t), Clients: Clients{Compute: h, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
+	_, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts-api-token", TSAuthKey: "tskey-auth-provided", Cloudflare: "cf"}, StatePath: provisionStatePath(t), Clients: Clients{Compute: h, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
 	if err == nil || !strings.Contains(err.Error(), "namespace-scoped") {
 		t.Fatalf("expected namespace-scoped auth key error, got %v", err)
 	}
@@ -57,7 +57,7 @@ func TestRunBindsDeviceToBootstrapKeyThenRecordedID(t *testing.T) {
 	cfg.Cloudflare.AccountID = "acc"
 	ts := &fakeTailscale{keyCreated: "2026-10-07T10:00:00Z"}
 	path := provisionStatePath(t)
-	opt := Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api-token", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}}
+	opt := Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts-api-token", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}}
 
 	st, err := Run(context.Background(), opt)
 	if err != nil {
@@ -89,7 +89,7 @@ func TestRunFreshComputeIgnoresLeftoverRecordedDevice(t *testing.T) {
 		t.Fatal(err)
 	}
 	ts := &fakeTailscale{keyCreated: "2026-10-07T10:00:00Z"}
-	opt := Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api-token", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}}
+	opt := Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts-api-token", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}}
 	if _, err := Run(context.Background(), opt); err != nil {
 		t.Fatal(err)
 	}

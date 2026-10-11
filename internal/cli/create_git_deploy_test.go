@@ -26,7 +26,7 @@ func TestCreateOptionalGitDeployAccessGenerateAndVerify(t *testing.T) {
 	var progress bytes.Buffer
 	a := &app{configPath: cfgPath, provider: "hetzner", yes: true, stdin: strings.NewReader("correct horse battery staple\n\n\ngit@github.com:owner/repo.git\ny\n"), stdout: &out, stderr: &progress, services: serviceHooks{
 		preflight: func(context.Context, config.Config, credentials.Set) error { return nil },
-		runProvision: func(_ context.Context, got config.Config, stPath string, _ compute.Account, creds credentials.Set, sudoPassword, adminPasswordHash string) (state.State, error) {
+		runProvision: func(_ context.Context, got config.Config, stPath string, _ compute.Account, creds credentials.Set, sudoPassword string) (state.State, error) {
 			calls = append(calls, "runProvision")
 			st := state.State{Namespace: got.Namespace, Server: got.Server, Tailscale: state.TailscaleState{Name: "demo-web"}, Compute: state.ComputeState{ID: "123", Name: got.Compute.Name}, Cloudflare: state.CloudflareState{Name: got.Cloudflare.Tunnel.Name}}
 			if err := state.Save(stPath, st); err != nil {
@@ -50,7 +50,7 @@ func TestCreateOptionalGitDeployAccessGenerateAndVerify(t *testing.T) {
 			}
 			return nil
 		},
-		doctorReport: func(_ context.Context, got config.Config, _ state.State, _ credentials.Set, _, _ string) doctor.Report {
+		doctorReport: func(_ context.Context, got config.Config, _ state.State, _ credentials.Set, _ string) doctor.Report {
 			calls = append(calls, "doctorReport")
 			if got.Git.Access != config.GitAccessDeployKey || got.Git.DeployRepository != "git@github.com:owner/repo.git" {
 				t.Fatalf("doctor git intent = %+v", got.Git)
@@ -100,7 +100,7 @@ func TestCreateGitAccountAccessRunsDoctorWithPersistedIntent(t *testing.T) {
 	var out bytes.Buffer
 	a := &app{configPath: cfgPath, provider: "hetzner", yes: true, stdin: strings.NewReader("correct horse battery staple\ny\nbuzz\nbuzz@example.com\nn\nghp_test\ny\n"), stdout: &out, services: serviceHooks{
 		preflight: func(context.Context, config.Config, credentials.Set) error { return nil },
-		runProvision: func(_ context.Context, got config.Config, stPath string, _ compute.Account, _ credentials.Set, _, _ string) (state.State, error) {
+		runProvision: func(_ context.Context, got config.Config, stPath string, _ compute.Account, _ credentials.Set, _ string) (state.State, error) {
 			st := state.State{Namespace: got.Namespace, Server: got.Server, Tailscale: state.TailscaleState{Name: "demo-web"}}
 			return st, state.Save(stPath, st)
 		},
@@ -114,7 +114,7 @@ func TestCreateGitAccountAccessRunsDoctorWithPersistedIntent(t *testing.T) {
 			return "", nil
 		},
 		setupGitHubCLI: func(context.Context, config.Config, state.State, string, string) error { return nil },
-		doctorReport: func(_ context.Context, got config.Config, _ state.State, _ credentials.Set, _, _ string) doctor.Report {
+		doctorReport: func(_ context.Context, got config.Config, _ state.State, _ credentials.Set, _ string) doctor.Report {
 			if got.Git.Access != config.GitAccessAccountKey || got.Git.Identity.Name != "buzz" {
 				t.Fatalf("doctor received stale git intent: %+v", got.Git)
 			}
@@ -136,7 +136,7 @@ func TestCreateOptionalGitDeployAccessSkipsWhenDeclined(t *testing.T) {
 	var calls []string
 	a := &app{configPath: cfgPath, provider: "hetzner", yes: true, stdin: strings.NewReader("correct horse battery staple\nn\nn\n"), stdout: io.Discard, services: serviceHooks{
 		preflight: func(context.Context, config.Config, credentials.Set) error { return nil },
-		runProvision: func(_ context.Context, got config.Config, stPath string, _ compute.Account, creds credentials.Set, sudoPassword, adminPasswordHash string) (state.State, error) {
+		runProvision: func(_ context.Context, got config.Config, stPath string, _ compute.Account, creds credentials.Set, sudoPassword string) (state.State, error) {
 			calls = append(calls, "runProvision")
 			st := state.State{Namespace: got.Namespace, Server: got.Server, Tailscale: state.TailscaleState{Name: "demo-web"}}
 			return st, state.Save(stPath, st)
@@ -145,7 +145,7 @@ func TestCreateOptionalGitDeployAccessSkipsWhenDeclined(t *testing.T) {
 			t.Fatal("generateGitDeployKey should not run")
 			return "", nil
 		},
-		doctorReport: func(context.Context, config.Config, state.State, credentials.Set, string, string) doctor.Report {
+		doctorReport: func(context.Context, config.Config, state.State, credentials.Set, string) doctor.Report {
 			calls = append(calls, "doctorReport")
 			return doctor.Report{Results: []doctor.Result{{Name: "smoke", Scope: "test", Status: doctor.Pass, Evidence: "ok"}}}
 		},

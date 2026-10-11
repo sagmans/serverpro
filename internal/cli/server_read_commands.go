@@ -14,7 +14,7 @@ import (
 	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/doctor"
-	"github.com/sagmans/serverpro/internal/passwordhash"
+	"github.com/sagmans/serverpro/internal/lifecycle"
 	"github.com/sagmans/serverpro/internal/redact"
 	"github.com/sagmans/serverpro/internal/state"
 	"gopkg.in/yaml.v3"
@@ -102,7 +102,7 @@ func (a *app) runServerDoctor(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	var sudoPassword, adminPasswordHash string
+	var sudoPassword string
 	remoteTarget := st.Tailscale.Name != ""
 	if remoteTarget {
 		hasSudoEnv, err := sudoPasswordEnvSet(cfg)
@@ -119,17 +119,15 @@ func (a *app) runServerDoctor(ctx context.Context, name string) error {
 				return err
 			}
 			if a.doctorFix {
-				adminPasswordHash, err = passwordhash.GenerateSHA512(sudoPassword)
-				if err != nil {
-					return redact.New(a.redactionSecrets(creds)...).Error(err)
+				if err := lifecycle.ValidateAdminPassword(sudoPassword); err != nil {
+					return err
 				}
-				a.addRuntimeSecret(adminPasswordHash)
 			}
 		}
 	}
 	doctorCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
-	report := a.doctorReport(doctorCtx, cfg, st, creds, sudoPassword, adminPasswordHash)
+	report := a.doctorReport(doctorCtx, cfg, st, creds, sudoPassword)
 	if remoteTarget && !a.doctorFix && sudoPassword == "" && reportNeedsSudoPassword(report) {
 		sudoPassword, err = a.resolveSudoPassword(cfg)
 		if err != nil {

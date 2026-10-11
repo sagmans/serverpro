@@ -19,7 +19,7 @@ func TestRunCreatesCloudflareTunnelBeforeHetznerResources(t *testing.T) {
 	cfg.Cloudflare.Tunnel.Enabled = true
 	h := &fakeHetzner{}
 	ts := &fakeTailscale{}
-	_, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts", Cloudflare: "cf"}, StatePath: provisionStatePath(t), Clients: Clients{Compute: h, Tailscale: ts, Cloudflare: &fakeCloudflare{createErr: errors.New("forbidden")}, Remote: &fakeRemote{}}})
+	_, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts", Cloudflare: "cf"}, StatePath: provisionStatePath(t), Clients: Clients{Compute: h, Tailscale: ts, Cloudflare: &fakeCloudflare{createErr: errors.New("forbidden")}, Remote: &fakeRemote{}}})
 	if err == nil || !strings.Contains(err.Error(), "forbidden") {
 		t.Fatalf("expected cloudflare error, got %v", err)
 	}
@@ -147,7 +147,7 @@ func TestRunRejectsExistingStateForDifferentTarget(t *testing.T) {
 	}
 	h := &fakeHetzner{}
 	ts := &fakeTailscale{}
-	_, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: h, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
+	_, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: h, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
 	if err == nil || !strings.Contains(err.Error(), "state target mismatch") {
 		t.Fatalf("expected state mismatch error, got %v", err)
 	}

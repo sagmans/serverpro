@@ -537,6 +537,13 @@ on stderr explains the storage failure. Doctor failure exit behavior is unchange
 The existing cloud-init detail log remains at
 `~/.local/share/serverpro/logs/<namespace>/<server>/cloud-init-status-long.txt`.
 
+Doctor's `admin password hash` check reports only the crypt scheme of the
+admin's shadow entry. It fails on SHA-crypt (`$6$`, written to cloud-init by
+older serverpro releases) and other legacy schemes, and when no password is
+set. `--fix` asks for the admin sudo password and re-sets it with plain
+`chpasswd`, so the host stores it with its default (yescrypt), and clears any
+leftover first-boot sudo grant.
+
 `serverpro server doctor NAME --fix` refreshes package repositories, upgrades
 serverpro-managed apt packages, repairs exact pins, and checksum-verifies a
 stale Tailscale release. Docker checks also reject altered managed Buildx

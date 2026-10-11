@@ -7,6 +7,11 @@ import (
 	"github.com/sagmans/serverpro/internal/tailscaletools"
 )
 
+// BootstrapSudoersPath is the first-boot grant that lets the locked admin
+// account reach root before it has a password. lifecycle.AdminPasswordScript
+// removes it once the password is set.
+const BootstrapSudoersPath = "/etc/sudoers.d/90-serverpro-bootstrap"
+
 const (
 	tailscaleVersion     = tailscaletools.Version
 	tailscaleAMD64SHA256 = tailscaletools.AMD64SHA256
@@ -38,11 +43,17 @@ users:
   - name: {{ .Config.Admin.Username }}
     groups: sudo
     shell: /bin/bash
-    hashed_passwd: {{ .AdminPasswordHash }}
-    lock_passwd: false
+    lock_passwd: true
 ssh_pwauth: false
 disable_root: true
 write_files:
+  # First-boot grant only: the admin account is locked until serverpro sets
+  # its password over Tailscale SSH, which removes this file.
+  - path: ` + BootstrapSudoersPath + `
+    permissions: '0440'
+    content: |
+      Defaults:{{ .Config.Admin.Username }} verifypw=any
+      {{ .Config.Admin.Username }} ALL=(ALL) NOPASSWD:ALL
   - path: /etc/ssh/sshd_config.d/99-serverpro.conf
     permissions: '0644'
     content: |
