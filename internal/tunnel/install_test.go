@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -72,6 +73,9 @@ const (
 	// testDpkgUnpackedState is a dpkg state that is not "installed", so the
 	// candidate gate runs even though apt-cache marks the version as current.
 	testDpkgUnpackedState = "unpacked"
+	// testBinaryDigest is what the fake sha256sum reports for the connector,
+	// so a case opts into a matching install receipt by recording it.
+	testBinaryDigest = "0123456789abcdef"
 )
 
 // fakeDpkgCompareVersions really orders versions with sort -V (macOS and
@@ -117,10 +121,15 @@ func TestInstallScriptCloudflaredCandidateExecutableMatrix(t *testing.T) {
 		name, installedState, installedVersion, candidate string
 		origins                                           string
 		candidateMarked, candidateStatus                  bool
+		receipt                                           bool
 		wantOK                                            bool
 	}{
 		{name: "candidate-at-floor", candidate: baseline.MinimumVersion, origins: cloudflareAPTRepositoryURL, wantOK: true},
-		{name: "installed-at-floor-skips-candidate", installedState: "installed", installedVersion: baseline.MinimumVersion, candidate: testBelowAnyFloor, origins: testMirrorURL, wantOK: true},
+		{name: "installed-at-floor-with-receipt-skips-candidate", installedState: "installed", installedVersion: baseline.MinimumVersion, candidate: testBelowAnyFloor, origins: testMirrorURL, receipt: true, wantOK: true},
+		// Without a matching receipt the floor alone no longer keeps a
+		// connector: it must be replaced by a Cloudflare-only version.
+		{name: "installed-at-floor-without-receipt-needs-cloudflare-version", installedState: "installed", installedVersion: baseline.MinimumVersion, candidate: testBelowAnyFloor, origins: testMirrorURL},
+		{name: "installed-newer-without-receipt-replaced-from-cloudflare", installedState: "installed", installedVersion: "2099.1.0", candidate: baseline.MinimumVersion, origins: cloudflareAPTRepositoryURL, wantOK: true},
 		{name: "installed-below-floor-upgrades-from-cloudflare", installedState: "installed", installedVersion: belowFloor, candidate: baseline.MinimumVersion, origins: cloudflareAPTRepositoryURL, wantOK: true},
 		{name: "installed-below-floor-candidate-below-floor", installedState: "installed", installedVersion: belowFloor, candidate: belowFloor, origins: cloudflareAPTRepositoryURL, candidateMarked: true, candidateStatus: true},
 		{name: "config-files-newer-candidate-below-floor", installedState: "config-files", installedVersion: baseline.MinimumVersion, candidate: testBelowAnyFloor, origins: cloudflareAPTRepositoryURL},
@@ -150,7 +159,14 @@ func TestInstallScriptCloudflaredCandidateExecutableMatrix(t *testing.T) {
 			writeFakeCommand(t, binDir, "dpkg-query", "[ -n \"$INSTALLED_STATE\" ] || exit 1\ncase \"$*\" in *db:Status-Status*) printf '%s|%s' \"$INSTALLED_STATE\" \"$INSTALLED_VERSION\" ;; *) printf '%s' \"$INSTALLED_VERSION\" ;; esac\n")
 			writeFakeCommand(t, binDir, "dpkg", fakeDpkgCompareVersions)
 			writeFakeCommand(t, binDir, "apt-cache", fakeAptCachePolicy)
-			cmd := exec.Command("bash", "-c", `source "$1"; verify_cloudflared_candidate`, "test", scriptPath)
+			writeFakeCommand(t, binDir, "sha256sum", "printf '%s  %s\\n' \""+testBinaryDigest+"\" \"$1\"\n")
+			receiptPath := filepath.Join(dir, "cloudflared.receipt")
+			if tc.receipt {
+				if err := os.WriteFile(receiptPath, []byte(tc.installedVersion+" "+testBinaryDigest+"\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cmd := exec.Command("bash", "-c", `source "$1"; CLOUDFLARED_RECEIPT="$2"; verify_cloudflared_candidate`, "test", scriptPath, receiptPath)
 			cmd.Env = append(os.Environ(),
 				"SERVERPRO_TUNNEL_SOURCE_ONLY=1",
 				"PATH="+binDir+":"+os.Getenv("PATH"),
@@ -223,13 +239,17 @@ func TestCloudflaredCandidateOriginParsesRealPolicyOutput(t *testing.T) {
 				t.Fatal(err)
 			}
 			writeFakeCommand(t, binDir, "apt-cache", "cat \"$POLICY\"\n")
-			cmd := exec.Command("bash", "-c", `source "$1"; cloudflared_candidate_from_trusted_origin "$2"`, "test", scriptPath, wantVersion)
+			cmd := exec.Command("bash", "-c", `source "$1"; cloudflared_versions_from_trusted_origin`, "test", scriptPath)
 			cmd.Env = append(os.Environ(), "SERVERPRO_TUNNEL_SOURCE_ONLY=1", "PATH="+binDir+":"+os.Getenv("PATH"), "POLICY="+policyPath)
-			err := cmd.Run()
-			if tc.wantOK && err != nil {
-				t.Fatalf("Cloudflare-only candidate rejected: %v", err)
+			out, err := cmd.Output()
+			if err != nil {
+				t.Fatalf("origin parser failed: %v", err)
 			}
-			if !tc.wantOK && err == nil {
+			trusted := slices.Contains(strings.Fields(string(out)), wantVersion)
+			if tc.wantOK && !trusted {
+				t.Fatalf("Cloudflare-only candidate rejected: %q", out)
+			}
+			if !tc.wantOK && trusted {
 				t.Fatal("candidate with an untrusted or unknown source accepted")
 			}
 		})
@@ -426,7 +446,7 @@ func TestScriptsPinCloudflaredOriginAndWaitForAptLock(t *testing.T) {
 				`apt-get -o DPkg::Lock::Timeout="${APT_LOCK_TIMEOUT}"`,
 				"APT_LOCK_TIMEOUT=" + strconv.Itoa(hostplatform.APTLockTimeoutSeconds),
 				hostplatform.APTUpdateShellFunction(),
-				`apt_get install -y "${CLOUDFLARED_PACKAGE}=${candidate_version}"`,
+				`apt_get install -y "$@" "${CLOUDFLARED_PACKAGE}=${candidate_version}"`,
 				"CLOUDFLARED_APT_PREFERENCES_PATH=/etc/apt/preferences.d/serverpro-cloudflared",
 				"CLOUDFLARED_APT_REPOSITORY_URL=" + cloudflareAPTRepositoryURL,
 			} {
@@ -462,7 +482,7 @@ func TestWriteCloudflaredAptPinWritesOriginPreference(t *testing.T) {
 	if err != nil || info.Mode().Perm() != 0o644 {
 		t.Fatalf("preferences mode = %v, %v", info.Mode(), err)
 	}
-	if _, err := os.Stat(prefs + cloudflaredAPTPinStagingSuffix); !os.IsNotExist(err) {
+	if _, err := os.Stat(prefs + stagingSuffix); !os.IsNotExist(err) {
 		t.Fatalf("temp preferences file left behind: %v", err)
 	}
 }

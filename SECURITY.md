@@ -18,7 +18,9 @@ complete reviewed tool and package baseline.
 Exact artifact/runtime pins fail on drift. Direct apt dependencies use reviewed
 minimums instead: after repository refresh, needed signed candidates must meet
 the floor before package scripts run, installed results are verified, and newer
-security updates remain valid and are never downgraded. This avoids freezing security fixes while ensuring every
+security updates remain valid and are never downgraded. The one exception is a
+cloudflared connector that serverpro did not install: the cloudflared install
+and repair replace it with the Cloudflare build, even when it is newer. This avoids freezing security fixes while ensuring every
 previously unversioned direct dependency has an enforced baseline.
 
 ## Report a vulnerability
@@ -282,9 +284,21 @@ Managed host tools install through integrity-checked sources, not
   newer; ingress-enabled doctor runs verify both that floor and service state.
   Install and repair pin the `cloudflared` package to origin
   `pkg.cloudflare.com` (apt preferences, priority 990) so apt prefers it. The
-  pin only ranks sources. The control is the candidate gate: every repository
-  offering the candidate version must be the Cloudflare origin, so a candidate
-  offered only or also by another source is refused, even at a higher version.
+  pin only ranks sources. The control is the origin gate: install and repair
+  install only the newest version that the Cloudflare origin alone offers, so
+  a version offered only or also by another source is refused, even at a
+  higher version.
+- After each install, serverpro writes the installed version and the SHA-256
+  of `/usr/bin/cloudflared` to `/var/lib/serverpro/cloudflared.receipt`
+  (root, `0644`). Cloudflare's signed index lists only the latest release, so
+  apt cannot vouch for an older installed version; the receipt can. The
+  doctor check fails when the receipt is missing or when the installed
+  version or binary digest differs from it. This catches a connector from
+  `dpkg -i` or another repository, a same-version replacement, and an edited
+  binary, even above the floor. The repair then reinstalls the Cloudflare
+  build with `--reinstall`, and adds `--allow-downgrades` only to replace a
+  newer foreign build. The receipt proves only what serverpro installed; root
+  on the host can rewrite both the binary and the receipt.
 - The doctor sshd repair validates a candidate config with `sshd -t -f`
   before it touches the live files, writes the drop-in before the `Include`
   that activates it, and restores the previous files if the live config then
@@ -297,7 +311,8 @@ Managed host tools install through integrity-checked sources, not
   candidates before package scripts run, reject missing/below-floor packages,
   force the C locale while parsing apt output, require dpkg state `installed`
   rather than trusting stale `config-files` version metadata, verify installed
-  floors, preserve newer versions, and never request a downgrade.
+  floors, preserve newer versions, and never request a downgrade, except to
+  replace a cloudflared connector that serverpro did not install.
 - apt work waits for a concurrent apt run within one bounded budget
   (`internal/hostplatform`, 300 seconds) rather than failing or hanging.
   Package-list refreshes retry only apt's C-locale package-lists lock error;

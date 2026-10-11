@@ -43,10 +43,18 @@ const (
 	// 500 of every other repository yet below 1000, so the pin never asks apt
 	// to downgrade an installed newer connector.
 	cloudflaredAPTPinPriority = "990"
-	// cloudflaredAPTPinStagingSuffix names the sibling file the pin is staged
-	// in, so the rename that publishes it is atomic and apt never reads a
-	// half-written preference.
-	cloudflaredAPTPinStagingSuffix = ".serverpro-new"
+	// stagingSuffix names the sibling file the pin and the install receipt are
+	// staged in, so the rename that publishes each is atomic and neither apt
+	// nor the doctor check ever reads a half-written file.
+	stagingSuffix = ".serverpro-new"
+	// cloudflaredReceiptPath records the version and binary digest of the
+	// connector serverpro installed from the Cloudflare repository. The signed
+	// index lists only the latest release, so once Cloudflare ships a newer
+	// one apt can no longer vouch for the installed version; the receipt is
+	// what still tells serverpro's build apart from a connector placed by
+	// dpkg -i or another repository. It lives in cloud-init's serverpro state
+	// directory.
+	cloudflaredReceiptPath = "/var/lib/serverpro/cloudflared.receipt"
 	// dpkgStatusPath is the pseudo-repository apt-cache policy lists for the
 	// installed version. The origin gate skips it: it records what is already
 	// on disk, not a source apt can fetch the candidate from.
@@ -81,9 +89,9 @@ func cloudflareAPTOrigin() string {
 // the same package from any other configured repository. A pin only ranks
 // versions; it excludes no source. Another repository's version still becomes
 // the candidate when Cloudflare offers none or when the installed version is
-// newer than Cloudflare's (a pin below 1000 never downgrades), so
-// verify_cloudflared_candidate's origin gate is the control that refuses such
-// a candidate.
+// newer than Cloudflare's (a pin below 1000 never downgrades), so the
+// install and repair choose their target from the versions only Cloudflare
+// offers rather than from apt's candidate.
 func cloudflaredAPTPreferences() string {
 	return "Package: " + hostplatform.CloudflaredPackageBaseline().Name + "\nPin: origin \"" + cloudflareAPTOrigin() + "\"\nPin-Priority: " + cloudflaredAPTPinPriority + "\n"
 }
@@ -91,13 +99,19 @@ func cloudflaredAPTPreferences() string {
 // CheckCommand prints exactly one reason when the connector is unhealthy.
 // Doctor evidence carries this output because the batch error alone only
 // reports an exit status, which cannot tell a missing package from an
-// outdated one or a stopped service.
+// outdated one, a connector serverpro did not install, or a stopped service.
+// The provenance step compares the installed version and binary digest with
+// the install receipt, so a dpkg -i or other-repository connector fails even
+// above the package floor; it reads only world-readable files.
 func CheckCommand() string {
 	cloudflared := hostplatform.CloudflaredPackageBaseline()
 	return fmt.Sprintf(`export LC_ALL=C
 package_name=%[1]s
 minimum_version=%[2]s
 service_name=%[3]s
+receipt_path=%[4]s
+binary_path=%[5]s
+repository_url=%[6]s
 package_record=$(dpkg-query -W -f='${db:Status-Status}|${Version}' "${package_name}" 2>/dev/null) || package_record=
 package_status=${package_record%%%%|*}
 case "${package_record}" in
@@ -109,6 +123,20 @@ if ! dpkg --compare-versions "${installed_version}" ge "${minimum_version}"; the
   printf '%%s %%s is below minimum %%s\n' "${package_name}" "${installed_version}" "${minimum_version}"
   exit 1
 fi
+receipt_version=
+receipt_digest=
+if [ -r "${receipt_path}" ]; then
+  read -r receipt_version receipt_digest < "${receipt_path}"
+fi
+if [ -z "${receipt_version}" ]; then
+  printf '%%s install receipt is missing: %%s\n' "${package_name}" "${receipt_path}"
+  exit 1
+fi
+binary_digest=$(sha256sum "${binary_path}" 2>/dev/null | awk '{ print $1 }')
+if [ -z "${binary_digest}" ] || [ "${receipt_version}" != "${installed_version}" ] || [ "${receipt_digest}" != "${binary_digest}" ]; then
+  printf '%%s %%s is not the build serverpro installed from %%s\n' "${package_name}" "${installed_version}" "${repository_url}"
+  exit 1
+fi
 if ! service_state=$(systemctl is-active "${service_name}" 2>&1); then
   printf '%%s service is not active: %%s\n' "${service_name}" "${service_state:-unknown}"
   exit 1
@@ -117,6 +145,9 @@ printf '%%s %%s %%s\n' "${package_name}" "${installed_version}" "${service_state
 		shell.Quote(cloudflared.Name),
 		shell.Quote(cloudflared.MinimumVersion),
 		shell.Quote(cloudflaredServiceName),
+		shell.Quote(cloudflaredReceiptPath),
+		shell.Quote(cloudflaredBinaryPath),
+		shell.Quote(cloudflareAPTRepositoryURL),
 	)
 }
 
@@ -142,12 +173,14 @@ CLOUDFLARED_APT_SOURCE_PATH=%s
 CLOUDFLARED_APT_SOURCE=%s
 CLOUDFLARED_APT_REPOSITORY_URL=%s
 CLOUDFLARED_APT_PREFERENCES_PATH=%s
-CLOUDFLARED_APT_PIN_STAGING_SUFFIX=%s
+STAGING_SUFFIX=%s
 DPKG_STATUS_PATH=%s
 CLOUDFLARED_APT_PREFERENCES=%s
 APT_LOCK_TIMEOUT=%d
 CLOUDFLARED_UNIT=%s
 CLOUDFLARED_TOKEN=%s
+CLOUDFLARED_BINARY=%s
+CLOUDFLARED_RECEIPT=%s
 `,
 		hostplatform.ManagedHostOS,
 		hostplatform.ManagedHostVersion,
@@ -163,12 +196,14 @@ CLOUDFLARED_TOKEN=%s
 		shell.Quote(cloudflaredAPTSource()),
 		cloudflareAPTRepositoryURL,
 		cloudflaredAPTPreferencesPath,
-		cloudflaredAPTPinStagingSuffix,
+		stagingSuffix,
 		dpkgStatusPath,
 		shell.Quote(cloudflaredAPTPreferences()),
 		hostplatform.APTLockTimeoutSeconds,
 		cloudflaredUnitPath,
 		cloudflaredTokenPath,
+		cloudflaredBinaryPath,
+		cloudflaredReceiptPath,
 	)
 }
 
@@ -230,29 +265,33 @@ apt_get() {
 
 # write_cloudflared_apt_pin makes apt prefer the Cloudflare origin. The pin
 # ranks repositories but excludes none, so it cannot widen trust and the
-# repair may (re)write it; verify_cloudflared_candidate's origin gate is what
-# refuses a candidate from another repository.
+# repair may (re)write it; verify_cloudflared_candidate is what refuses a
+# version another repository offers.
 write_cloudflared_apt_pin() {
-  pin_staging_path=${CLOUDFLARED_APT_PREFERENCES_PATH}${CLOUDFLARED_APT_PIN_STAGING_SUFFIX}
+  pin_staging_path=${CLOUDFLARED_APT_PREFERENCES_PATH}${STAGING_SUFFIX}
   install -d -m 0755 "$(dirname "${CLOUDFLARED_APT_PREFERENCES_PATH}")"
   printf '%s' "${CLOUDFLARED_APT_PREFERENCES}" > "${pin_staging_path}"
   chmod 0644 "${pin_staging_path}"
   mv -f "${pin_staging_path}" "${CLOUDFLARED_APT_PREFERENCES_PATH}"
 }
 
-# cloudflared_candidate_from_trusted_origin succeeds only when every
-# repository offering the candidate version is the Cloudflare one, so apt
-# cannot fetch that version from anywhere else. It is the enforcing control:
-# the origin pin only ranks repositories.
+# cloudflared_versions_from_trusted_origin prints each version that only the
+# Cloudflare repository offers, so apt cannot fetch it from anywhere else. It
+# is the enforcing origin control: the origin pin only ranks repositories.
 #
 # In the version table a version line is "[***] <version> <priority>" and each
 # source under it is "<priority> <url> <suite> <arch> Packages" or
 # "<priority> <dpkg status path>". The status line also has two fields, so it
 # is matched before the version line or it would end the version being read.
-# Any other line under the wanted version counts as an untrusted source, so an
-# unexpected format fails closed.
-cloudflared_candidate_from_trusted_origin() {
-  apt-cache policy "${CLOUDFLARED_PACKAGE}" | awk -v want="$1" -v repo="${CLOUDFLARED_APT_REPOSITORY_URL}" -v status="${DPKG_STATUS_PATH}" '
+# The status line is skipped because it records what is on disk, not a
+# source. A version listed twice (a dpkg -i package whose control fields
+# differ from Cloudflare's) is judged across both entries. Any other line
+# under a version counts as an untrusted source, so an unexpected format
+# fails closed. The policy is read before parsing because a pipeline would
+# report awk's status and hide an apt-cache failure as "no trusted version".
+cloudflared_versions_from_trusted_origin() {
+  policy=$(apt-cache policy "${CLOUDFLARED_PACKAGE}") || return 1
+  printf '%s\n' "${policy}" | awk -v repo="${CLOUDFLARED_APT_REPOSITORY_URL}" -v status="${DPKG_STATUS_PATH}" '
     /Version table:/ { table = 1; next }
     !table { next }
     {
@@ -262,39 +301,100 @@ cloudflared_candidate_from_trusted_origin() {
       if (n == 0) { next }
       if (n == 2 && field[1] ~ /^-?[0-9]+$/ && field[2] == status) { next }
       if (n == 2 && field[2] ~ /^-?[0-9]+$/) { current = field[1]; next }
-      if (current != want) { next }
-      total++
-      if (field[1] ~ /^-?[0-9]+$/ && field[2] == repo && field[n] == "Packages") { trusted++ }
+      if (current == "") { next }
+      total[current]++
+      if (field[1] ~ /^-?[0-9]+$/ && field[2] == repo && field[n] == "Packages") { trusted[current]++ }
     }
-    END { exit !(total > 0 && total == trusted) }
+    END { for (version in total) if (total[version] == trusted[version]) print version }
   '
 }
 
+# newest_cloudflared_version_from_trusted_origin picks the install target
+# instead of apt's Candidate: below priority 1000 apt keeps an installed newer
+# connector from another source as Candidate, which would leave the repair
+# nothing trusted to restore.
+newest_cloudflared_version_from_trusted_origin() {
+  newest=
+  trusted_versions=$(cloudflared_versions_from_trusted_origin) || return 1
+  for version in ${trusted_versions}; do
+    if [ -z "${newest}" ] || ! dpkg --compare-versions "${newest}" ge "${version}"; then
+      newest=${version}
+    fi
+  done
+  printf '%s' "${newest}"
+}
+
+# cloudflared_binary_digest names the connector by content, because a
+# same-version package from another source differs only in its bytes.
+cloudflared_binary_digest() {
+  digest=$(sha256sum "${CLOUDFLARED_BINARY}") || return 1
+  printf '%s' "${digest%% *}"
+}
+
+# cloudflared_receipt_matches succeeds only when the installed connector is
+# the exact build install_cloudflared_candidate recorded. Without it a
+# connector at or above the floor would pass however it got onto the host.
+cloudflared_receipt_matches() {
+  installed_version=$(installed_cloudflared_version) || return 1
+  [ -r "${CLOUDFLARED_RECEIPT}" ] || return 1
+  read -r receipt_version receipt_digest < "${CLOUDFLARED_RECEIPT}" || return 1
+  actual_digest=$(cloudflared_binary_digest 2>/dev/null) || return 1
+  [ -n "${actual_digest}" ] && [ "${receipt_version}" = "${installed_version}" ] && [ "${receipt_digest}" = "${actual_digest}" ]
+}
+
+# record_cloudflared_receipt runs only after apt installed the verified
+# Cloudflare version, so the receipt never vouches for another build.
+record_cloudflared_receipt() {
+  receipt_staging_path=${CLOUDFLARED_RECEIPT}${STAGING_SUFFIX}
+  install -d -m 0755 "$(dirname "${CLOUDFLARED_RECEIPT}")"
+  receipt_digest=$(cloudflared_binary_digest)
+  printf '%s %s\n' "${candidate_version}" "${receipt_digest}" > "${receipt_staging_path}"
+  chmod 0644 "${receipt_staging_path}"
+  mv -f "${receipt_staging_path}" "${CLOUDFLARED_RECEIPT}"
+}
+
+# verify_cloudflared_candidate keeps a connector only when it is above the
+# floor and matches the receipt. Anything else, including a newer connector
+# from another source, is replaced by the newest version only Cloudflare
+# offers.
 verify_cloudflared_candidate() {
-  if installed_version=$(installed_cloudflared_version) && dpkg --compare-versions "${installed_version}" ge "${CLOUDFLARED_MINIMUM_VERSION}"; then
-    candidate_version=
+  candidate_version=
+  if installed_version=$(installed_cloudflared_version) && dpkg --compare-versions "${installed_version}" ge "${CLOUDFLARED_MINIMUM_VERSION}" && cloudflared_receipt_matches; then
     return 0
   fi
-  candidate_version=$(apt-cache policy "${CLOUDFLARED_PACKAGE}" | awk '$1 == "Candidate:" { print $2; exit }')
-  if [ -z "${candidate_version}" ] || [ "${candidate_version}" = '(none)' ]; then
-    printf 'cloudflared has no install candidate\n' >&2
+  if ! candidate_version=$(newest_cloudflared_version_from_trusted_origin); then
+    printf 'apt-cache policy %s failed\n' "${CLOUDFLARED_PACKAGE}" >&2
+    return 1
+  fi
+  if [ -z "${candidate_version}" ]; then
+    printf 'no cloudflared version is offered only by %s\n' "${CLOUDFLARED_APT_REPOSITORY_URL}" >&2
     return 1
   fi
   if ! dpkg --compare-versions "${candidate_version}" ge "${CLOUDFLARED_MINIMUM_VERSION}"; then
     printf 'cloudflared candidate is below minimum %s: %s\n' "${CLOUDFLARED_MINIMUM_VERSION}" "${candidate_version}" >&2
     return 1
   fi
-  if ! cloudflared_candidate_from_trusted_origin "${candidate_version}"; then
-    printf 'cloudflared candidate %s is not offered only by %s\n' "${candidate_version}" "${CLOUDFLARED_APT_REPOSITORY_URL}" >&2
-    return 1
-  fi
 }
 
-# install_cloudflared_candidate installs the exact verified candidate version.
+# install_cloudflared_candidate installs the exact verified version and then
+# records it. --reinstall replaces a same-version build from another source,
+# and --allow-downgrades is added only to replace a newer untrusted connector,
+# because the exact version is already verified as Cloudflare-only.
 install_cloudflared_candidate() {
-  if [ -n "${candidate_version:-}" ]; then
-    apt_get install -y "${CLOUDFLARED_PACKAGE}=${candidate_version}"
+  if [ -z "${candidate_version:-}" ]; then
+    return 0
   fi
+  set -- --reinstall
+  if installed_version=$(installed_cloudflared_version) && ! dpkg --compare-versions "${candidate_version}" ge "${installed_version}"; then
+    set -- "$@" --allow-downgrades
+  fi
+  apt_get install -y "$@" "${CLOUDFLARED_PACKAGE}=${candidate_version}"
+  installed_version=$(installed_cloudflared_version) || installed_version=none
+  if [ "${installed_version}" != "${candidate_version}" ]; then
+    printf 'cloudflared %s is installed after installing %s\n' "${installed_version}" "${candidate_version}" >&2
+    return 1
+  fi
+  record_cloudflared_receipt
 }
 
 # Trust exactly one approved primary key; subkeys cannot satisfy identity and
@@ -434,7 +534,10 @@ UNIT
 	) + scriptFooter
 }
 
-// UpgradeScript is the doctor repair for an outdated or stopped connector.
+// UpgradeScript is the doctor repair for an outdated, untrusted, or stopped
+// connector. A connector that does not match the install receipt is
+// reinstalled from Cloudflare, so a dpkg -i or other-repository build is
+// replaced even when it is newer.
 // Provisioning pins cloudflared with --no-autoupdate and stock unattended
 // upgrades skip pkg.cloudflare.com, so a raised package floor otherwise never
 // reaches existing hosts. It reuses provisioning's trusted repository and
@@ -444,7 +547,7 @@ func UpgradeScript() string {
 main() {
   require_supported_host
   require_cloudflared_service_setup
-  if ! verify_cloudflared_minimum; then
+  if ! verify_cloudflared_minimum || ! cloudflared_receipt_matches; then
     verify_trusted_cloudflare_apt_key
     verify_cloudflared_apt_source
     write_cloudflared_apt_pin

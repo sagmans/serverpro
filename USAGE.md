@@ -568,11 +568,19 @@ repair does not delete them. Tailscale daemon restart is delayed until the updat
 SSH command returns, then doctor waits and rechecks it. When ingress is enabled, doctor verifies cloudflared is active and at or above
 its reviewed `2026.9.3` package floor. A failed `cloudflared` check names one
 reason: the package is not installed, its package status, the installed version
-below the floor, or the service state from `systemctl is-active`.
+below the floor, a missing install receipt, a connector that is "not the build
+serverpro installed from https://pkg.cloudflare.com/cloudflared", or the service
+state from `systemctl is-active`. The receipt is
+`/var/lib/serverpro/cloudflared.receipt`. Hosts provisioned before it existed
+report it missing until `--fix` reinstalls the connector once.
 Cloudflared remains conditional ingress infrastructure and is not upgraded by
 generic host-tool repair. Instead, `--fix` runs a dedicated cloudflared repair.
 It upgrades from the Cloudflare apt repository that provisioning trusted, then
-enables and restarts the service. It does not change the tunnel token. It fails
+enables and restarts the service. A connector from `dpkg -i`, another
+repository, or an edited binary is reinstalled from Cloudflare, also when it is
+newer. When no version is offered only by Cloudflare, the repair stops with
+"no cloudflared version is offered only by https://pkg.cloudflare.com/cloudflared";
+remove the other source that offers it. It does not change the tunnel token. It fails
 with a "reprovision the server" message when the service unit, token file,
 pinned keyring, or exact apt source line is missing or changed.
 Provisioning, bootstrap, and `--fix` apt work waits up to 5 minutes for each

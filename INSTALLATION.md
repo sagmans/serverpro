@@ -89,7 +89,9 @@ A fixed C locale keeps apt candidate parsing independent of host language. Only
 dpkg state `installed` satisfies a floor; stale version metadata from a
 removed package in `config-files` state triggers candidate validation instead.
 Existing newer packages remain valid and are never downgraded; Ubuntu and vendor
-security updates therefore continue normally.
+security updates therefore continue normally. The exception is a cloudflared
+connector serverpro did not install from `pkg.cloudflare.com`: install and
+`doctor --fix` replace it with the Cloudflare build, even when it is newer.
 
 | Package | Minimum version |
 | --- | --- |
