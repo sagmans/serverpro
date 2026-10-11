@@ -169,6 +169,10 @@ access paths for app-owned deployment flows.
     before restarting its daemon after the SSH update command returns. With
     ingress enabled, `--fix` also runs the cloudflared repair from
     `internal/tunnel` under a longer per-command deadline.
+    Every sshd hardening check shares one fix. That fix rewrites the
+    serverpro drop-in and reloads ssh only when the managed config differs,
+    so several failing sshd checks cannot trip systemd's start rate limit.
+    Remote checks already run in a root shell and never call sudo again.
     Package/tool and generic fixable-check failures (including cloudflared)
     retain the check's own captured output without duplicating output already
     present in SSH errors. The batch error itself still carries only the

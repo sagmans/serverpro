@@ -51,14 +51,18 @@ var sshdHardeningExpectations = map[string]string{
 	sshdKeywordPermitOpen:                   sshdValueNone,
 }
 
+// sshdSettingValueCommand and sshdChallengeResponseCommand run inside the
+// remote runner's root shell, so they call sshd and grep directly: a nested
+// root-to-root sudo re-enters PAM account checks and fails on hosts whose
+// root password is expired (some provider images), masking the real setting.
 func sshdSettingValueCommand(keyword, value string) string {
 	expected := strings.ToLower(keyword) + " " + value
 	configured := keyword + " " + value
-	return "out=\"$(sudo sshd -T 2>&1)\"; " +
+	return "out=\"$(sshd -T 2>&1)\"; " +
 		"if printf '%s\n' \"$out\" | grep -Fx " + shell.Quote(expected) + "; then exit 0; fi; " +
 		"case \"$out\" in *\"Missing privilege separation directory: /run/sshd\"*) " +
-		"sudo grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config[.]d/[*][.]conf([[:space:]]|$)' /etc/ssh/sshd_config && " +
-		"sudo grep -Fx " + shell.Quote(configured) + " /etc/ssh/sshd_config.d/99-serverpro.conf && " +
+		"grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config[.]d/[*][.]conf([[:space:]]|$)' /etc/ssh/sshd_config && " +
+		"grep -Fx " + shell.Quote(configured) + " /etc/ssh/sshd_config.d/99-serverpro.conf && " +
 		"printf '%s\n' " + shell.Quote("sshd inactive; /run/sshd absent; serverpro config contains "+configured) + " ;; " +
 		"*) printf '%s\n' \"$out\"; exit 1 ;; esac"
 }
@@ -66,11 +70,11 @@ func sshdSettingValueCommand(keyword, value string) string {
 func sshdChallengeResponseCommand() string {
 	configured := sshdKeywordChallengeResponseAuth + " " + sshdHardeningExpectations[sshdKeywordChallengeResponseAuth]
 	effectiveExpected := strings.ToLower(sshdKeywordKbdInteractiveAuthentication) + " " + sshdHardeningExpectations[sshdKeywordKbdInteractiveAuthentication]
-	return "out=\"$(sudo sshd -T 2>&1)\"; " +
+	return "out=\"$(sshd -T 2>&1)\"; " +
 		"if printf '%s\n' \"$out\" | grep -Fx " + shell.Quote(effectiveExpected) + "; then exit 0; fi; " +
 		"case \"$out\" in *\"Missing privilege separation directory: /run/sshd\"*) " +
-		"sudo grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config[.]d/[*][.]conf([[:space:]]|$)' /etc/ssh/sshd_config && " +
-		"sudo grep -Fx " + shell.Quote(configured) + " /etc/ssh/sshd_config.d/99-serverpro.conf && " +
+		"grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config[.]d/[*][.]conf([[:space:]]|$)' /etc/ssh/sshd_config && " +
+		"grep -Fx " + shell.Quote(configured) + " /etc/ssh/sshd_config.d/99-serverpro.conf && " +
 		"printf '%s\n' " + shell.Quote("sshd inactive; /run/sshd absent; serverpro config contains "+configured) + " ;; " +
 		"*) printf '%s\n' \"$out\"; exit 1 ;; esac"
 }
@@ -225,16 +229,26 @@ case "$hash" in
 esac`
 }
 
+// sshdSettingsFixCommand is shared by every sshd hardening check, so one
+// doctor --fix run can invoke it once per failing setting. It therefore only
+// rewrites and reloads when the managed config actually differs: back-to-back
+// restarts trip systemd's start rate limit and leave ssh.service failed.
+// try-reload-or-restart applies a change to a running daemon without a new
+// start and leaves a socket-activated, inactive ssh.service inactive; the next
+// socket-spawned sshd reads the new config.
 func sshdSettingsFixCommand() string {
 	return `mkdir -p /etc/ssh/sshd_config.d /run/sshd
+changed=0
 if ! grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config[.]d/[*][.]conf([[:space:]]|$)' /etc/ssh/sshd_config; then
   tmp="$(mktemp)"
   printf 'Include /etc/ssh/sshd_config.d/*.conf\n' > "$tmp"
   cat /etc/ssh/sshd_config >> "$tmp"
   cat "$tmp" > /etc/ssh/sshd_config
   rm -f "$tmp"
+  changed=1
 fi
-cat > /etc/ssh/sshd_config.d/99-serverpro.conf <<'EOF'
+desired="$(mktemp)"
+cat > "$desired" <<'EOF'
 PermitRootLogin no
 PasswordAuthentication no
 KbdInteractiveAuthentication no
@@ -245,5 +259,11 @@ AllowTcpForwarding no
 PermitTunnel no
 PermitOpen none
 EOF
-sshd -t && systemctl restart ssh`
+if ! cmp -s "$desired" /etc/ssh/sshd_config.d/99-serverpro.conf; then
+  cat "$desired" > /etc/ssh/sshd_config.d/99-serverpro.conf
+  changed=1
+fi
+rm -f "$desired"
+if [ "$changed" -eq 0 ]; then sshd -t; exit; fi
+sshd -t && systemctl try-reload-or-restart ssh`
 }
