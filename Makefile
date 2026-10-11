@@ -121,8 +121,11 @@ link-bin: bin
 lint: ${GOLANGCI_LINT_STAMP}
 	GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE}" "${GOLANGCI_LINT}" run
 
+# An empty script list (no Git, tarball checkout, dubious-ownership refusal)
+# must fail loudly rather than reach shellcheck with no files.
 lint-shell:
 	command -v "${SHELLCHECK}" >/dev/null 2>&1 || { echo "lint-shell: ${SHELLCHECK} not found; install ShellCheck with your system package manager" >&2; exit 1; }
+	test -n "${SHELL_LINT_SCRIPTS}" || { echo "lint-shell: no Git-tracked *.sh files found; run from a Git checkout" >&2; exit 1; }
 	"${SHELLCHECK}" -x ${SHELL_LINT_SCRIPTS}
 
 vuln: ${GOVULNCHECK_STAMP}
