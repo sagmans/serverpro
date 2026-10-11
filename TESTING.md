@@ -151,6 +151,11 @@ password. Commands went through the runner's admin `sudo -S -v` and
   starting `ssh.service`, and repeated runs passed.
 - With the socket disabled, the fix started the enabled `ssh.service`. With
   both units disabled, it started nothing.
+- Nine fixes against a running daemon with unchanged config each reloaded
+  it. The main PID stayed the same and the unit result stayed `success`.
+- A `mktemp` failure exited nonzero and left the drop-in unchanged.
+- An enabled socket that was stopped failed the `sshd units` check, and the fix
+  restarted it. An idle `ssh.service` behind an active socket passed.
 
 ## Doctor output coverage
 

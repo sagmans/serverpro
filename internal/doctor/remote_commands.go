@@ -86,21 +86,26 @@ func sshdChallengeResponseCommand() string {
 		"*) printf '%s\n' \"$out\"; exit 1 ;; esac"
 }
 
-// sshdUnitsReadCommand fails while either ssh unit sits in the failed state,
-// naming the units so the evidence points at the exact recovery target.
+// sshdUnitsReadCommand fails while an ssh unit is failed, or enabled but not
+// running, and names each unit so the evidence points at the recovery target.
+// ssh.service stays inactive by design while ssh.socket listens, so that case
+// passes.
 func sshdUnitsReadCommand() string {
-	return "failed=''\n" +
+	return "bad=''\n" +
 		"for unit in " + sshSocketUnit + " " + sshServiceUnit + "; do\n" +
-		"  if systemctl is-failed --quiet \"$unit\"; then failed=\"$failed $unit\"; fi\n" +
+		"  if systemctl is-failed --quiet \"$unit\"; then bad=\"$bad $unit:failed\"; continue; fi\n" +
+		"  if [ \"$unit\" = " + sshServiceUnit + " ] && systemctl is-active --quiet " + sshSocketUnit + "; then continue; fi\n" +
+		"  if systemctl is-enabled --quiet \"$unit\" && ! systemctl is-active --quiet \"$unit\"; then bad=\"$bad $unit:inactive\"; fi\n" +
 		"done\n" +
-		"if [ -n \"$failed\" ]; then printf 'failed ssh units:%s\\n' \"$failed\"; exit 1; fi\n" +
-		"printf '%s\\n' 'no failed ssh units'"
+		"if [ -n \"$bad\" ]; then printf 'unhealthy ssh units:%s\\n' \"$bad\"; exit 1; fi\n" +
+		"printf '%s\\n' 'ssh units healthy'"
 }
 
-// sshdUnitsFixCommand clears the failed state and restores whichever unit
-// the host enables, so a socket-activated host gets its listener back
-// without also starting a standalone daemon. It never enables a disabled
-// unit; public port 22 stays closed by the ufw checks either way.
+// sshdUnitsFixCommand clears the failed state and starts whichever unit the
+// host enables, preferring the socket so a socket-activated host does not
+// also gain a standalone daemon. It never enables a disabled unit, so it only
+// returns the host to its own configured listener; the ufw checks earlier in
+// the same plan are what keep public port 22 denied.
 func sshdUnitsFixCommand() string {
 	return "for unit in " + sshSocketUnit + " " + sshServiceUnit + "; do\n" +
 		"  if systemctl is-failed --quiet \"$unit\"; then systemctl reset-failed \"$unit\"; fi\n" +
@@ -266,20 +271,22 @@ esac`
 // restarts trip systemd's start rate limit and leave ssh.service failed.
 // try-reload-or-restart applies a change to a running daemon without a new
 // start and leaves a socket-activated, inactive ssh.service inactive; the next
-// socket-spawned sshd reads the new config.
+// socket-spawned sshd reads the new config. A running daemon is reloaded even
+// when the files already match, because an earlier reload may have failed
+// after the write and sshd -T only proves the on-disk config. Every temp-file
+// step exits on failure, since an empty path would truncate the target.
 func sshdSettingsFixCommand() string {
 	return `mkdir -p /etc/ssh/sshd_config.d /run/sshd
 changed=0
 if ! grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config[.]d/[*][.]conf([[:space:]]|$)' /etc/ssh/sshd_config; then
-  tmp="$(mktemp)"
-  printf 'Include /etc/ssh/sshd_config.d/*.conf\n' > "$tmp"
-  cat /etc/ssh/sshd_config >> "$tmp"
-  cat "$tmp" > /etc/ssh/sshd_config
+  tmp="$(mktemp)" || exit 1
+  { printf 'Include /etc/ssh/sshd_config.d/*.conf\n'; cat /etc/ssh/sshd_config; } > "$tmp" || { rm -f "$tmp"; exit 1; }
+  cat "$tmp" > /etc/ssh/sshd_config || { rm -f "$tmp"; exit 1; }
   rm -f "$tmp"
   changed=1
 fi
-desired="$(mktemp)"
-cat > "$desired" <<'EOF'
+desired="$(mktemp)" || exit 1
+cat > "$desired" <<'EOF' || { rm -f "$desired"; exit 1; }
 PermitRootLogin no
 PasswordAuthentication no
 KbdInteractiveAuthentication no
@@ -291,10 +298,10 @@ PermitTunnel no
 PermitOpen none
 EOF
 if ! cmp -s "$desired" /etc/ssh/sshd_config.d/99-serverpro.conf; then
-  cat "$desired" > /etc/ssh/sshd_config.d/99-serverpro.conf
+  cat "$desired" > /etc/ssh/sshd_config.d/99-serverpro.conf || { rm -f "$desired"; exit 1; }
   changed=1
 fi
 rm -f "$desired"
-if [ "$changed" -eq 0 ]; then sshd -t; exit; fi
+if [ "$changed" -eq 0 ] && ! systemctl is-active --quiet ` + sshServiceUnit + `; then sshd -t; exit; fi
 sshd -t && systemctl try-reload-or-restart ssh`
 }
