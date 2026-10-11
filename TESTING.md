@@ -280,6 +280,13 @@ apt-daily.
 - With the dpkg frontend lock held instead, plain `apt-get update` returned 0,
   which confirms that update never takes the dpkg lock and that
   `DPkg::Lock::Timeout` cannot cover it.
+- In a disposable systemd-booted Ubuntu 24.04 container, the real
+  `apt-daily.service` started a full package-list download (throttled only for
+  that run) and held the lists lock. The rendered cloudflared install script
+  then printed apt's lock error and the wait notice, waited, refreshed, and
+  installed cloudflared from `pkg.cloudflare.com`, returning 0 after
+  174 seconds. That run outlasts the 2-minute transport default, which is why
+  provisioning now runs the install under the shared connector deadline.
 
 ## Command surface matrix
 
