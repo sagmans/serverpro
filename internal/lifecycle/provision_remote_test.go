@@ -19,14 +19,14 @@ func TestRunBootstrapsTunnelAndLockdownOverRemote(t *testing.T) {
 	cfg.Cloudflare.AccountID = "acc"
 	cfg.Cloudflare.Tunnel.Enabled = true
 	r := &fakeRemote{}
-	_, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api", Cloudflare: "cf"}, StatePath: provisionStatePath(t), Clients: Clients{Compute: &fakeHetzner{}, Tailscale: &fakeTailscale{}, Cloudflare: &fakeCloudflare{}, Remote: r}})
+	_, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts-api", Cloudflare: "cf"}, StatePath: provisionStatePath(t), Clients: Clients{Compute: &fakeHetzner{}, Tailscale: &fakeTailscale{}, Cloudflare: &fakeCloudflare{}, Remote: r}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(r.scripts) != 4 {
-		t.Fatalf("expected remote probe, tunnel install, server tool bootstrap, and lockdown scripts, got %d: %q", len(r.scripts), r.scripts)
+	if len(r.scripts) != 5 {
+		t.Fatalf("expected remote probe, admin password, tunnel install, server tool bootstrap, and lockdown scripts, got %d: %q", len(r.scripts), r.scripts)
 	}
-	if r.scripts[0] != "true" || !strings.Contains(r.scripts[1], "cloudflared") || !strings.Contains(r.scripts[2], "serverpro-bootstrap-tools") || !strings.Contains(r.scripts[2], "@earendil-works/pi-coding-agent") || !strings.Contains(r.scripts[2], "bootstrap packages apply --yes") || !strings.Contains(r.scripts[2], "bootstrap packages upgrade --yes") || !strings.Contains(r.scripts[2], "mise --yes install") || !strings.Contains(r.scripts[2], "SERVERPRO_BOOTSTRAP_TMUX_VERSION") || !strings.Contains(r.scripts[3], "ufw default deny outgoing") || !strings.Contains(r.scripts[3], "ufw allow out 7844/tcp") {
+	if r.scripts[0] != "true" || r.scripts[1] != AdminPasswordScript(cfg.Admin.Username) || !strings.Contains(r.scripts[2], "cloudflared") || !strings.Contains(r.scripts[3], "serverpro-bootstrap-tools") || !strings.Contains(r.scripts[3], "@earendil-works/pi-coding-agent") || !strings.Contains(r.scripts[3], "bootstrap packages apply --yes") || !strings.Contains(r.scripts[3], "bootstrap packages upgrade --yes") || !strings.Contains(r.scripts[3], "mise --yes install") || !strings.Contains(r.scripts[3], "SERVERPRO_BOOTSTRAP_TMUX_VERSION") || !strings.Contains(r.scripts[4], "ufw default deny outgoing") || !strings.Contains(r.scripts[4], "ufw allow out 7844/tcp") {
 		t.Fatalf("unexpected remote scripts: %q", r.scripts)
 	}
 }
@@ -35,17 +35,17 @@ func TestRunSkipsCloudflareBootstrapWhenIngressDisabled(t *testing.T) {
 	cfg := config.Example("prod")
 	cf := &fakeCloudflare{}
 	r := &fakeRemote{}
-	_, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api"}, StatePath: provisionStatePath(t), Clients: Clients{Compute: &fakeHetzner{}, Tailscale: &fakeTailscale{}, Cloudflare: cf, Remote: r}})
+	_, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts-api"}, StatePath: provisionStatePath(t), Clients: Clients{Compute: &fakeHetzner{}, Tailscale: &fakeTailscale{}, Cloudflare: cf, Remote: r}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cf.tokenRequests != 0 {
 		t.Fatalf("disabled ingress requested Cloudflare tunnel token %d times", cf.tokenRequests)
 	}
-	if len(r.scripts) != 3 {
-		t.Fatalf("expected remote probe, server tool bootstrap, and lockdown scripts, got %d: %q", len(r.scripts), r.scripts)
+	if len(r.scripts) != 4 {
+		t.Fatalf("expected remote probe, admin password, server tool bootstrap, and lockdown scripts, got %d: %q", len(r.scripts), r.scripts)
 	}
-	if r.scripts[0] != "true" || strings.Contains(r.scripts[1], "cloudflared") || !strings.Contains(r.scripts[1], "serverpro-bootstrap-tools") || !strings.Contains(r.scripts[1], "bootstrap packages apply --yes") || !strings.Contains(r.scripts[1], "bootstrap packages upgrade --yes") || !strings.Contains(r.scripts[1], "mise --yes install") || !strings.Contains(r.scripts[2], "ufw default deny outgoing") {
+	if r.scripts[0] != "true" || r.scripts[1] != AdminPasswordScript(cfg.Admin.Username) || strings.Contains(r.scripts[2], "cloudflared") || !strings.Contains(r.scripts[2], "serverpro-bootstrap-tools") || !strings.Contains(r.scripts[2], "bootstrap packages apply --yes") || !strings.Contains(r.scripts[2], "bootstrap packages upgrade --yes") || !strings.Contains(r.scripts[2], "mise --yes install") || !strings.Contains(r.scripts[3], "ufw default deny outgoing") {
 		t.Fatalf("unexpected remote scripts: %q", r.scripts)
 	}
 }
@@ -108,6 +108,10 @@ func (r *sequenceRemote) Run(context.Context, string, string, string) (string, e
 	err := r.errors[r.calls]
 	r.calls++
 	return "", err
+}
+
+func (r *sequenceRemote) RunWithInput(ctx context.Context, user, host, script, _ string) (string, error) {
+	return r.Run(ctx, user, host, script)
 }
 
 type errorRemote struct {

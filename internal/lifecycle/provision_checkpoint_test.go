@@ -17,7 +17,7 @@ func TestRunSavesTunnelCreatedBeforeTailscaleFailure(t *testing.T) {
 	cfg.Cloudflare.AccountID = "acc"
 	cfg.Cloudflare.Tunnel.Enabled = true
 	path := provisionStatePath(t)
-	_, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: &fakeTailscale{keyErr: context.Canceled}, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
+	_, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: &fakeTailscale{keyErr: context.Canceled}, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
 	if err == nil {
 		t.Fatal("expected tailscale error")
 	}
@@ -37,7 +37,7 @@ func TestRunSavesTunnelCreatedBeforeFirewallFailure(t *testing.T) {
 	path := provisionStatePath(t)
 	h := &fakeHetzner{firewallErr: errors.New("firewall failed")}
 	ts := &fakeTailscale{deleteErr: errors.New("auth key delete failed")}
-	_, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: h, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
+	_, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: h, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
 	if err == nil || !strings.Contains(err.Error(), "firewall failed") {
 		t.Fatalf("expected firewall failure, got %v", err)
 	}
@@ -66,7 +66,7 @@ func TestRunCheckpointsComputeResourcesBeforeLateProvisionFailure(t *testing.T) 
 			cfg.Cloudflare.AccountID = "acc"
 			cfg.Cloudflare.Tunnel.Enabled = true
 			path := provisionStatePath(t)
-			_, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: test.compute, Tailscale: &fakeTailscale{}, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
+			_, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: test.compute, Tailscale: &fakeTailscale{}, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
 			if err == nil || !strings.Contains(err.Error(), test.wantError) {
 				t.Fatalf("expected %q failure, got %v", test.wantError, err)
 			}

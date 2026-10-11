@@ -20,7 +20,7 @@ func TestRunDeletesCheckpointedAuthKeyBeforeCreatingReplacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	ts := &fakeTailscale{}
-	if _, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}}); err != nil {
+	if _, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts-api"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}}); err != nil {
 		t.Fatal(err)
 	}
 	if len(ts.deletedKeyIDs) != 2 || ts.deletedKeyIDs[0] != "old-key" || ts.deletedKeyIDs[1] != "k1" {
@@ -43,7 +43,7 @@ func TestRunKeepsCheckpointedAuthKeyWhileExistingComputeBoots(t *testing.T) {
 		t.Fatal(err)
 	}
 	ts := &fakeTailscale{}
-	if _, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}}); err != nil {
+	if _, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts-api"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}}); err != nil {
 		t.Fatal(err)
 	}
 	if ts.created || len(ts.deletedKeyIDs) != 1 || ts.deletedKeyIDs[0] != "old-key" {
@@ -58,7 +58,7 @@ func TestRunStopsWhenCheckpointedAuthKeyCleanupFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	ts := &fakeTailscale{deleteErr: context.Canceled}
-	_, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
+	_, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts-api"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
 	var provisionErr *ProvisionError
 	if !errors.As(err, &provisionErr) || provisionErr.Phase != ProvisionPhaseTailscaleAuthKey || !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected typed stale-key cleanup failure, got %T %v", err, err)
@@ -77,7 +77,7 @@ func TestRunCompletesWhenFinalAuthKeyCleanupReturnsNotFound(t *testing.T) {
 	cfg.Cloudflare.Tunnel.Enabled = true
 	path := provisionStatePath(t)
 	ts := &fakeTailscale{deleteErr: &httpjson.StatusError{Method: http.MethodDelete, Path: "/keys/k1", Status: "404 Not Found", StatusCode: http.StatusNotFound}}
-	st, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
+	st, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts-api", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
 	if err != nil {
 		t.Fatalf("expected success on not-found auth key cleanup, got %v", err)
 	}
@@ -102,7 +102,7 @@ func TestRunCompletesAndRetainsKeyWhenFinalAuthKeyCleanupFails(t *testing.T) {
 	cfg.Cloudflare.Tunnel.Enabled = true
 	path := provisionStatePath(t)
 	ts := &fakeTailscale{deleteErr: &httpjson.StatusError{Method: http.MethodDelete, Path: "/keys/k1", Status: "500 Internal Server Error", StatusCode: http.StatusInternalServerError}}
-	st, err := Run(context.Background(), Options{Config: cfg, AdminPasswordHash: testAdminPasswordHash, Creds: credentials.Set{Tailscale: "ts-api", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
+	st, err := Run(context.Background(), Options{Config: cfg, AdminPassword: testAdminPassword, Creds: credentials.Set{Tailscale: "ts-api", Cloudflare: "cf"}, StatePath: path, Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}}})
 	if err != nil {
 		t.Fatalf("completed provision must not fail on best-effort cleanup error, got %v", err)
 	}

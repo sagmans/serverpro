@@ -10,7 +10,6 @@ import (
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/lifecycle"
-	"github.com/sagmans/serverpro/internal/passwordhash"
 	"github.com/sagmans/serverpro/internal/redact"
 	"github.com/sagmans/serverpro/internal/state"
 	"github.com/spf13/cobra"
@@ -80,11 +79,11 @@ func (a *app) runCreateCommand(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	adminPasswordHash, err := passwordhash.GenerateSHA512(sudoPassword)
-	if err != nil {
-		return redact.New(a.redactionSecrets(creds)...).Error(err)
+	// The password is set on the host over SSH after first boot; no hash of it
+	// ever enters cloud-init user data.
+	if err := lifecycle.ValidateAdminPassword(sudoPassword); err != nil {
+		return err
 	}
-	a.addRuntimeSecret(adminPasswordHash)
 	unlockTailnet, err := state.LockTailnetPolicy(cmd.Context(), config.RegistryPath(), cfg.Access.Tailscale.Tailnet)
 	if err != nil {
 		return err
@@ -103,7 +102,7 @@ func (a *app) runCreateCommand(cmd *cobra.Command) error {
 	if err := progress.emit(progressPhaseProvision); err != nil {
 		return err
 	}
-	st, err := a.runProvision(provisionCtx, cfg, stPath, providerAccount, creds, sudoPassword, adminPasswordHash)
+	st, err := a.runProvision(provisionCtx, cfg, stPath, providerAccount, creds, sudoPassword)
 	cancelProvision()
 	unlockTailnet()
 	tailnetLocked = false
@@ -119,7 +118,7 @@ func (a *app) runCreateCommand(cmd *cobra.Command) error {
 	}
 	doctorCtx, cancelDoctor := context.WithTimeout(cmd.Context(), createPhaseTimeout)
 	defer cancelDoctor()
-	report := a.doctorReport(doctorCtx, cfg, st, creds, sudoPassword, adminPasswordHash)
+	report := a.doctorReport(doctorCtx, cfg, st, creds, sudoPassword)
 	if err := a.writeDoctorReport(cfg, creds, report); err != nil {
 		return redact.New(a.redactionSecrets(creds)...).Error(err)
 	}

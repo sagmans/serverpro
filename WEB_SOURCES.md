@@ -406,7 +406,19 @@ Use: password-aware sudo execution.
 https://www.sudo.ws/docs/man/sudoers.man/
 ```
 
-Use: `NOPASSWD` and `PASSWD` semantics.
+Use: `NOPASSWD` and `PASSWD` semantics, and `verifypw=any` for the first-boot
+grant (with the default `verifypw=all`, the admin's `%sudo` entry makes
+`sudo -v` demand the not-yet-set password).
+
+### chpasswd
+
+```text
+https://manpages.ubuntu.com/manpages/noble/man8/chpasswd.8.html
+```
+
+Use: without `--encrypted`, chpasswd hashes the stdin password through PAM;
+Ubuntu 24.04's `common-password` uses `pam_unix.so obscure yescrypt`, so the
+admin password is stored as `$y$`.
 
 ### cloud-init
 

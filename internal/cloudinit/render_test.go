@@ -13,16 +13,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const testAdminPasswordHash = "$6$rounds=100000$abcdefghijklmnop$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-
 func TestRenderHardeningAndTailscale(t *testing.T) {
 	cfg := config.Example("prod")
 	cfg.Cloudflare.AccountID = "acc"
-	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff", AdminPasswordHash: testAdminPasswordHash})
+	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"PermitRootLogin no", "PasswordAuthentication no", "KbdInteractiveAuthentication no", "ChallengeResponseAuthentication no", "X11Forwarding no", "AllowAgentForwarding no", "AllowTcpForwarding no", "PermitTunnel no", "PermitOpen none", "ufw default deny incoming", "tailscale up", "/root/.serverpro-tailscale-authkey", "--hostname 'prod-01'", "--ssh", "groups: sudo", "hashed_passwd: " + testAdminPasswordHash} {
+	for _, want := range []string{"PermitRootLogin no", "PasswordAuthentication no", "KbdInteractiveAuthentication no", "ChallengeResponseAuthentication no", "X11Forwarding no", "AllowAgentForwarding no", "AllowTcpForwarding no", "PermitTunnel no", "PermitOpen none", "ufw default deny incoming", "tailscale up", "/root/.serverpro-tailscale-authkey", "--hostname 'prod-01'", "--ssh", "groups: sudo", "lock_passwd: true"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("cloud-init missing %q\n%s", want, out)
 		}
@@ -41,10 +39,16 @@ func TestRenderHardeningAndTailscale(t *testing.T) {
 	if strings.Contains(out, "[ sh, -c") {
 		t.Fatalf("cloud-init should avoid fragile flow-style shell commands\n%s", out)
 	}
-	for _, removed := range []string{"NOPASSWD", "lock_passwd: true", "chpasswd:", "\n    passwd: "} {
+	// User data is readable from the provider metadata service, so it must
+	// carry no password or password hash; the password is set over SSH.
+	for _, removed := range []string{"hashed_passwd", "lock_passwd: false", "chpasswd", "\n    passwd: ", "$6$", "$y$"} {
 		if strings.Contains(out, removed) {
 			t.Fatalf("cloud-init should not render %q\n%s", removed, out)
 		}
+	}
+	bootstrapGrant := "  - path: " + BootstrapSudoersPath + "\n    permissions: '0440'\n    content: |\n      Defaults:deploy verifypw=any\n      deploy ALL=(ALL) NOPASSWD:ALL\n"
+	if !strings.Contains(out, bootstrapGrant) || strings.Count(out, "NOPASSWD") != 1 {
+		t.Fatalf("cloud-init should grant first-boot sudo only through %s\n%s", BootstrapSudoersPath, out)
 	}
 	if err := yaml.Unmarshal([]byte(out), new(map[string]any)); err != nil {
 		t.Fatalf("cloud-init rendered invalid YAML: %v\n%s", err, out)
@@ -58,7 +62,7 @@ func TestRenderHardeningAndTailscale(t *testing.T) {
 
 func TestRenderRegistersSecretCleanupBeforeFallibleCommands(t *testing.T) {
 	cfg := config.Example("prod")
-	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff", AdminPasswordHash: testAdminPasswordHash})
+	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +82,7 @@ func TestRenderRegistersSecretCleanupBeforeFallibleCommands(t *testing.T) {
 
 func TestRenderPinsSupportedHostAndPackageBaselines(t *testing.T) {
 	cfg := config.Example("prod")
-	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff", AdminPasswordHash: testAdminPasswordHash})
+	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +108,7 @@ func TestRenderPinsSupportedHostAndPackageBaselines(t *testing.T) {
 
 func TestRenderPreflightsPackageCandidatesBeforeCloudInitInstall(t *testing.T) {
 	cfg := config.Example("prod")
-	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff", AdminPasswordHash: testAdminPasswordHash})
+	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +126,7 @@ func TestRenderPreflightsPackageCandidatesBeforeCloudInitInstall(t *testing.T) {
 
 func TestRenderedPackageCandidateFloorExecutableMatrix(t *testing.T) {
 	cfg := config.Example("prod")
-	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff", AdminPasswordHash: testAdminPasswordHash})
+	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +207,7 @@ func TestRenderedPackageCandidateFloorExecutableMatrix(t *testing.T) {
 
 func TestRenderPinsAndVerifiesTailscaleArtifacts(t *testing.T) {
 	cfg := config.Example("prod")
-	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff", AdminPasswordHash: testAdminPasswordHash})
+	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +234,7 @@ func TestRenderPinsAndVerifiesTailscaleArtifacts(t *testing.T) {
 
 func TestRenderedTailscaleInstallerRejectsUnsupportedArchitecture(t *testing.T) {
 	cfg := config.Example("prod")
-	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff", AdminPasswordHash: testAdminPasswordHash})
+	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +269,7 @@ func TestRenderedTailscaleInstallerRejectsUnsupportedArchitecture(t *testing.T) 
 
 func TestRenderedTailscaleInstallerExecutableMatrix(t *testing.T) {
 	cfg := config.Example("prod")
-	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff", AdminPasswordHash: testAdminPasswordHash})
+	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -395,7 +399,7 @@ func writeCloudInitFakeCommand(t *testing.T, dir, name, body string) {
 func TestRenderRequiresAdminUsername(t *testing.T) {
 	cfg := config.Example("prod")
 	cfg.Admin.Username = ""
-	_, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff", AdminPasswordHash: testAdminPasswordHash})
+	_, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff"})
 	if err == nil || !strings.Contains(err.Error(), "admin username") {
 		t.Fatalf("expected admin username error, got %v", err)
 	}
@@ -403,17 +407,9 @@ func TestRenderRequiresAdminUsername(t *testing.T) {
 
 func TestRenderRequiresAuthKey(t *testing.T) {
 	cfg := config.Example("prod")
-	_, err := Render(Input{Config: cfg, AdminPasswordHash: testAdminPasswordHash})
+	_, err := Render(Input{Config: cfg})
 	if err == nil || !strings.Contains(err.Error(), "tailscale auth key") {
 		t.Fatalf("expected auth key error, got %v", err)
-	}
-}
-
-func TestRenderRequiresAdminPasswordHash(t *testing.T) {
-	cfg := config.Example("prod")
-	_, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff"})
-	if err == nil || !strings.Contains(err.Error(), "admin password hash") {
-		t.Fatalf("expected admin password hash error, got %v", err)
 	}
 }
 

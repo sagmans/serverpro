@@ -87,9 +87,12 @@ func Run(ctx context.Context, opt Options) (state.State, error) {
 	if err := validateTailscaleSSHPolicy(ctx, opt.Clients.Tailscale, opt.Creds, cfg); err != nil {
 		return st, newProvisionError(ProvisionPhaseTailscalePolicyValidation, st, err)
 	}
+	if err := ValidateAdminPassword(opt.AdminPassword); err != nil {
+		return st, newProvisionError(ProvisionPhaseBootstrapRender, st, err)
+	}
 	userData := ""
 	if needsCompute {
-		userData, err = renderProvisionUserData(cfg, key, opt.AdminPasswordHash)
+		userData, err = renderProvisionUserData(cfg, key)
 		if err != nil {
 			return st, newProvisionError(ProvisionPhaseBootstrapRender, st, err)
 		}
@@ -102,6 +105,9 @@ func Run(ctx context.Context, opt Options) (state.State, error) {
 	}
 	if err := waitRemoteReady(ctx, opt.Clients.Remote, cfg, st); err != nil {
 		return st, newProvisionError(ProvisionPhaseRemoteReady, st, err)
+	}
+	if err := setRemoteAdminPassword(ctx, opt.Clients.Remote, cfg, st, opt.AdminPassword); err != nil {
+		return st, newProvisionError(ProvisionPhaseRemoteAdminPassword, st, err)
 	}
 	if err := bootstrapRemoteNetwork(ctx, opt.Clients.Remote, opt.Clients.Cloudflare, cfg, st); err != nil {
 		return st, newProvisionError(ProvisionPhaseRemoteBootstrap, st, err)

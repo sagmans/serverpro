@@ -33,7 +33,7 @@ func createTestConfig(t *testing.T) string {
 	return cfgPath
 }
 
-func passingCreateDoctorReport(context.Context, config.Config, state.State, credentials.Set, string, string) doctor.Report {
+func passingCreateDoctorReport(context.Context, config.Config, state.State, credentials.Set, string) doctor.Report {
 	return doctor.Report{Results: []doctor.Result{{Name: "smoke", Scope: "test", Status: doctor.Pass, Evidence: "ok"}}}
 }
 

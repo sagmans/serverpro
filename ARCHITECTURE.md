@@ -250,7 +250,12 @@ flowchart LR
    `created` or `adopted` provenance, and compensate only a fresh tunnel when
    publication fails.
 7. Create and checkpoint the one-off Tailscale auth key, then render cloud-init
-   with the shared pinned, checksum-verified Tailscale-first bootstrap.
+   with the shared pinned, checksum-verified Tailscale-first bootstrap. User
+   data carries no admin password or password hash, because the provider
+   metadata service exposes it to the host. Cloud-init creates the admin
+   account locked, in the `sudo` group, with a first-boot grant in
+   `/etc/sudoers.d/90-serverpro-bootstrap` (`NOPASSWD:ALL` plus
+   `verifypw=any`) so the password-aware SSH path can reach root once.
 8. Create compute through the lifecycle-owned `ComputeCreator.Create` boundary,
    then wait for and checkpoint its Tailscale device. The first bind accepts
    only one device that matches the name and tags and enrolled at or after the
@@ -263,8 +268,14 @@ flowchart LR
    every remote command when the check fails. Every mutation failure
    returns a typed lifecycle phase plus non-secret resource IDs, including IDs
    whose checkpoint failed.
-9. Wait for Tailscale SSH and converge the managed host tools through the
-   embedded bootstrap script.
+9. Wait for Tailscale SSH, then set the admin password before any other remote
+   step (`remote_admin_password` phase). `lifecycle.AdminPasswordScript` reads
+   the password from protected stdin, pipes it to plain `chpasswd` so the host
+   hashes it with its PAM default (yescrypt on Ubuntu 24.04), removes the
+   first-boot grant and any cloud-init `NOPASSWD:ALL` rule, and validates
+   password sudo, restoring the sudoers files on failure. `doctor --fix` runs
+   the same script. Then converge the managed host tools through the embedded
+   bootstrap script.
 10. During interactive GitHub setup, persist the selected non-secret access
     intent before remote mutation. Full development requires a PAT; deploy-key
     intent includes its normalized repository scope. Switching from deploy-key

@@ -31,10 +31,10 @@ type serviceHooks struct {
 	preflight                      func(context.Context, config.Config, credentials.Set) error
 	preflightTailscaleClient       func(string, string) preflightTailscaleClient
 	preflightCloudflareClient      func(string, string) preflightCloudflareClient
-	runProvision                   func(context.Context, config.Config, string, compute.Account, credentials.Set, string, string) (state.State, error)
+	runProvision                   func(context.Context, config.Config, string, compute.Account, credentials.Set, string) (state.State, error)
 	provisionClients               func(lifecycle.Clients) lifecycle.Clients
 	provisionOptions               func(lifecycle.Options) (lifecycle.Options, error)
-	doctorReport                   func(context.Context, config.Config, state.State, credentials.Set, string, string) doctor.Report
+	doctorReport                   func(context.Context, config.Config, state.State, credentials.Set, string) doctor.Report
 	doctorClients                  func(context.Context, config.Config, state.State, credentials.Set, string) (doctor.Clients, compute.Account, error)
 	retryDoctorSudoReport          func(context.Context, config.Config, state.State, credentials.Set, doctor.Report, string) doctor.Report
 	bootstrapTools                 func(context.Context, config.Config, state.State, string, bootstraptools.Target) error
@@ -152,9 +152,9 @@ func (a *app) preflight(ctx context.Context, cfg config.Config, creds credential
 	return nil
 }
 
-func (a *app) runProvision(ctx context.Context, cfg config.Config, stPath string, providerAccount compute.Account, creds credentials.Set, sudoPassword, adminPasswordHash string) (state.State, error) {
+func (a *app) runProvision(ctx context.Context, cfg config.Config, stPath string, providerAccount compute.Account, creds credentials.Set, sudoPassword string) (state.State, error) {
 	if a.services.runProvision != nil {
-		return a.services.runProvision(ctx, cfg, stPath, providerAccount, creds, sudoPassword, adminPasswordHash)
+		return a.services.runProvision(ctx, cfg, stPath, providerAccount, creds, sudoPassword)
 	}
 	provider, err := a.resolveProvider(string(providerAccount.Provider))
 	if err != nil {
@@ -169,7 +169,7 @@ func (a *app) runProvision(ctx context.Context, cfg config.Config, stPath string
 	if a.services.provisionClients != nil {
 		clients = a.services.provisionClients(clients)
 	}
-	options := lifecycle.Options{Config: cfg, ComputeAccount: providerAccount, Creds: creds, StatePath: stPath, AdminPasswordHash: adminPasswordHash, Clients: clients}
+	options := lifecycle.Options{Config: cfg, ComputeAccount: providerAccount, Creds: creds, StatePath: stPath, AdminPassword: sudoPassword, Clients: clients}
 	if a.services.provisionOptions != nil {
 		options, err = a.services.provisionOptions(options)
 		if err != nil {
@@ -242,9 +242,9 @@ func (a *app) retryDoctorSudoReport(ctx context.Context, cfg config.Config, st s
 	return doctor.RetryRemote(ctx, cfg, st, existing, remote.TailscaleSSH{SudoPassword: sudoPassword}, doctor.Options{SudoPassword: sudoPassword, GitHubPAT: creds.GitHubPAT}).Redact(a.redactionSecrets(creds)...)
 }
 
-func (a *app) doctorReport(ctx context.Context, cfg config.Config, st state.State, creds credentials.Set, sudoPassword, adminPasswordHash string) doctor.Report {
+func (a *app) doctorReport(ctx context.Context, cfg config.Config, st state.State, creds credentials.Set, sudoPassword string) doctor.Report {
 	if a.services.doctorReport != nil {
-		return a.services.doctorReport(ctx, cfg, st, creds, sudoPassword, adminPasswordHash)
+		return a.services.doctorReport(ctx, cfg, st, creds, sudoPassword)
 	}
 	var clients doctor.Clients
 	var accountRef compute.Account
@@ -260,5 +260,5 @@ func (a *app) doctorReport(ctx context.Context, cfg config.Config, st state.Stat
 	if err != nil {
 		return doctor.Report{Results: []doctor.Result{{Status: doctor.Fail, Scope: "provider", Name: "compute provider", Evidence: err.Error()}}}
 	}
-	return doctor.RunWithOptions(ctx, cfg, st, creds, clients, doctor.Options{Fix: a.doctorFix, SudoPassword: sudoPassword, SudoPasswordHash: adminPasswordHash, ComputeAccount: accountRef}).Redact(a.redactionSecrets(creds)...)
+	return doctor.RunWithOptions(ctx, cfg, st, creds, clients, doctor.Options{Fix: a.doctorFix, SudoPassword: sudoPassword, ComputeAccount: accountRef}).Redact(a.redactionSecrets(creds)...)
 }

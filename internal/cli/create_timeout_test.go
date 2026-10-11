@@ -18,11 +18,11 @@ func TestCreateCommandGivesDoctorIndependentTimeout(t *testing.T) {
 	var provisionCtx context.Context
 	a := &app{configPath: cfgPath, provider: "hetzner", nonInteractive: true, yes: true, stdout: io.Discard, services: serviceHooks{
 		preflight: func(context.Context, config.Config, credentials.Set) error { return nil },
-		runProvision: func(ctx context.Context, cfg config.Config, _ string, _ compute.Account, _ credentials.Set, _, _ string) (state.State, error) {
+		runProvision: func(ctx context.Context, cfg config.Config, _ string, _ compute.Account, _ credentials.Set, _ string) (state.State, error) {
 			provisionCtx = ctx
 			return state.State{Namespace: cfg.Namespace, Server: cfg.Server}, nil
 		},
-		doctorReport: func(ctx context.Context, _ config.Config, _ state.State, _ credentials.Set, _, _ string) doctor.Report {
+		doctorReport: func(ctx context.Context, _ config.Config, _ state.State, _ credentials.Set, _ string) doctor.Report {
 			if ctx == provisionCtx {
 				t.Fatal("doctor reused provisioning context")
 			}
@@ -35,7 +35,7 @@ func TestCreateCommandGivesDoctorIndependentTimeout(t *testing.T) {
 			if _, ok := ctx.Deadline(); !ok {
 				t.Fatal("doctor context has no deadline")
 			}
-			return passingCreateDoctorReport(ctx, config.Config{}, state.State{}, credentials.Set{}, "", "")
+			return passingCreateDoctorReport(ctx, config.Config{}, state.State{}, credentials.Set{}, "")
 		},
 	}}
 	cmd := a.serverCreateCmd()

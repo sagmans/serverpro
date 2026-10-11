@@ -123,10 +123,13 @@ func remoteSSHDSettingSpecification(name, keyword string) remoteCheckSpecificati
 
 func remoteSudoSpecification(user string) remoteCheckSpecification {
 	return remoteCheckSpecification{
-		readCommands: []string{sudoPasswordRequiredCommand(user)},
+		readCommands: []string{sudoPasswordRequiredCommand(user), adminPasswordHashCommand(user)},
 		liveCommands: []string{sudoPasswordFixCommand(user)},
 		run: func(ctx context.Context, runner remote.Runner, user, host string, options Options) []Result {
-			return []Result{remoteSudoPasswordRequiredCheck(ctx, runner, user, host, options)}
+			sudo := remoteSudoPasswordRequiredCheck(ctx, runner, user, host, options)
+			// The sudo fix re-sets the password too, so the hash baseline is stale then.
+			fixed := sudo.Status == Pass && strings.HasPrefix(sudo.Evidence, "fixed: ")
+			return []Result{sudo, remoteAdminPasswordHashCheck(ctx, runner, user, host, options, fixed)}
 		},
 	}
 }

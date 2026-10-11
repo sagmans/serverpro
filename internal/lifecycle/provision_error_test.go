@@ -58,7 +58,7 @@ func TestRunCheckpointFailuresReturnTypedPhaseAndResourceSnapshot(t *testing.T) 
 			failed := false
 			ts := &fakeTailscale{}
 			st, err := Run(context.Background(), Options{
-				Config: cfg, AdminPasswordHash: testAdminPasswordHash,
+				Config: cfg, AdminPassword: testAdminPassword,
 				Creds: credentials.Set{Tailscale: "ts-api", Cloudflare: "cf"}, StatePath: provisionStatePath(t),
 				Clients: Clients{Compute: &fakeHetzner{}, Tailscale: ts, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}},
 				saveState: func(_ string, got state.State) error {
@@ -123,15 +123,18 @@ func TestRunClassifiesLifecycleFailuresByPhase(t *testing.T) {
 		{name: "tailscale policy validation", phase: ProvisionPhaseTailscalePolicyValidation, alter: func(opt *Options) {
 			opt.Clients.Tailscale = &validationFailTailscale{fakeTailscale: &fakeTailscale{}, err: cause}
 		}},
-		{name: "bootstrap render", phase: ProvisionPhaseBootstrapRender, alter: func(opt *Options) { opt.AdminPasswordHash = "invalid" }},
+		{name: "bootstrap render", phase: ProvisionPhaseBootstrapRender, alter: func(opt *Options) { opt.AdminPassword = "" }},
 		{name: "compute", phase: ProvisionPhaseCompute, alter: func(opt *Options) { opt.Clients.Compute = &fakeHetzner{serverErr: cause} }},
 		{name: "tailscale device", phase: ProvisionPhaseTailscaleDevice, alter: func(opt *Options) {
 			opt.Clients.Tailscale = &deviceFailTailscale{fakeTailscale: &fakeTailscale{}, err: cause}
 		}},
 		{name: "remote ready", phase: ProvisionPhaseRemoteReady, alter: func(opt *Options) { opt.Clients.Remote = &errorRemote{err: errors.New("sudo authentication failure")} }},
+		{name: "remote admin password", phase: ProvisionPhaseRemoteAdminPassword, alter: func(opt *Options) {
+			opt.Clients.Remote = &sequenceRemote{errors: []error{nil, cause}}
+		}},
 		{name: "remote bootstrap", phase: ProvisionPhaseRemoteBootstrap, alter: func(opt *Options) {
 			opt.Config.Cloudflare.Tunnel.Enabled = false
-			opt.Clients.Remote = &sequenceRemote{errors: []error{nil, cause}}
+			opt.Clients.Remote = &sequenceRemote{errors: []error{nil, nil, cause}}
 		}},
 	}
 
@@ -141,7 +144,7 @@ func TestRunClassifiesLifecycleFailuresByPhase(t *testing.T) {
 			cfg.Cloudflare.AccountID = "acc"
 			cfg.Cloudflare.Tunnel.Enabled = true
 			opt := Options{
-				Config: cfg, AdminPasswordHash: testAdminPasswordHash,
+				Config: cfg, AdminPassword: testAdminPassword,
 				Creds: credentials.Set{Tailscale: "ts-api", Cloudflare: "cf"}, StatePath: provisionStatePath(t),
 				Clients: Clients{Compute: &fakeHetzner{}, Tailscale: &fakeTailscale{}, Cloudflare: &fakeCloudflare{}, Remote: &fakeRemote{}},
 			}

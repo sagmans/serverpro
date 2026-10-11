@@ -13,7 +13,7 @@ import (
 func TestRenderMainSSHDConfigHardeningScriptBehavior(t *testing.T) {
 	cfg := config.Example("prod")
 	cfg.Cloudflare.AccountID = "acc"
-	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff", AdminPasswordHash: testAdminPasswordHash})
+	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestRenderMainSSHDConfigHardeningScriptBehavior(t *testing.T) {
 func TestRenderNormalizesMainSSHDConfigBeforeSSHRestart(t *testing.T) {
 	cfg := config.Example("prod")
 	cfg.Cloudflare.AccountID = "acc"
-	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff", AdminPasswordHash: testAdminPasswordHash})
+	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff"})
 	if err != nil {
 		t.Fatal(err)
 	}

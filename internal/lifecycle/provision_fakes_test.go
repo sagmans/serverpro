@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	testAdminPasswordHash  = "$6$rounds=100000$abcdefghijklmnop$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	testAdminPassword      = "correct horse battery staple"
 	testCloudflareAPIToken = "test-secret-cloudflare-api-token"
 	testTailscaleAPIToken  = "test-secret-tailscale-api-token"
 )
@@ -143,9 +143,18 @@ func (f *fakeCloudflare) TunnelToken(context.Context, string) (string, error) {
 	return "cf-token", nil
 }
 
-type fakeRemote struct{ scripts []string }
+type fakeRemote struct {
+	scripts []string
+	inputs  []string
+}
 
 func (f *fakeRemote) Run(_ context.Context, user, host, script string) (string, error) {
 	f.scripts = append(f.scripts, script)
+	return "ok", nil
+}
+
+func (f *fakeRemote) RunWithInput(_ context.Context, user, host, script, input string) (string, error) {
+	f.scripts = append(f.scripts, script)
+	f.inputs = append(f.inputs, input)
 	return "ok", nil
 }

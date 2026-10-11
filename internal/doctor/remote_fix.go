@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/sagmans/serverpro/internal/passwordhash"
+	"github.com/sagmans/serverpro/internal/lifecycle"
 	"github.com/sagmans/serverpro/internal/remote"
 )
 
@@ -28,13 +28,10 @@ func fixPasswordlessSudo(ctx context.Context, r remote.Runner, user, host, evide
 	if !opt.Fix {
 		return fail("remote", SudoPasswordCheckName, evidence, "run serverpro server doctor --fix to require sudo password")
 	}
-	if !passwordhash.ValidSHA512(opt.SudoPasswordHash) {
-		return fail("remote", SudoPasswordCheckName, evidence+"; invalid sudo password hash", "supply a valid sudo password hash")
-	}
-	if opt.SudoPassword == "" || strings.ContainsAny(opt.SudoPassword, "\r\n") {
+	if lifecycle.ValidateAdminPassword(opt.SudoPassword) != nil {
 		return fail("remote", SudoPasswordCheckName, evidence+"; invalid sudo password", "supply a valid sudo password")
 	}
-	if fixErr := runRemoteWithInput(ctx, r, user, host, sudoPasswordFixCommand(user), sudoPasswordFixInput(opt.SudoPasswordHash, opt.SudoPassword)); fixErr != nil {
+	if fixErr := runRemoteWithInput(ctx, r, user, host, sudoPasswordFixCommand(user), sudoPasswordFixInput(opt.SudoPassword)); fixErr != nil {
 		return fail("remote", SudoPasswordCheckName, evidence+"; fix failed: "+fixErr.Error(), "inspect remote command")
 	}
 	out, err := r.Run(ctx, user, host, sudoPasswordRequiredCommand(user))
@@ -42,6 +39,38 @@ func fixPasswordlessSudo(ctx context.Context, r remote.Runner, user, host, evide
 		return fail("remote", SudoPasswordCheckName, err.Error(), "fix applied but check still failed")
 	}
 	return pass("remote", SudoPasswordCheckName, "fixed: "+out)
+}
+
+// remoteAdminPasswordHashCheck flags admin passwords still stored with
+// SHA-crypt (older serverpro releases put a $6$ hash in cloud-init user data)
+// or not set at all. The fix re-sets the password with plain chpasswd so the
+// host hashes it with its default scheme. recheck forces a live read when an
+// earlier fix in this run already re-set the password, because the batch
+// baseline is stale then.
+func remoteAdminPasswordHashCheck(ctx context.Context, r remote.Runner, user, host string, opt Options, recheck bool) Result {
+	command := adminPasswordHashCommand(user)
+	out, err := r.Run(ctx, user, host, command)
+	if recheck {
+		out, err = r.Run(ctx, user, host, command)
+	}
+	if err == nil {
+		return pass("remote", AdminPasswordHashCheckName, strings.TrimSpace(out))
+	}
+	evidence := remoteFailureEvidence(out, err)
+	if !opt.Fix {
+		return fail("remote", AdminPasswordHashCheckName, evidence, "run serverpro server doctor --fix to re-set the admin password with the host's default hash")
+	}
+	if lifecycle.ValidateAdminPassword(opt.SudoPassword) != nil {
+		return fail("remote", AdminPasswordHashCheckName, evidence+"; invalid sudo password", "supply a valid sudo password")
+	}
+	if fixErr := runRemoteWithInput(ctx, r, user, host, sudoPasswordFixCommand(user), sudoPasswordFixInput(opt.SudoPassword)); fixErr != nil {
+		return fail("remote", AdminPasswordHashCheckName, evidence+"; fix failed: "+fixErr.Error(), "inspect remote command")
+	}
+	out, err = r.Run(ctx, user, host, command)
+	if err != nil {
+		return fail("remote", AdminPasswordHashCheckName, remoteFailureEvidence(out, err), "fix applied but check still failed")
+	}
+	return pass("remote", AdminPasswordHashCheckName, "fixed: "+strings.TrimSpace(out))
 }
 
 func passwordlessSudoEvidence(out string, err error) bool {

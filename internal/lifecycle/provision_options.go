@@ -12,14 +12,16 @@ import (
 type provisionStateSaver func(string, state.State) error
 
 type Options struct {
-	Config            config.Config
-	ComputeAccount    compute.Account
-	Creds             credentials.Set
-	StatePath         string
-	AdminPasswordHash string
-	Clients           Clients
-	Now               func() time.Time
-	saveState         provisionStateSaver
+	Config         config.Config
+	ComputeAccount compute.Account
+	Creds          credentials.Set
+	StatePath      string
+	// AdminPassword is set on the host over SSH after first boot; it never
+	// enters cloud-init user data.
+	AdminPassword string
+	Clients       Clients
+	Now           func() time.Time
+	saveState     provisionStateSaver
 }
 
 func (o Options) now() time.Time {
