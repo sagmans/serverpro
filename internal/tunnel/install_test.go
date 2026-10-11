@@ -1,6 +1,7 @@
 package tunnel
 
 import (
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -62,22 +63,79 @@ func TestInstallScriptPinsSupportedHostAndCloudflaredMinimum(t *testing.T) {
 	}
 }
 
+const (
+	// testMirrorURL stands in for any configured repository other than
+	// Cloudflare's; the origin gate must never trust it.
+	testMirrorURL = "https://mirror.example/cloudflared"
+	// testBelowAnyFloor is a version every reviewed floor exceeds.
+	testBelowAnyFloor = "0.0.0"
+	// testDpkgUnpackedState is a dpkg state that is not "installed", so the
+	// candidate gate runs even though apt-cache marks the version as current.
+	testDpkgUnpackedState = "unpacked"
+)
+
+// fakeDpkgCompareVersions really orders versions with sort -V (macOS and
+// GNU), because a fake that ignores the minimum would never prove the floor.
+// Only "ge" is supported so a new comparison in the script fails loudly.
+const fakeDpkgCompareVersions = `[ "${1:-}" = --compare-versions ] && [ "${3:-}" = ge ] || { echo "unsupported fake dpkg call: $*" >&2; exit 2; }
+lowest=$(printf '%s\n%s\n' "$2" "$4" | sort -V | head -n 1)
+[ "${lowest}" = "$4" ]
+`
+
+// fakeAptCachePolicy mirrors apt 2.8 apt-cache policy output on noble with the
+// origin pin in place: the version line carries the pin priority (990), each
+// source line its own priority (500), the installed version is marked "***",
+// and the dpkg status pseudo-source follows the real sources at 100.
+const fakeAptCachePolicy = `installed=(none)
+[ "${INSTALLED_STATE}" = installed ] && installed=${INSTALLED_VERSION}
+printf 'cloudflared:\n  Installed: %s\n  Candidate: %s\n  Version table:\n' "${installed}" "${CANDIDATE_VERSION}"
+if [ -n "${CANDIDATE_MARKED}" ]; then printf ' *** %s 990\n' "${CANDIDATE_VERSION}"; else printf '     %s 990\n' "${CANDIDATE_VERSION}"; fi
+for origin in ${ORIGINS}; do printf '        500 %s noble/main arm64 Packages\n' "${origin}"; done
+[ -z "${CANDIDATE_STATUS}" ] || printf '        100 /var/lib/dpkg/status\n'
+if [ "${INSTALLED_STATE}" = installed ] && [ "${INSTALLED_VERSION}" != "${CANDIDATE_VERSION}" ]; then
+  printf ' *** %s 100\n        100 /var/lib/dpkg/status\n' "${INSTALLED_VERSION}"
+fi
+printf '     0.0.1 500\n        500 https://mirror.example/older noble/main arm64 Packages\n'
+`
+
+// versionOneStepBelow derives the closest version under a reviewed floor, so
+// the floor case keeps testing the boundary when the baseline moves.
+func versionOneStepBelow(t *testing.T, version string) string {
+	t.Helper()
+	cut := strings.LastIndex(version, ".")
+	last, err := strconv.Atoi(version[cut+1:])
+	if cut < 0 || err != nil || last == 0 {
+		t.Fatalf("cannot derive a version one step below %q", version)
+	}
+	return version[:cut+1] + strconv.Itoa(last-1)
+}
+
 func TestInstallScriptCloudflaredCandidateExecutableMatrix(t *testing.T) {
 	baseline := hostplatform.CloudflaredPackageBaseline()
+	belowFloor := versionOneStepBelow(t, baseline.MinimumVersion)
 	for _, tc := range []struct {
 		name, installedState, installedVersion, candidate string
 		origins                                           string
+		candidateMarked, candidateStatus                  bool
 		wantOK                                            bool
 	}{
 		{name: "candidate-at-floor", candidate: baseline.MinimumVersion, origins: cloudflareAPTRepositoryURL, wantOK: true},
-		{name: "installed-at-floor-skips-candidate", installedState: "installed", installedVersion: "3.0", candidate: "0.0.0", origins: "https://mirror.example/ubuntu", wantOK: true},
-		{name: "config-files-newer-candidate-below-floor", installedState: "config-files", installedVersion: "3.0", candidate: "0.0.0", origins: cloudflareAPTRepositoryURL},
-		{name: "candidate-below-floor", candidate: "0.0.0", origins: cloudflareAPTRepositoryURL},
+		{name: "installed-at-floor-skips-candidate", installedState: "installed", installedVersion: baseline.MinimumVersion, candidate: testBelowAnyFloor, origins: testMirrorURL, wantOK: true},
+		{name: "installed-below-floor-upgrades-from-cloudflare", installedState: "installed", installedVersion: belowFloor, candidate: baseline.MinimumVersion, origins: cloudflareAPTRepositoryURL, wantOK: true},
+		{name: "installed-below-floor-candidate-below-floor", installedState: "installed", installedVersion: belowFloor, candidate: belowFloor, origins: cloudflareAPTRepositoryURL, candidateMarked: true, candidateStatus: true},
+		{name: "config-files-newer-candidate-below-floor", installedState: "config-files", installedVersion: baseline.MinimumVersion, candidate: testBelowAnyFloor, origins: cloudflareAPTRepositoryURL},
+		{name: "candidate-below-floor", candidate: testBelowAnyFloor, origins: cloudflareAPTRepositoryURL},
+		{name: "candidate-one-step-below-floor", candidate: belowFloor, origins: cloudflareAPTRepositoryURL},
 		{name: "missing-candidate", candidate: "(none)"},
+		// The status line has two fields like a version line; it must not end
+		// the candidate's source list or hide a source listed after it.
+		{name: "marked-candidate-with-origin-and-status", installedState: testDpkgUnpackedState, installedVersion: baseline.MinimumVersion, candidate: baseline.MinimumVersion, origins: cloudflareAPTRepositoryURL, candidateMarked: true, candidateStatus: true, wantOK: true},
+		{name: "candidate-with-origin-and-status", installedState: testDpkgUnpackedState, installedVersion: baseline.MinimumVersion, candidate: baseline.MinimumVersion, origins: cloudflareAPTRepositoryURL, candidateStatus: true, wantOK: true},
+		{name: "marked-candidate-also-from-other-origin", installedState: testDpkgUnpackedState, installedVersion: baseline.MinimumVersion, candidate: baseline.MinimumVersion, origins: cloudflareAPTRepositoryURL + " " + testMirrorURL, candidateMarked: true, candidateStatus: true},
 		// The origin gate: the candidate version must come only from Cloudflare.
-		{name: "candidate-from-other-origin", candidate: baseline.MinimumVersion, origins: "https://mirror.example/cloudflared"},
-		{name: "candidate-also-from-other-origin", candidate: baseline.MinimumVersion, origins: cloudflareAPTRepositoryURL + " https://mirror.example/cloudflared"},
-		{name: "candidate-only-in-dpkg-status", candidate: baseline.MinimumVersion},
+		{name: "candidate-from-other-origin", candidate: baseline.MinimumVersion, origins: testMirrorURL},
+		{name: "candidate-also-from-other-origin", candidate: baseline.MinimumVersion, origins: cloudflareAPTRepositoryURL + " " + testMirrorURL},
+		{name: "candidate-only-in-dpkg-status", installedState: testDpkgUnpackedState, installedVersion: baseline.MinimumVersion, candidate: baseline.MinimumVersion, candidateMarked: true, candidateStatus: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -90,15 +148,8 @@ func TestInstallScriptCloudflaredCandidateExecutableMatrix(t *testing.T) {
 				t.Fatal(err)
 			}
 			writeFakeCommand(t, binDir, "dpkg-query", "[ -n \"$INSTALLED_STATE\" ] || exit 1\ncase \"$*\" in *db:Status-Status*) printf '%s|%s' \"$INSTALLED_STATE\" \"$INSTALLED_VERSION\" ;; *) printf '%s' \"$INSTALLED_VERSION\" ;; esac\n")
-			writeFakeCommand(t, binDir, "dpkg", "case \"${2:-}\" in 3.0) exit 0 ;; \"$CANDIDATE_VERSION\") [ \"${2:-}\" != 0.0.0 ] ;; *) exit 1 ;; esac\n")
-			// Mirrors apt-cache policy output: a version line per version, then one
-			// "priority URL suite arch Packages" line per repository offering it.
-			writeFakeCommand(t, binDir, "apt-cache", `printf 'cloudflared:\n  Installed: (none)\n  Candidate: %s\n  Version table:\n' "$CANDIDATE_VERSION"
-printf '     %s 990\n' "$CANDIDATE_VERSION"
-for origin in $ORIGINS; do printf '        990 %s noble/main amd64 Packages\n' "$origin"; done
-printf '        100 /var/lib/dpkg/status\n'
-printf ' *** 0.0.1 500\n        500 https://mirror.example/older noble/main amd64 Packages\n'
-`)
+			writeFakeCommand(t, binDir, "dpkg", fakeDpkgCompareVersions)
+			writeFakeCommand(t, binDir, "apt-cache", fakeAptCachePolicy)
 			cmd := exec.Command("bash", "-c", `source "$1"; verify_cloudflared_candidate`, "test", scriptPath)
 			cmd.Env = append(os.Environ(),
 				"SERVERPRO_TUNNEL_SOURCE_ONLY=1",
@@ -107,15 +158,97 @@ printf ' *** 0.0.1 500\n        500 https://mirror.example/older noble/main amd6
 				"INSTALLED_VERSION="+tc.installedVersion,
 				"CANDIDATE_VERSION="+tc.candidate,
 				"ORIGINS="+tc.origins,
+				"CANDIDATE_MARKED="+flagEnv(tc.candidateMarked),
+				"CANDIDATE_STATUS="+flagEnv(tc.candidateStatus),
 			)
-			err := cmd.Run()
+			out, err := cmd.CombinedOutput()
 			if tc.wantOK && err != nil {
-				t.Fatalf("safe cloudflared candidate rejected: %v", err)
+				t.Fatalf("safe cloudflared candidate rejected: %v\n%s", err, out)
 			}
 			if !tc.wantOK && err == nil {
 				t.Fatal("unsafe cloudflared candidate accepted")
 			}
 		})
+	}
+}
+
+// flagEnv renders a case flag for the fake commands, which test for a
+// non-empty value.
+func flagEnv(set bool) string {
+	if set {
+		return "1"
+	}
+	return ""
+}
+
+// TestCloudflaredCandidateOriginParsesRealPolicyOutput feeds the origin gate
+// apt-cache policy output captured from apt 2.8.3 on noble arm64 with the pin
+// written, before and after installing cloudflared, plus variants that must
+// fail closed.
+func TestCloudflaredCandidateOriginParsesRealPolicyOutput(t *testing.T) {
+	const (
+		header      = "cloudflared:\n  Installed: (none)\n  Candidate: 2026.10.0\n  Version table:\n"
+		cloudflare  = "        500 https://pkg.cloudflare.com/cloudflared noble/main arm64 Packages\n"
+		mirror      = "        500 file:/srv/mirror ./ Packages\n"
+		statusLine  = "        100 /var/lib/dpkg/status\n"
+		candidate   = "     2026.10.0 990\n"
+		installed   = " *** 2026.10.0 990\n"
+		wantVersion = "2026.10.0"
+	)
+	for _, tc := range []struct {
+		name, policy string
+		wantOK       bool
+	}{
+		{name: "before-install", policy: header + candidate + cloudflare, wantOK: true},
+		{name: "after-install", policy: header + installed + cloudflare + statusLine, wantOK: true},
+		{name: "second-repository", policy: header + candidate + cloudflare + mirror},
+		{name: "second-repository-after-status-line", policy: header + installed + cloudflare + statusLine + mirror},
+		{name: "only-other-repository", policy: header + candidate + mirror},
+		{name: "only-status-line", policy: header + installed + statusLine},
+		{name: "unrecognised-source-line", policy: header + candidate + cloudflare + "        unexpected\n"},
+		{name: "candidate-missing-from-table", policy: header + "     2026.9.0 990\n" + cloudflare},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			scriptPath := filepath.Join(dir, "upgrade.sh")
+			if err := os.WriteFile(scriptPath, []byte(UpgradeScript()), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			policyPath := filepath.Join(dir, "policy.txt")
+			if err := os.WriteFile(policyPath, []byte(tc.policy), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			binDir := filepath.Join(dir, "bin")
+			if err := os.Mkdir(binDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			writeFakeCommand(t, binDir, "apt-cache", "cat \"$POLICY\"\n")
+			cmd := exec.Command("bash", "-c", `source "$1"; cloudflared_candidate_from_trusted_origin "$2"`, "test", scriptPath, wantVersion)
+			cmd.Env = append(os.Environ(), "SERVERPRO_TUNNEL_SOURCE_ONLY=1", "PATH="+binDir+":"+os.Getenv("PATH"), "POLICY="+policyPath)
+			err := cmd.Run()
+			if tc.wantOK && err != nil {
+				t.Fatalf("Cloudflare-only candidate rejected: %v", err)
+			}
+			if !tc.wantOK && err == nil {
+				t.Fatal("candidate with an untrusted or unknown source accepted")
+			}
+		})
+	}
+}
+
+// TestCloudflareAPTOriginMatchesRepositoryHost keeps the pinned origin on the
+// repository host apt reports as the origin, so a URL change cannot leave the
+// pin naming a host no source uses.
+func TestCloudflareAPTOriginMatchesRepositoryHost(t *testing.T) {
+	repository, err := url.Parse(cloudflareAPTRepositoryURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cloudflareAPTOrigin(); got != repository.Hostname() || got != "pkg.cloudflare.com" {
+		t.Fatalf("cloudflareAPTOrigin() = %q, want host of %q", got, cloudflareAPTRepositoryURL)
+	}
+	if !strings.Contains(cloudflaredAPTPreferences(), "Pin: origin \""+repository.Hostname()+"\"\n") {
+		t.Fatalf("preferences do not pin the repository host:\n%s", cloudflaredAPTPreferences())
 	}
 }
 
@@ -329,7 +462,7 @@ func TestWriteCloudflaredAptPinWritesOriginPreference(t *testing.T) {
 	if err != nil || info.Mode().Perm() != 0o644 {
 		t.Fatalf("preferences mode = %v, %v", info.Mode(), err)
 	}
-	if _, err := os.Stat(prefs + ".serverpro-new"); !os.IsNotExist(err) {
+	if _, err := os.Stat(prefs + cloudflaredAPTPinStagingSuffix); !os.IsNotExist(err) {
 		t.Fatalf("temp preferences file left behind: %v", err)
 	}
 }
