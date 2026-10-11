@@ -173,6 +173,8 @@ access paths for app-owned deployment flows.
     serverpro drop-in and reloads ssh only when the managed config differs,
     so several failing sshd checks cannot trip systemd's start rate limit.
     Remote checks already run in a root shell and never call sudo again.
+    A separate `sshd units` check fails while `ssh.socket` or `ssh.service`
+    is in the failed state; its fix resets them and starts the enabled unit.
     Package/tool and generic fixable-check failures (including cloudflared)
     retain the check's own captured output without duplicating output already
     present in SSH errors. The batch error itself still carries only the

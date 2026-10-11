@@ -65,6 +65,9 @@ func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
 	} {
 		specifications = append(specifications, remoteSSHDSettingSpecification(setting.name, setting.keyword))
 	}
+	// Runs after the setting checks so their shared repair, which may reload
+	// ssh, settles before the unit state is judged.
+	specifications = append(specifications, remoteFixableSpecification(sshdUnitsCheckName, sshdUnitsReadCommand(), sshdUnitsFixCommand()))
 	specifications = append(specifications,
 		remoteFixableSpecification("apparmor", "systemctl is-active apparmor && aa-status --enabled", "systemctl enable --now apparmor"),
 		remoteFixableSpecification("unattended upgrades", "systemctl is-enabled unattended-upgrades || systemctl is-enabled apt-daily.timer", "systemctl enable --now unattended-upgrades || systemctl enable --now apt-daily.timer"),

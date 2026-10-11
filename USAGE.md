@@ -519,7 +519,9 @@ Failed package, tool, and other fixable remote checks include the check's own
 command output in `evidence`.
 The sshd hardening checks share one `--fix` action. It changes and reloads ssh
 only when the serverpro sshd config differs, and it never starts an inactive,
-socket-activated `ssh.service`.
+socket-activated `ssh.service`. The `sshd units` check reports a failed
+`ssh.socket` or `ssh.service`; `--fix` clears the failure and starts the unit
+the host enables.
 Doctor redacts known credentials before it limits failure evidence to 4 KiB.
 Long failures retain the beginning and end, separated by `... [truncated] ...`,
 so terminal errors remain visible after bootstrap progress. Successful checks

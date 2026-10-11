@@ -37,6 +37,13 @@ const (
 	sshdKeywordAllowTCPForwarding           = "AllowTcpForwarding"
 	sshdKeywordPermitTunnel                 = "PermitTunnel"
 	sshdKeywordPermitOpen                   = "PermitOpen"
+
+	// sshd units check: a failed ssh unit is invisible to the sshd -T
+	// setting checks, and earlier repairs that restarted ssh once per failing
+	// setting left both units failed on start-limit-hit.
+	sshdUnitsCheckName = "sshd units"
+	sshSocketUnit      = "ssh.socket"
+	sshServiceUnit     = "ssh.service"
 )
 
 var sshdHardeningExpectations = map[string]string{
@@ -77,6 +84,30 @@ func sshdChallengeResponseCommand() string {
 		"grep -Fx " + shell.Quote(configured) + " /etc/ssh/sshd_config.d/99-serverpro.conf && " +
 		"printf '%s\n' " + shell.Quote("sshd inactive; /run/sshd absent; serverpro config contains "+configured) + " ;; " +
 		"*) printf '%s\n' \"$out\"; exit 1 ;; esac"
+}
+
+// sshdUnitsReadCommand fails while either ssh unit sits in the failed state,
+// naming the units so the evidence points at the exact recovery target.
+func sshdUnitsReadCommand() string {
+	return "failed=''\n" +
+		"for unit in " + sshSocketUnit + " " + sshServiceUnit + "; do\n" +
+		"  if systemctl is-failed --quiet \"$unit\"; then failed=\"$failed $unit\"; fi\n" +
+		"done\n" +
+		"if [ -n \"$failed\" ]; then printf 'failed ssh units:%s\\n' \"$failed\"; exit 1; fi\n" +
+		"printf '%s\\n' 'no failed ssh units'"
+}
+
+// sshdUnitsFixCommand clears the failed state and restores whichever unit
+// the host enables, so a socket-activated host gets its listener back
+// without also starting a standalone daemon. It never enables a disabled
+// unit; public port 22 stays closed by the ufw checks either way.
+func sshdUnitsFixCommand() string {
+	return "for unit in " + sshSocketUnit + " " + sshServiceUnit + "; do\n" +
+		"  if systemctl is-failed --quiet \"$unit\"; then systemctl reset-failed \"$unit\"; fi\n" +
+		"done\n" +
+		"if systemctl is-enabled --quiet " + sshSocketUnit + "; then systemctl start " + sshSocketUnit + "\n" +
+		"elif systemctl is-enabled --quiet " + sshServiceUnit + "; then systemctl start " + sshServiceUnit + "\n" +
+		"fi"
 }
 
 const gitSigningPublicKeyRelativePath = ".ssh/id_ed25519_sign.pub"
