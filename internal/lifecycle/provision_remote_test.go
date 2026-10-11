@@ -12,6 +12,7 @@ import (
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/tunnel"
 )
 
 func TestRunBootstrapsTunnelAndLockdownOverRemote(t *testing.T) {
@@ -122,4 +123,50 @@ type errorRemote struct {
 func (r *errorRemote) Run(context.Context, string, string, string) (string, error) {
 	r.calls++
 	return "", r.err
+}
+
+// deadlineRemote records each script's context deadline so tests can prove
+// which remote steps outlive the transport's short default.
+type deadlineRemote struct {
+	fakeRemote
+	deadlines map[string]time.Duration
+}
+
+func (d *deadlineRemote) Run(ctx context.Context, user, host, script string) (string, error) {
+	if deadline, ok := ctx.Deadline(); ok {
+		if d.deadlines == nil {
+			d.deadlines = map[string]time.Duration{}
+		}
+		d.deadlines[script] = time.Until(deadline)
+	}
+	return d.fakeRemote.Run(ctx, user, host, script)
+}
+
+// TestBootstrapRemoteNetworkGivesTunnelInstallTheAptDeadline guards the
+// provisioning install: first-boot apt-daily can hold both apt locks, and the
+// transport default would cut off a wait the install script survives.
+func TestBootstrapRemoteNetworkGivesTunnelInstallTheAptDeadline(t *testing.T) {
+	cfg := config.Example("prod")
+	cfg.Cloudflare.AccountID = "acc"
+	cfg.Cloudflare.Tunnel.Enabled = true
+	st := state.State{}
+	st.Tailscale.Name = "prod-01"
+	st.Cloudflare.TunnelID = "tunnel-id"
+	r := &deadlineRemote{}
+	if err := bootstrapRemoteNetwork(context.Background(), r, &fakeCloudflare{}, cfg, st); err != nil {
+		t.Fatal(err)
+	}
+	var install string
+	for _, script := range r.scripts {
+		if strings.Contains(script, "install_cloudflared_candidate") {
+			install = script
+		}
+	}
+	deadline, ok := r.deadlines[install]
+	if install == "" || !ok {
+		t.Fatalf("tunnel install not run with a deadline: %q", r.scripts)
+	}
+	if deadline < tunnel.ScriptTimeout-time.Minute || deadline > tunnel.ScriptTimeout {
+		t.Fatalf("tunnel install deadline = %v, want about %v", deadline, tunnel.ScriptTimeout)
+	}
 }

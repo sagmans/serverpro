@@ -31,7 +31,9 @@ func bootstrapRemoteNetwork(ctx context.Context, r remote.Runner, c CloudflareCl
 		if err != nil {
 			return err
 		}
-		if _, err := r.Run(ctx, cfg.Admin.Username, st.Tailscale.Name, tunnel.InstallScript(tok)); err != nil {
+		// The install waits on apt locks held by first-boot apt-daily runs, so it
+		// needs the apt-sized deadline rather than the transport default.
+		if _, err := remote.WithTimeout(r, tunnel.ScriptTimeout).Run(ctx, cfg.Admin.Username, st.Tailscale.Name, tunnel.InstallScript(tok)); err != nil {
 			return err
 		}
 	}

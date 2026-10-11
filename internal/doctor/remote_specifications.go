@@ -3,7 +3,6 @@ package doctor
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/sagmans/serverpro/internal/bootstraptools"
 	"github.com/sagmans/serverpro/internal/config"
@@ -17,13 +16,9 @@ import (
 
 const (
 	supportedPlatformCheckName = "supported platform"
-	// cloudflaredFixTransferMargin covers the repair's own apt work: index
-	// download, package download, and install once the locks are free.
-	cloudflaredFixTransferMargin = 5 * time.Minute
-	// cloudflaredFixTimeout lets the repair spend the full shared apt wait on
-	// the package-lists lock and again on the dpkg lock before its own work,
-	// so the SSH deadline never cuts off a wait the script would survive.
-	cloudflaredFixTimeout = 2*hostplatform.APTLockTimeout + cloudflaredFixTransferMargin
+	// cloudflaredFixTimeout is the connector script deadline; the tunnel
+	// package owns it so provisioning and the repair cannot drift apart.
+	cloudflaredFixTimeout = tunnel.ScriptTimeout
 )
 
 // remoteCheckSpecification keeps batch authority inseparable from the check

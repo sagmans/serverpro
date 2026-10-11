@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/sagmans/serverpro/internal/hostplatform"
 	"github.com/sagmans/serverpro/internal/shell"
@@ -17,6 +18,16 @@ const (
 	// CheckName is the doctor result name; doctor evidence summaries and
 	// specifications key on it, so it lives next to the check it names.
 	CheckName = "cloudflared"
+
+	// scriptTransferMargin covers the connector script's own apt work: index
+	// download, package download, and install once the locks are free.
+	scriptTransferMargin = 5 * time.Minute
+	// ScriptTimeout is the SSH deadline for the install and repair scripts.
+	// Both may spend the full shared apt wait on the package-lists lock and
+	// again on the dpkg lock before their own work, so provisioning and doctor
+	// wrap them in this deadline instead of the short default, which would cut
+	// off a wait the script would survive.
+	ScriptTimeout = 2*hostplatform.APTLockTimeout + scriptTransferMargin
 
 	cloudflareAPTKeyFingerprint = "CC94B39C77AE7342A68B89628A682D308D4E5E73"
 	cloudflareAPTKeyURL         = "https://pkg.cloudflare.com/cloudflare-main.gpg"
