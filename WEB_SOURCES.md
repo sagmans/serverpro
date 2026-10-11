@@ -741,11 +741,11 @@ https://cli.github.com/manual/gh_attestation_verify
 https://github.com/actions/checkout/releases/tag/v7.0.1
 https://github.com/actions/setup-go/releases/tag/v7.0.0
 https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
-https://github.com/actions/upload-artifact/releases/tag/v7.0.1
-https://github.com/actions/download-artifact/releases/tag/v8.0.1
-https://github.com/actions/attest-build-provenance/releases/tag/v4.1.1
-https://github.com/actions/attest/releases/tag/v4.2.0
-https://github.com/anchore/sbom-action/releases/tag/v0.24.0
+https://github.com/actions/upload-artifact/releases/tag/v7.0.2
+https://github.com/actions/download-artifact/releases/tag/v8.0.2
+https://github.com/actions/attest-build-provenance/releases/tag/v4.2.2
+https://github.com/actions/attest/releases/tag/v4.2.2
+https://github.com/anchore/sbom-action/releases/tag/v0.24.3
 https://github.com/anchore/syft/releases/tag/v1.48.0
 ```
 
