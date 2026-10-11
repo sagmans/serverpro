@@ -98,6 +98,12 @@ func newBatchReplayRunner(source remote.Runner, plan remoteReadPlan, results []r
 	return &batchReplayRunner{source: source, plan: plan, cached: cached}
 }
 
+func (r *batchReplayRunner) discardBaseline(script string) {
+	if results := r.cached[script]; len(results) > 0 {
+		r.cached[script] = results[1:]
+	}
+}
+
 func (r *batchReplayRunner) Run(ctx context.Context, user, host, script string) (string, error) {
 	if results := r.cached[script]; len(results) > 0 {
 		result := results[0]

@@ -169,13 +169,24 @@ access paths for app-owned deployment flows.
     before restarting its daemon after the SSH update command returns. With
     ingress enabled, `--fix` also runs the cloudflared repair from
     `internal/tunnel` under a longer per-command deadline.
-    Every sshd hardening check shares one fix. That fix rewrites the
-    serverpro drop-in and reloads ssh only when the managed config differs,
-    so several failing sshd checks cannot trip systemd's start rate limit.
-    Remote checks already run in a root shell and never call sudo again.
+    Every sshd hardening check shares one fix. That fix builds the candidate
+    main config and serverpro drop-in in a private temp directory, validates
+    them with `sshd -t -f` against a copy of the drop-in directory, and only
+    then replaces the live files (same-directory temp file and `mv`). It
+    re-runs `sshd -t` on the live config and restores the previous files if
+    that fails, so an invalid config never stays on disk. It writes only when
+    the managed config differs and then uses `try-reload-or-restart`, which
+    reloads a running `ssh.service` and leaves an inactive, socket-activated
+    one alone; a running daemon is also reloaded when nothing changed, in case
+    an earlier reload failed. Checks the repair can change (the later sshd
+    settings, `sshd units`, and `listening ports`) declare it in
+    `refreshAfterLive`: once it ran in a doctor run they skip their batch
+    baseline and read the host live, so one repair settles them and a unit
+    the repair broke is not hidden by a stale baseline. Remote checks already
+    run in a root shell and never call sudo again.
     A separate `sshd units` check fails while `ssh.socket` or `ssh.service`
     is failed, or enabled but not running; its fix resets them and starts
-    the enabled unit.
+    the enabled unit unless it already runs.
     Package/tool and generic fixable-check failures (including cloudflared)
     retain the check's own captured output without duplicating output already
     present in SSH errors. The batch error itself still carries only the
@@ -236,7 +247,14 @@ both below-floor state and cached newer candidates. Tailscale remains an exact
 client/daemon release; cloudflared is a minimum ingress package and is diagnosed
 and repaired separately from generic bootstrap repair. Provisioning runs it with
 `--no-autoupdate`, and stock unattended upgrades skip `pkg.cloudflare.com`, so a
-raised floor reaches existing hosts only through `doctor --fix`.
+raised floor reaches existing hosts only through `doctor --fix`. Both the
+install and the repair write `/etc/apt/preferences.d/serverpro-cloudflared`,
+which pins the `cloudflared` package to origin `pkg.cloudflare.com` at
+priority 990, then install only a candidate version that every offering
+repository lists as `https://pkg.cloudflare.com/cloudflared`. Their apt calls,
+and those of cloud-init, the bootstrap script, the managed-package refresh,
+and the Tailscale updater, pass `-o DPkg::Lock::Timeout=300` so a concurrent
+unattended-upgrades run delays them instead of failing them.
 
 ## Runtime flow
 

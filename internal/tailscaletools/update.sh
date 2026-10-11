@@ -128,9 +128,9 @@ install_prerequisites() {
   local -a packages
   package_list=$(required_env SERVERPRO_TAILSCALE_PACKAGES)
   read -r -a packages <<<"${package_list}"
-  apt-get update
+  apt-get -o DPkg::Lock::Timeout=300 update
   verify_package_candidates "${packages[@]}"
-  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${packages[@]}"
+  DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends "${packages[@]}"
   verify_package_minimums "${packages[@]}"
 }
 

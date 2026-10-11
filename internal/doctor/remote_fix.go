@@ -98,6 +98,9 @@ func runRemoteWithInput(ctx context.Context, r remote.Runner, user, host, script
 // read and fix commands print host state or diagnostics, never credentials;
 // a check whose output could hold a secret must not use this path.
 func remoteFixableCheck(ctx context.Context, r remote.Runner, user, host, name, command, fixCommand string, opt Options) Result {
+	if opt.refreshBaseline {
+		discardBaseline(r, command)
+	}
 	out, err := r.Run(ctx, user, host, command)
 	if err == nil {
 		return pass("remote", name, summarizeRemoteEvidence(name, out))

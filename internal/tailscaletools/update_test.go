@@ -133,7 +133,7 @@ func TestUpdateScriptCandidateFloorExecutableMatrix(t *testing.T) {
 			writeTailscaleFakeCommand(t, binDir, "dpkg-query", "if [ -f \"$INSTALL_MARKER\" ]; then state=installed; version=$CANDIDATE_VERSION; elif [ -n \"$INSTALLED_STATE\" ]; then state=$INSTALLED_STATE; version=$INSTALLED_VERSION; else exit 1; fi\ncase \"$*\" in *db:Status-Status*) printf '%s|%s' \"$state\" \"$version\" ;; *) printf '%s' \"$version\" ;; esac\n")
 			writeTailscaleFakeCommand(t, binDir, "dpkg", "case \"${2:-}\" in 3.0|\"$CANDIDATE_VERSION\") [ \"${2:-}\" != 0.0.0 ] ;; *) exit 1 ;; esac\n")
 			writeTailscaleFakeCommand(t, binDir, "apt-cache", "printf '  Candidate: %s\\n' \"$CANDIDATE_VERSION\"\n")
-			writeTailscaleFakeCommand(t, binDir, "apt-get", "if [ \"${1:-}\" = update ]; then exit 0; fi\nprintf ran >\"$INSTALL_MARKER\"\n")
+			writeTailscaleFakeCommand(t, binDir, "apt-get", "while [ \"${1:-}\" = -o ]; do shift 2; done\nif [ \"${1:-}\" = update ]; then exit 0; fi\nprintf ran >\"$INSTALL_MARKER\"\n")
 			cmd := exec.Command("bash", "-c", `source "$1"; install_prerequisites`, "test", scriptPath)
 			cmd.Env = append(os.Environ(),
 				"SERVERPRO_TAILSCALE_SOURCE_ONLY=1",
@@ -169,7 +169,7 @@ func TestUpdateScriptPreflightsCandidatesBeforeInstall(t *testing.T) {
 	script := UpdateScript()
 	functionStart := strings.Index(script, "install_prerequisites() {")
 	candidateCheck := strings.Index(script[functionStart:], `verify_package_candidates "${packages[@]}"`)
-	install := strings.Index(script[functionStart:], `apt-get install -y --no-install-recommends "${packages[@]}"`)
+	install := strings.Index(script[functionStart:], `apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends "${packages[@]}"`)
 	if functionStart < 0 || candidateCheck < 0 || install < 0 || candidateCheck > install {
 		t.Fatalf("candidate floors must be checked before prerequisite installation")
 	}
@@ -182,7 +182,7 @@ func TestUpdateScriptPinsArtifactsAndDelaysDaemonRestart(t *testing.T) {
 		AMD64SHA256,
 		ARM64SHA256,
 		"https://pkgs.tailscale.com/stable/",
-		`apt-get install -y --no-install-recommends "${packages[@]}"`,
+		`apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends "${packages[@]}"`,
 		"sha256sum -c",
 		"--no-same-owner",
 		`GODEBUG="tlsmlkem=1"`,

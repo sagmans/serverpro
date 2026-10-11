@@ -39,6 +39,9 @@ type Options struct {
 	// GitHubPAT reaches remote checks so parity can compare the locally
 	// stored copy with remote hosts.yml; only fingerprints ever enter evidence.
 	GitHubPAT string
+	// refreshBaseline makes a check skip its batch baseline and read live,
+	// because a repair earlier in the same run may have changed the host.
+	refreshBaseline bool
 }
 
 type InventoryItem struct {

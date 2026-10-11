@@ -65,12 +65,18 @@ func TestInstallScriptCloudflaredCandidateExecutableMatrix(t *testing.T) {
 	baseline := hostplatform.CloudflaredPackageBaseline()
 	for _, tc := range []struct {
 		name, installedState, installedVersion, candidate string
+		origins                                           string
 		wantOK                                            bool
 	}{
-		{name: "candidate-at-floor", candidate: baseline.MinimumVersion, wantOK: true},
-		{name: "config-files-newer-candidate-below-floor", installedState: "config-files", installedVersion: "3.0", candidate: "0.0.0"},
-		{name: "candidate-below-floor", candidate: "0.0.0"},
+		{name: "candidate-at-floor", candidate: baseline.MinimumVersion, origins: cloudflareAPTRepositoryURL, wantOK: true},
+		{name: "installed-at-floor-skips-candidate", installedState: "installed", installedVersion: "3.0", candidate: "0.0.0", origins: "https://mirror.example/ubuntu", wantOK: true},
+		{name: "config-files-newer-candidate-below-floor", installedState: "config-files", installedVersion: "3.0", candidate: "0.0.0", origins: cloudflareAPTRepositoryURL},
+		{name: "candidate-below-floor", candidate: "0.0.0", origins: cloudflareAPTRepositoryURL},
 		{name: "missing-candidate", candidate: "(none)"},
+		// The origin gate: the candidate version must come only from Cloudflare.
+		{name: "candidate-from-other-origin", candidate: baseline.MinimumVersion, origins: "https://mirror.example/cloudflared"},
+		{name: "candidate-also-from-other-origin", candidate: baseline.MinimumVersion, origins: cloudflareAPTRepositoryURL + " https://mirror.example/cloudflared"},
+		{name: "candidate-only-in-dpkg-status", candidate: baseline.MinimumVersion},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -84,7 +90,14 @@ func TestInstallScriptCloudflaredCandidateExecutableMatrix(t *testing.T) {
 			}
 			writeFakeCommand(t, binDir, "dpkg-query", "[ -n \"$INSTALLED_STATE\" ] || exit 1\ncase \"$*\" in *db:Status-Status*) printf '%s|%s' \"$INSTALLED_STATE\" \"$INSTALLED_VERSION\" ;; *) printf '%s' \"$INSTALLED_VERSION\" ;; esac\n")
 			writeFakeCommand(t, binDir, "dpkg", "case \"${2:-}\" in 3.0) exit 0 ;; \"$CANDIDATE_VERSION\") [ \"${2:-}\" != 0.0.0 ] ;; *) exit 1 ;; esac\n")
-			writeFakeCommand(t, binDir, "apt-cache", "printf '  Candidate: %s\\n' \"$CANDIDATE_VERSION\"\n")
+			// Mirrors apt-cache policy output: a version line per version, then one
+			// "priority URL suite arch Packages" line per repository offering it.
+			writeFakeCommand(t, binDir, "apt-cache", `printf 'cloudflared:\n  Installed: (none)\n  Candidate: %s\n  Version table:\n' "$CANDIDATE_VERSION"
+printf '     %s 990\n' "$CANDIDATE_VERSION"
+for origin in $ORIGINS; do printf '        990 %s noble/main amd64 Packages\n' "$origin"; done
+printf '        100 /var/lib/dpkg/status\n'
+printf ' *** 0.0.1 500\n        500 https://mirror.example/older noble/main amd64 Packages\n'
+`)
 			cmd := exec.Command("bash", "-c", `source "$1"; verify_cloudflared_candidate`, "test", scriptPath)
 			cmd.Env = append(os.Environ(),
 				"SERVERPRO_TUNNEL_SOURCE_ONLY=1",
@@ -92,6 +105,7 @@ func TestInstallScriptCloudflaredCandidateExecutableMatrix(t *testing.T) {
 				"INSTALLED_STATE="+tc.installedState,
 				"INSTALLED_VERSION="+tc.installedVersion,
 				"CANDIDATE_VERSION="+tc.candidate,
+				"ORIGINS="+tc.origins,
 			)
 			err := cmd.Run()
 			if tc.wantOK && err != nil {
@@ -107,7 +121,7 @@ func TestInstallScriptCloudflaredCandidateExecutableMatrix(t *testing.T) {
 func TestInstallScriptPreflightsCloudflaredCandidateBeforeInstall(t *testing.T) {
 	s := InstallScript("cf-tunnel-token")
 	candidateCheck := strings.Index(s, "\n  verify_cloudflared_candidate\n")
-	install := strings.Index(s, `apt-get install -y "${CLOUDFLARED_PACKAGE}"`)
+	install := strings.Index(s, "\n  install_cloudflared_candidate\n")
 	if candidateCheck < 0 || install < 0 || candidateCheck > install {
 		t.Fatalf("cloudflared candidate floor must be checked before package installation\n%s", s)
 	}
@@ -126,7 +140,7 @@ func TestUpgradeScriptGatesTrustBeforeApt(t *testing.T) {
 		t.Fatalf("upgrade script has no main\n%s", s)
 	}
 	body := s[mainStart:]
-	aptUpdate := strings.Index(body, "apt-get update")
+	aptUpdate := strings.Index(body, "apt_get update")
 	if aptUpdate < 0 {
 		t.Fatalf("upgrade script never refreshes apt\n%s", body)
 	}
@@ -253,5 +267,66 @@ func writeFakeCommand(t *testing.T, dir, name, body string) {
 	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte("#!/bin/sh\nset -eu\n"+body), 0o700); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestScriptsPinCloudflaredOriginAndWaitForAptLock covers both apt paths:
+// provisioning and the doctor repair write the origin pin before apt runs,
+// install only the verified candidate version, and wait on the dpkg lock.
+func TestScriptsPinCloudflaredOriginAndWaitForAptLock(t *testing.T) {
+	for name, s := range map[string]string{"install": InstallScript("cf-tunnel-token"), "upgrade": UpgradeScript()} {
+		t.Run(name, func(t *testing.T) {
+			body := s[strings.Index(s, "main() {"):]
+			pin := strings.Index(body, "write_cloudflared_apt_pin")
+			update := strings.Index(body, "apt_get update")
+			candidate := strings.Index(body, "verify_cloudflared_candidate")
+			install := strings.Index(body, "install_cloudflared_candidate")
+			if pin < 0 || update < 0 || candidate < 0 || install < 0 || pin > update || update > candidate || candidate > install {
+				t.Fatalf("want pin < apt update < candidate check < install\n%s", body)
+			}
+			if strings.Contains(body, "apt-get ") {
+				t.Fatalf("main must call apt through apt_get so it waits for the dpkg lock\n%s", body)
+			}
+			for _, want := range []string{
+				`apt-get -o DPkg::Lock::Timeout="${APT_LOCK_TIMEOUT}"`,
+				"APT_LOCK_TIMEOUT=300",
+				`apt_get install -y "${CLOUDFLARED_PACKAGE}=${candidate_version}"`,
+				"CLOUDFLARED_APT_PREFERENCES_PATH=/etc/apt/preferences.d/serverpro-cloudflared",
+				"CLOUDFLARED_APT_REPOSITORY_URL=" + cloudflareAPTRepositoryURL,
+			} {
+				if !strings.Contains(s, want) {
+					t.Fatalf("script missing %q", want)
+				}
+			}
+		})
+	}
+}
+
+func TestWriteCloudflaredAptPinWritesOriginPreference(t *testing.T) {
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "upgrade.sh")
+	if err := os.WriteFile(scriptPath, []byte(UpgradeScript()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	prefs := filepath.Join(dir, "preferences.d", "serverpro-cloudflared")
+	cmd := exec.Command("bash", "-c", `source "$1"; CLOUDFLARED_APT_PREFERENCES_PATH="$2"; write_cloudflared_apt_pin; write_cloudflared_apt_pin`, "test", scriptPath, prefs)
+	cmd.Env = append(os.Environ(), "SERVERPRO_TUNNEL_SOURCE_ONLY=1")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("write pin: %v\n%s", err, out)
+	}
+	got, err := os.ReadFile(prefs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Package: cloudflared\nPin: origin \"pkg.cloudflare.com\"\nPin-Priority: 990\n"
+	if string(got) != want {
+		t.Fatalf("preferences = %q, want %q", got, want)
+	}
+	info, err := os.Stat(prefs)
+	if err != nil || info.Mode().Perm() != 0o644 {
+		t.Fatalf("preferences mode = %v, %v", info.Mode(), err)
+	}
+	if _, err := os.Stat(prefs + ".serverpro-new"); !os.IsNotExist(err) {
+		t.Fatalf("temp preferences file left behind: %v", err)
 	}
 }

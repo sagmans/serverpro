@@ -101,8 +101,8 @@ func sshdUnitsReadCommand() string {
 		"printf '%s\\n' 'ssh units healthy'"
 }
 
-// sshdUnitsFixCommand clears the failed state and starts whichever unit the
-// host enables, preferring the socket so a socket-activated host does not
+// sshdUnitsFixCommand clears the failed state and starts, unless it already
+// runs, whichever unit the host enables, preferring the socket so a socket-activated host does not
 // also gain a standalone daemon. It never enables a disabled unit, so it only
 // returns the host to its own configured listener; the ufw checks earlier in
 // the same plan are what keep public port 22 denied.
@@ -110,8 +110,8 @@ func sshdUnitsFixCommand() string {
 	return "for unit in " + sshSocketUnit + " " + sshServiceUnit + "; do\n" +
 		"  if systemctl is-failed --quiet \"$unit\"; then systemctl reset-failed \"$unit\"; fi\n" +
 		"done\n" +
-		"if systemctl is-enabled --quiet " + sshSocketUnit + "; then systemctl start " + sshSocketUnit + "\n" +
-		"elif systemctl is-enabled --quiet " + sshServiceUnit + "; then systemctl start " + sshServiceUnit + "\n" +
+		"if systemctl is-enabled --quiet " + sshSocketUnit + "; then systemctl is-active --quiet " + sshSocketUnit + " || systemctl start " + sshSocketUnit + "\n" +
+		"elif systemctl is-enabled --quiet " + sshServiceUnit + "; then systemctl is-active --quiet " + sshServiceUnit + " || systemctl start " + sshServiceUnit + "\n" +
 		"fi"
 }
 
@@ -265,28 +265,41 @@ case "$hash" in
 esac`
 }
 
-// sshdSettingsFixCommand is shared by every sshd hardening check, so one
-// doctor --fix run can invoke it once per failing setting. It therefore only
-// rewrites and reloads when the managed config actually differs: back-to-back
-// restarts trip systemd's start rate limit and leave ssh.service failed.
-// try-reload-or-restart applies a change to a running daemon without a new
-// start and leaves a socket-activated, inactive ssh.service inactive; the next
-// socket-spawned sshd reads the new config. A running daemon is reloaded even
-// when the files already match, because an earlier reload may have failed
-// after the write and sshd -T only proves the on-disk config. Every temp-file
-// step exits on failure, since an empty path would truncate the target.
+// sshdSettingsFixCommand is shared by every sshd hardening check. Doctor runs
+// it at most once per run in practice: later sshd checks re-read the host
+// after it ran (refreshAfterSSHDRepair) instead of repairing again, because
+// back-to-back restarts trip systemd's start rate limit.
 func sshdSettingsFixCommand() string {
-	return `mkdir -p /etc/ssh/sshd_config.d /run/sshd
-changed=0
-if ! grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config[.]d/[*][.]conf([[:space:]]|$)' /etc/ssh/sshd_config; then
-  tmp="$(mktemp)" || exit 1
-  { printf 'Include /etc/ssh/sshd_config.d/*.conf\n'; cat /etc/ssh/sshd_config; } > "$tmp" || { rm -f "$tmp"; exit 1; }
-  cat "$tmp" > /etc/ssh/sshd_config || { rm -f "$tmp"; exit 1; }
-  rm -f "$tmp"
-  changed=1
-fi
-desired="$(mktemp)" || exit 1
-cat > "$desired" <<'EOF' || { rm -f "$desired"; exit 1; }
+	return sshdSettingsFixScript("/etc/ssh", "/run/sshd")
+}
+
+// sshdSettingsFixScript validates before it commits and never leaves an
+// invalid config on disk:
+//   - it builds the candidate main config and serverpro drop-in in a private
+//     temp directory and checks them with sshd -t -f against a copy of the
+//     drop-in directory, so the live files stay untouched if that fails;
+//   - it replaces each changed file through a same-directory temp file and
+//     mv, then runs sshd -t on the live config and restores the backups if
+//     that fails (for example when another drop-in changed meanwhile);
+//   - every temp-file step aborts on failure.
+//
+// It then reloads with try-reload-or-restart: that reloads a running
+// ssh.service (sshd supports reload, and reloads do not count towards the
+// start limit) and does nothing while a socket-activated ssh.service is
+// inactive, since the next socket-spawned sshd reads the new config. A
+// running daemon is reloaded even when the files already match, because an
+// earlier reload may have failed after its write and sshd -T only proves the
+// on-disk config. With nothing changed and ssh.service inactive it only
+// validates. sshDir and runDir are parameters so tests can run the script
+// against a scratch tree; production passes /etc/ssh and /run/sshd.
+func sshdSettingsFixScript(sshDir, runDir string) string {
+	return `main=` + shell.Quote(sshDir+"/sshd_config") + `
+dropin_dir=` + shell.Quote(sshDir+"/sshd_config.d") + `
+dropin="$dropin_dir/99-serverpro.conf"
+mkdir -p "$dropin_dir" ` + shell.Quote(runDir) + ` || exit 1
+work="$(mktemp -d)" || { echo 'sshd repair: cannot create a temp directory; live config unchanged' >&2; exit 1; }
+trap 'rm -rf "$work"' EXIT
+cat > "$work/99-serverpro.conf" <<'EOF' || exit 1
 PermitRootLogin no
 PasswordAuthentication no
 KbdInteractiveAuthentication no
@@ -297,11 +310,55 @@ AllowTcpForwarding no
 PermitTunnel no
 PermitOpen none
 EOF
-if ! cmp -s "$desired" /etc/ssh/sshd_config.d/99-serverpro.conf; then
-  cat "$desired" > /etc/ssh/sshd_config.d/99-serverpro.conf || { rm -f "$desired"; exit 1; }
-  changed=1
+main_changed=0
+dropin_changed=0
+if grep -Eq '^[[:space:]]*Include[[:space:]]+'"$dropin_dir"'/[*][.]conf([[:space:]]|$)' "$main"; then
+  cp "$main" "$work/main" || exit 1
+else
+  { printf 'Include %s/*.conf\n' "$dropin_dir"; cat "$main"; } > "$work/main" || exit 1
+  main_changed=1
 fi
-rm -f "$desired"
+cmp -s "$work/99-serverpro.conf" "$dropin" || dropin_changed=1
+changed=0
+if [ "$main_changed" -eq 1 ] || [ "$dropin_changed" -eq 1 ]; then
+  changed=1
+  mkdir "$work/d" || exit 1
+  for conf in "$dropin_dir"/*.conf; do
+    [ -e "$conf" ] || continue
+    cp "$conf" "$work/d/" || exit 1
+  done
+  cp "$work/99-serverpro.conf" "$work/d/99-serverpro.conf" || exit 1
+  sed "s#^\([[:space:]]*Include[[:space:]]\{1,\}\)$dropin_dir/[*][.]conf#\1$work/d/*.conf#" "$work/main" > "$work/candidate" || exit 1
+  if ! sshd -t -f "$work/candidate"; then
+    echo 'sshd repair: candidate config failed sshd -t; live config unchanged' >&2
+    exit 1
+  fi
+  cp -p "$main" "$work/main.bak" || exit 1
+  had_dropin=0
+  if [ -e "$dropin" ]; then cp -p "$dropin" "$work/dropin.bak" || exit 1; had_dropin=1; fi
+  restore() {
+    cp -p "$work/main.bak" "$main.serverpro-restore" && mv -f "$main.serverpro-restore" "$main"
+    if [ "$had_dropin" -eq 1 ]; then
+      cp -p "$work/dropin.bak" "$dropin.serverpro-restore" && mv -f "$dropin.serverpro-restore" "$dropin"
+    else
+      rm -f "$dropin"
+    fi
+  }
+  commit() {
+    cp "$1" "$2.serverpro-new" && chmod 0644 "$2.serverpro-new" && mv -f "$2.serverpro-new" "$2"
+  }
+  if [ "$main_changed" -eq 1 ]; then
+    commit "$work/main" "$main" || { rm -f "$main.serverpro-new"; restore; exit 1; }
+  fi
+  if [ "$dropin_changed" -eq 1 ]; then
+    commit "$work/99-serverpro.conf" "$dropin" || { rm -f "$dropin.serverpro-new"; restore; exit 1; }
+  fi
+  if ! sshd -t; then
+    restore
+    echo 'sshd repair: live config failed sshd -t after the write; restored the previous files' >&2
+    exit 1
+  fi
+fi
 if [ "$changed" -eq 0 ] && ! systemctl is-active --quiet ` + sshServiceUnit + `; then sshd -t; exit; fi
 sshd -t && systemctl try-reload-or-restart ssh`
 }
