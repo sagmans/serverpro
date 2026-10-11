@@ -118,8 +118,8 @@ func repairBootstrapTools(ctx context.Context, r remote.Runner, user, host strin
 }
 
 func repairTailscale(ctx context.Context, r remote.Runner, user, host string, checks []remoteToolDefinition, failed []int, results []Result, wait poll.WaitFunc) {
-	if _, err := r.Run(ctx, user, host, tailscaletools.UpdateScript()); err != nil {
-		markToolFixFailed(checks, failed, results, err.Error())
+	if out, err := r.Run(ctx, user, host, tailscaletools.UpdateScript()); err != nil {
+		markToolFixFailed(checks, failed, results, remoteFailureEvidence(out, err))
 		return
 	}
 	if err := poll.Wait(ctx, wait, tailscaletools.RestartGrace); err != nil {
@@ -129,24 +129,26 @@ func repairTailscale(ctx context.Context, r remote.Runner, user, host string, ch
 
 	for _, i := range failed {
 		check := checks[i]
-		var lastErr error
+		// lastEvidence keeps the final recheck's own output, as the other
+		// fixable checks do, so a still-failing probe says why it failed.
+		lastEvidence := ""
 		for attempt := 0; attempt < tailscaleRecheckAttempts; attempt++ {
 			out, err := r.Run(ctx, user, host, check.Command)
 			if err == nil {
 				results[i] = pass("remote", check.Name, "fixed: "+summarizeRemoteEvidence(check.Name, out))
-				lastErr = nil
+				lastEvidence = ""
 				break
 			}
-			lastErr = err
+			lastEvidence = remoteFailureEvidence(out, err)
 			if attempt+1 < tailscaleRecheckAttempts {
 				if err := poll.Wait(ctx, wait, tailscaleRecheckInterval); err != nil {
-					lastErr = err
+					lastEvidence = err.Error()
 					break
 				}
 			}
 		}
-		if lastErr != nil {
-			results[i] = fail("remote", check.Name, lastErr.Error(), "fix applied but check still failed")
+		if lastEvidence != "" {
+			results[i] = fail("remote", check.Name, lastEvidence, "fix applied but check still failed")
 		}
 	}
 }

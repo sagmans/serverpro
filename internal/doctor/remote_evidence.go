@@ -40,9 +40,9 @@ func summarizeRemoteEvidence(name, out string) string {
 		return summarizeListeningPorts(text)
 	case "egress positive":
 		return "dns/http egress ok"
-	case "cloudflared":
-		return "active"
 	}
+	// cloudflared falls through on purpose: its check prints one line with
+	// the installed version and service state, which proves a repair landed.
 	return text
 }
 
