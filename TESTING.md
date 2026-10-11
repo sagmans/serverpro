@@ -188,6 +188,40 @@ Ubuntu 24.04 chroot with the real `openssh-server` (OpenSSH 9.6p1) and a fake
 - The cloudflared candidate-origin parser accepted and rejected correctly
   against real noble `apt-cache policy` output with an origin pin in place.
 
+### sshd repair fail-safe dogfood
+
+On 2026-10-11 the rendered sshd fix, sshd read, and ssh unit scripts ran in a
+disposable privileged Ubuntu 24.04 container booted with systemd, with
+socket-activated `ssh.socket` and OpenSSH 9.6p1. Each repair ran over a real
+SSH login through `sudo -n sh`, as doctor's transport does. After every case a
+fresh key login was tried and succeeded, except where noted. The container
+and keys were deleted afterwards.
+
+- Stock config: the fix exited 0. `sshd -T` showed every hardened value. The
+  server stopped offering password auth, a root key login was refused, and a
+  rerun rewrote nothing.
+- Socket activation: `ssh.socket` stayed the listener and `ssh.service`
+  stayed disabled. With `ssh.service` running instead, the fix reloaded it
+  and kept the same main PID, so it did not restart.
+- With the only `Include` inside a trailing `Match` block, the fix added a
+  top-level `Include` and the hardened values applied globally.
+- A lower-numbered drop-in that set `PasswordAuthentication yes` made the fix
+  exit 1. The error named the missing `sshd -T` value and the overriding
+  drop-in.
+- A live `sshd -t` failure after the write restored both files, removed the
+  new drop-in, and exited 1. When the restore `mv` also failed, the fix exited
+  3 with the "restoring the previous files FAILED" message. No staging or
+  restore temp files remained in either case.
+- When the SSH client was killed during candidate validation with a TTY, the
+  hangup trap removed the temp directory and left the live config unchanged.
+  Without a TTY the repair received no signal and completed with a valid
+  config. A script fed through `sh -s` on a TTY can leak its temp directory
+  when killed, but doctor never uses that form because it runs a script file.
+- A `failed` `ssh.socket` failed the unit read check. The unit fix reset it
+  and started it, the read check passed, and SSH logins worked again.
+  `start-limit-hit` could not be reproduced for a socket unit in the
+  container.
+
 ### Cloudflared check and repair dogfood
 
 The 2026-10-11 cloudflared repair ran the rendered check and repair scripts
