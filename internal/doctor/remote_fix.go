@@ -93,23 +93,28 @@ func runRemoteWithInput(ctx context.Context, r remote.Runner, user, host, script
 	return err
 }
 
+// remoteFixableCheck carries each command's own output into failure evidence
+// because a batch error only names an index and exit status. Every caller's
+// read and fix commands print host state or diagnostics, never credentials;
+// a check whose output could hold a secret must not use this path.
 func remoteFixableCheck(ctx context.Context, r remote.Runner, user, host, name, command, fixCommand string, opt Options) Result {
 	out, err := r.Run(ctx, user, host, command)
 	if err == nil {
 		return pass("remote", name, summarizeRemoteEvidence(name, out))
 	}
+	evidence := remoteFailureEvidence(out, err)
 	if fixCommand == "" {
-		return fail("remote", name, err.Error(), "inspect remote command")
+		return fail("remote", name, evidence, "inspect remote command")
 	}
 	if !opt.Fix {
-		return fail("remote", name, err.Error(), "run serverpro server doctor --fix")
+		return fail("remote", name, evidence, "run serverpro server doctor --fix")
 	}
-	if _, fixErr := r.Run(ctx, user, host, fixCommand); fixErr != nil {
-		return fail("remote", name, err.Error()+"; fix failed: "+fixErr.Error(), "inspect remote command")
+	if fixOut, fixErr := r.Run(ctx, user, host, fixCommand); fixErr != nil {
+		return fail("remote", name, evidence+"; fix failed: "+remoteFailureEvidence(fixOut, fixErr), "inspect remote command")
 	}
 	out, err = r.Run(ctx, user, host, command)
 	if err != nil {
-		return fail("remote", name, err.Error(), "fix applied but check still failed")
+		return fail("remote", name, remoteFailureEvidence(out, err), "fix applied but check still failed")
 	}
 	return pass("remote", name, "fixed: "+summarizeRemoteEvidence(name, out))
 }

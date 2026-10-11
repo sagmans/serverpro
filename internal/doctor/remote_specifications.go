@@ -3,6 +3,7 @@ package doctor
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/sagmans/serverpro/internal/bootstraptools"
 	"github.com/sagmans/serverpro/internal/config"
@@ -14,7 +15,12 @@ import (
 	"github.com/sagmans/serverpro/internal/tunnel"
 )
 
-const supportedPlatformCheckName = "supported platform"
+const (
+	supportedPlatformCheckName = "supported platform"
+	// cloudflaredFixTimeout covers apt metadata refresh plus the package
+	// download, which outlast the default per-command SSH deadline.
+	cloudflaredFixTimeout = 10 * time.Minute
+)
 
 // remoteCheckSpecification keeps batch authority inseparable from the check
 // that consumes it, preventing new diagnostics from bypassing either path.
@@ -82,7 +88,7 @@ func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
 		specifications = append(specifications, remoteGitIdentitySpecifications(cfg)...)
 	}
 	if cfg.Network.Ingress != "none" {
-		specifications = append(specifications, remoteFixableSpecification("cloudflared", tunnel.CheckCommand(), ""))
+		specifications = append(specifications, remoteCloudflaredSpecification())
 	}
 	return specifications
 }
@@ -114,6 +120,21 @@ func remoteFixableSpecification(name, readCommand, liveCommand string) remoteChe
 		return []Result{remoteFixableCheck(ctx, runner, user, host, name, readCommand, liveCommand, options)}
 	}
 	return specification
+}
+
+// remoteCloudflaredSpecification gives the connector check a live repair:
+// provisioning installs cloudflared once with --no-autoupdate, so a raised
+// package floor otherwise leaves every existing host failing with no fix.
+func remoteCloudflaredSpecification() remoteCheckSpecification {
+	readCommand := tunnel.CheckCommand()
+	fixCommand := tunnel.UpgradeScript()
+	return remoteCheckSpecification{
+		readCommands: []string{readCommand},
+		liveCommands: []string{fixCommand},
+		run: func(ctx context.Context, runner remote.Runner, user, host string, options Options) []Result {
+			return []Result{remoteFixableCheck(ctx, remote.WithTimeout(runner, cloudflaredFixTimeout), user, host, tunnel.CheckName, readCommand, fixCommand, options)}
+		},
+	}
 }
 
 func remoteSSHDSettingSpecification(name, keyword string) remoteCheckSpecification {

@@ -217,7 +217,7 @@ func TestShellValidateSHA256Token(t *testing.T) {
 }
 
 // TestShellValidateUserToken pins the username sanitizer that runs before the
-// value reaches sudo -u / getent / run_as_target. A broken character class here
+// value reaches runuser -u / getent / run_as_target. A broken character class here
 // is a root command-injection vector, so every shell metacharacter must reject.
 func TestShellValidateUserToken(t *testing.T) {
 	assertShellValidator(t, `validate_user_token NAME "$TESTVAL"`, []validatorCase{

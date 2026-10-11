@@ -81,6 +81,13 @@ access paths for app-owned deployment flows.
     Tunnel adapter. The downloaded repository key is fingerprint-verified before
     trust, the noble repository is explicit, and the installed package must meet
     the reviewed minimum.
+  - Doctor check and repair scripts render from the same shell helpers. The
+    check prints one reason on failure: not installed, a non-installed package
+    status, the installed version below the floor, or the systemctl state.
+    The repair never fetches a key and never writes the token or unit. It
+    requires the provisioned unit and token, re-verifies the installed keyring
+    fingerprint and the exact apt source line, upgrades from that repository
+    to at least the floor, then enables and restarts the service.
 - State: `internal/state`
   - Provider-neutral registry, per-server JSON state, and context-cancellable
     workflow lock ordering.
@@ -159,9 +166,13 @@ access paths for app-owned deployment flows.
     every requested fix when the actual OS, codename, or architecture is outside
     support. `--fix` refreshes repositories, upgrades the
     general managed package set, repairs exact tool pins, and stages Tailscale
-    before restarting its daemon after the SSH update command returns.
-    Package/tool failures retain captured output without duplicating output
-    already present in SSH errors. The CLI redacts complete failure evidence
+    before restarting its daemon after the SSH update command returns. With
+    ingress enabled, `--fix` also runs the cloudflared repair from
+    `internal/tunnel` under a longer per-command deadline.
+    Package/tool and generic fixable-check failures (including cloudflared)
+    retain the check's own captured output without duplicating output already
+    present in SSH errors. The batch error itself still carries only the
+    command index and exit status, so scripts and credentials stay out of it. The CLI redacts complete failure evidence
     before report serialization bounds it to 4 KiB with a head/tail excerpt.
     Server doctor and create share an output boundary that saves this complete
     report in a private temporary directory. Default JSON output contains
@@ -216,7 +227,9 @@ current signed candidate, reject candidates below the reviewed floor, retain
 newer installed versions, and permit future security upgrades. Doctor reports
 both below-floor state and cached newer candidates. Tailscale remains an exact
 client/daemon release; cloudflared is a minimum ingress package and is diagnosed
-separately from generic bootstrap repair.
+and repaired separately from generic bootstrap repair. Provisioning runs it with
+`--no-autoupdate`, and stock unattended upgrades skip `pkg.cloudflare.com`, so a
+raised floor reaches existing hosts only through `doctor --fix`.
 
 ## Runtime flow
 

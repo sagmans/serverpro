@@ -262,7 +262,11 @@ Managed host tools install through integrity-checked sources, not
   against the architecture-specific SHA-256 digest published with that GitHub
   release. Bootstrap installs the bundled Pi integration under the target user's
   private Pi agent directory and does not invoke Herdr self-update or session
-  lifecycle commands.
+  lifecycle commands. Doctor verifies the digest before it runs Herdr at all.
+  On a mismatch it reads the installed version from the mise install path
+  without running the binary, so an older pinned install reports as
+  `expected herdr X, got herdr Y`. Any other mismatch reports as a SHA-256
+  mismatch.
 - Tailscale `1.102.4` first-boot and repair binaries are fetched only for
   reviewed amd64 or arm64 architectures, checked against pinned SHA-256 digests,
   and extracted by exact member name. Unsupported architectures and mismatches
@@ -292,7 +296,9 @@ Managed host tools install through integrity-checked sources, not
   managed-artifact download, verification, extraction, and staging. Read-only
   doctor uses existing apt candidate metadata; `--fix` refreshes metadata before
   upgrading the declared package set. Final user-home installation runs as the
-  target user; root does not write into user home paths.
+  target user through `runuser`; root does not write into user home paths. The
+  drop does not use sudo, because sudo checks root's own account and fails on
+  hosts that ship root with an expired password.
 
 Treat fingerprints, versions, and checksums as reviewed trust roots. Rotate them
 only after checking the new value through the official source recorded in

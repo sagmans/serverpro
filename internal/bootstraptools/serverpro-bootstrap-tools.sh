@@ -715,12 +715,19 @@ require_target_user() {
   fi
 }
 
+# run_as_target drops from root to the admin user for user-level installs.
+# runuser, not sudo: sudo runs the PAM account stage for the invoking user
+# even when root needs no password, so a provider image that ships root with
+# an expired password (DigitalOcean) makes every drop fail with "Account or
+# password is expired". runuser's PAM stack has no account stage, matching the
+# other root-to-admin hops in internal/lifecycle and internal/doctor.
 run_as_target() {
   local script=$1
   if [[ -z ${TARGET_USER:-} || -z ${TARGET_HOME:-} ]]; then
     return 0
   fi
-  sudo -H -u "${TARGET_USER}" \
+  # shellcheck disable=SC2016 # WHY: $HOME and $1 must expand in the target user's shell, after env -i resets HOME.
+  runuser -u "${TARGET_USER}" -- \
     env -i HOME="${TARGET_HOME}" USER="${TARGET_USER}" LOGNAME="${TARGET_USER}" PATH="${TARGET_PATH}" MISE_EXPERIMENTAL=1 \
     bash -c 'cd "$HOME" && exec bash -c "$1"' sh "${script}"
 }
@@ -1256,6 +1263,7 @@ remove_legacy_sg_tool_for_target() {
 
   # Retire the active legacy key before configuring ast-grep. `mise unuse`
   # edits TOML through mise itself and prunes the old install when now unused.
+  # shellcheck disable=SC2016 # WHY: $HOME and ${config} must expand as the target user, not as root.
   run_as_target 'set -euo pipefail; config="$HOME/.config/mise/config.toml"; if mise config get --file "${config}" tools.sg >/dev/null 2>&1; then mise --yes unuse --path "${config}" sg; fi'
 }
 
@@ -1351,7 +1359,7 @@ PROBE
 }
 
 target_managed_mise_tool_ready() {
-  local row=$1 version_env checksum_key probe version expected_npm_version expected_sha= script
+  local row=$1 version_env checksum_key probe version expected_npm_version expected_sha='' script
   IFS='|' read -r _ version_env _ _ _ _ _ checksum_key _ _ _ probe _ <<<"${row}"
   version=$(bootstrap_version_env "${version_env}")
   expected_npm_version=$(bootstrap_npm_version)

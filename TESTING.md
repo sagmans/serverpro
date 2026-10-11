@@ -23,7 +23,7 @@ why a layer is not applicable.
 | Read-only dogfood | `make test-dogfood-readonly` | Dogfood the actual binary across every no-token command path and local state mutation path. | No |
 | Live dogfood | `make test-dogfood-live` | Use real provider APIs for catalog, provider doctor, discover, and optional selectable create, status, doctor, fix, bootstrap, power, import, identity, and delete scenarios on a throwaway or kept test server; every successful command must emit valid JSON with command-specific status, shape, and identity. | Yes |
 | Live harness self-test | `make test-dogfood-live-selftest` | Unit-test every importable output contract, then prove malformed/invalid-success rejection, fallback-delete evidence, guards, secret transport, and cleanup retention through the shell orchestrator with a fake binary; no tokens or network. | No |
-| Shell lint | `make lint-shell` | Run `shellcheck -x` on the dogfood harness (orchestrator, shared lib, every flow file, self-test) and the other standalone shell scripts. ShellCheck is a system tool, not installed by the Makefile; the target fails with guidance when it is missing. | No |
+| Shell lint | `make lint-shell` | Run `shellcheck -x` on every Git-tracked `*.sh` file, including the root bootstrap script and the Tailscale updater. Suppressions are targeted `# shellcheck disable=SCxxxx # WHY: ...` lines. ShellCheck is a system tool, not installed by the Makefile; the target fails with guidance when it is missing. | No |
 
 CI combines `make check` with a separate `make test-full-chain-e2e` job.
 `make check` runs the primary non-live gates once; release workflow Go tests
@@ -124,6 +124,14 @@ Release fixtures need isolated HOME/XDG_CONFIG_HOME when operator-wide Git
 hooks enforce commit-message rules on synthetic fixture commits. Keep the
 real repository’s commit hooks and signing configuration unchanged.
 
+The 2026-10-11 root-to-user drop fix kept the production transport. A
+disposable Ubuntu 24.04 amd64 container ran the real bootstrap wrapper as root
+with root's password expired, the state DigitalOcean images ship. Before the
+fix, every drop to the admin user failed with `sudo: Account or password is
+expired`. After it, target `mise` installed and verified for the admin user.
+Earlier container runs above used `runuser` in place of sudo, so they could
+not show this failure.
+
 ## Doctor output coverage
 
 Doctor and create tests verify non-pass summary results, status counts,
@@ -138,6 +146,39 @@ reports as well as stdout; no production server or credential is required.
 The Python validator and live harness self-test accept valid summaries,
 including empty result lists for successful checks, but reject contradictory
 status/count data and failures disguised as success.
+
+### Cloudflared check and repair dogfood
+
+The 2026-10-11 cloudflared repair ran the rendered check and repair scripts
+with `sh` (dash, as the remote batch and sudo transport do) in a disposable
+Ubuntu 24.04 amd64 container. The pinned key and noble source came from the
+rendered install script's own helper, which verified fingerprint
+`CC94B39C77AE7342A68B89628A682D308D4E5E73`. The old `2026.8.2` `.deb` came from
+the `pkg.cloudflare.com` pool, because the signed index lists only the latest
+release.
+
+- With no package, the check printed `cloudflared package is not installed`.
+- With `2026.8.2` installed, the old check exited 1 with no output, which
+  matches the field report. The new check printed
+  `cloudflared 2026.8.2 is below minimum 2026.9.3`.
+- The repair stopped before any apt call with a "reprovision the server"
+  message in four cases: no unit or token, a missing apt source, a source
+  without `signed-by`, and a missing keyring. A keyring holding other keys
+  failed with a fingerprint mismatch. The package stayed at `2026.8.2`.
+- With the provisioned state restored, the repair upgraded to `2026.10.0`.
+  The check then printed `cloudflared 2026.10.0 active`.
+- A stopped service printed `cloudflared service is not active: failed`. The
+  repair restarted it without apt work. A removed package printed
+  `cloudflared package status is config-files, want installed`.
+
+The container has no systemd. A `systemctl` stub stood in only for
+`is-active`, `enable`, and `restart`, and its `restart` ran the upgraded
+binary's `--version` first. Real unit activation was not verified. The live
+create journey's `doctor --fix` meets a current connector, so it does not
+exercise this repair; confirm it on an affected host. Without the stub, the check printed the
+`systemctl: not found` error as the service state. A batched doctor run with
+captured output showed the old bare `remote batch command N failed with status
+1` evidence now followed by the check's own reason.
 
 ## Command surface matrix
 
@@ -154,7 +195,7 @@ status/count data and failures disguised as success.
 | `serverpro server bootstrap` | Re-run managed host tools on existing hosts for `all`, `git`, `docker`, `mise`, `node`, `pi`; emit stderr progress; the Git target converges Git/OpenSSH, target-user mise, and gh before persisted `none`, single-repo deploy-key, or PAT-required account-key setup. | `internal/cli/bootstrap*_test.go`, `internal/cli/git_identity_test.go`, `internal/bootstraptools/*_test.go`, `internal/lifecycle/git_deploy*_test.go`, `internal/lifecycle/git_identity*_test.go`; intent-before-mutation, required-PAT, exact doctor state, deploy-to-account cleanup, key rerun/public-key repair | dry-run all targets with fixture state | Live dogfood optional idempotent target after create; interactive GitHub registration remains manual |
 | `serverpro server list` | Local registry/state listing with namespace/provider filters. | `internal/cli/server_read_command_test.go` | fixture list cases | Read-only dogfood |
 | `serverpro server status` | State resolution, ambiguity handling, provider status refresh, IP update, JSON row. | `internal/cli/server_discovery_command_test.go`, `internal/cli/server_read_command_test.go` | no-token credential guard and `--all` cases | Live dogfood after create |
-| `serverpro server doctor` | Local, provider, Tailscale, Cloudflare, SSH, blocking remote platform authority, remote hardening, sudo, exact tool pins, refreshed apt package freshness, and redaction checks; one snapshot per service, one read-only remote batch, remote-only sudo retry, optional package/tool/Tailscale fix path. | `internal/cli/server_doctor_command_test.go`, `internal/doctor/*_test.go`; unsupported platforms disable every sequential/batched fix, `--fix` refreshes package metadata before trusting a cached-current result, and package failure evidence retains command output and terminal repair errors within redacted UTF-8 bounds | dry-run/guard cases plus production-orchestrated compiled full-chain reports and package-failure journeys without/with `--fix` | Live dogfood after create |
+| `serverpro server doctor` | Local, provider, Tailscale, Cloudflare, SSH, blocking remote platform authority, remote hardening, sudo, exact tool pins, refreshed apt package freshness, and redaction checks; one snapshot per service, one read-only remote batch, remote-only sudo retry, optional package/tool/Tailscale fix path. | `internal/cli/server_doctor_command_test.go`, `internal/doctor/*_test.go`; unsupported platforms disable every sequential/batched fix, `--fix` refreshes package metadata before trusting a cached-current result, package and fixable-check failure evidence retains command output and terminal repair errors within redacted UTF-8 bounds, and ingress-enabled `--fix` plans and runs the cloudflared repair | dry-run/guard cases plus production-orchestrated compiled full-chain reports and package-failure journeys without/with `--fix` | Live dogfood after create |
 | `serverpro server ssh` | Tailscale SSH target construction, admin user resolution, atomic config recovery update, dry-run command, live shell handoff. | `internal/cli/server_read_command_test.go`, `internal/config/io_test.go`, `internal/remote/*_test.go` including fake `tailscale` process | dry-run fixture case | Manual/live session only; do not automate interactive shell by default |
 | `serverpro server discover` | Read provider inventory and filter serverpro ownership labels. | `internal/cli/server_discovery_command_test.go`, `internal/importsync/discover_test.go` | compiled help, provider validation, and scrubbed-token guard cases | Live read-only API dogfood |
 | `serverpro server import` | Rebuild config, credentials, state, registry; valid provider-only mesh intent; partial credential completion; optional Tailscale and Cloudflare enrichment; preserving force refresh and service-token merge; dry-run/force/all/provider-id gates. | `internal/cli/server_import_command_test.go`, `internal/importsync/import_test.go`, `internal/importsync/enrich_test.go`, `internal/credentials/save_test.go` | compiled provider-only import → doctor dry-run → SSH recovery journey; help, argument/provider validation, scrubbed-token dry-run guard, and no-write proof | Live read-only discover first; import live only into isolated HOME when explicitly requested |
@@ -188,7 +229,7 @@ status/count data and failures disguised as success.
 | `cmd/serverpro-e2e` | Build-tagged hermetic composition entrypoint. | Built only by `make test-full-chain-e2e`; requires a loopback fixture URL. |
 | `internal/e2e` | Stateful all-provider compiled journeys and CI contract. | Concurrent isolated HOME journeys, strict JSON, production doctor/cleanup orchestration over local clients, completion-checkpoint failure, cleanup evidence, and secret-scrubbed failure artifacts. |
 | `internal/cli` | Cobra commands, prompts, config/state orchestration, output, scoped flags. | Every command path, manifest-backed compiled evidence, strict JSON stability, non-interactive failures, dry-run no-write guarantees, prompt/progress routing to stderr, fixed progress phase/elapsed/attempt fields, secret redaction. |
-| `internal/bootstraptools` | Embedded host-tool bootstrap script and target selection. | Supported Ubuntu/codename/architecture gate before mutation, complete package-floor and base-package manifests, candidate-floor rejection before install, locale-stable apt parsing, equal/newer/older/missing/removed-`config-files` package cases, all-target base-package convergence, canonical mise specification-to-manifest/doctor mapping, focused Git prerequisite sequencing and gh-only repair, executable configuration calls, shared readiness/final-verification probes including wrong npm, generated-script target/package apply-and-upgrade behavior, refreshed apt freshness check, exact Node/npm/Pi/uv/Rust/gh/rg/fd/ast-grep/sem/inspect/Herdr pins, release-shaped uv/ast-grep output, absent/present/failure legacy `sg` config migration, GitHub release checksums and architecture gates, inspect digest-before-execution, explicit backend and Rust-profile validation, forced same-version Node/npm, Rust, and checksum-tool repair with Pi restoration after Node replacement, component-scoped repair, malformed/missing/wrong-version probes, Rust default-component checks, script env, shell syntax, no `curl\|sh`, and executable exact-primary-key GPG allow/deny cases. |
+| `internal/bootstraptools` | Embedded host-tool bootstrap script and target selection. | Supported Ubuntu/codename/architecture gate before mutation, complete package-floor and base-package manifests, candidate-floor rejection before install, locale-stable apt parsing, equal/newer/older/missing/removed-`config-files` package cases, all-target base-package convergence, canonical mise specification-to-manifest/doctor mapping, focused Git prerequisite sequencing and gh-only repair, executable configuration calls, shared readiness/final-verification probes including wrong npm, generated-script target/package apply-and-upgrade behavior, refreshed apt freshness check, exact Node/npm/Pi/uv/Rust/gh/rg/fd/ast-grep/sem/inspect/Herdr pins, release-shaped uv/ast-grep output, absent/present/failure legacy `sg` config migration, GitHub release checksums and architecture gates, inspect digest-before-execution, explicit backend and Rust-profile validation, forced same-version Node/npm, Rust, and checksum-tool repair with Pi restoration after Node replacement, component-scoped repair, malformed/missing/wrong-version probes, Rust default-component checks, script env, shell syntax, no `curl\|sh`, and executable exact-primary-key GPG allow/deny cases. Doctor Herdr check verifies the digest before any Herdr execution and names an older pinned install as an expected/got version mismatch read from the mise install path (container dogfood: stale, tampered, and out-of-tree binaries never ran). |
 | `internal/cloudinit` | First-boot hardening user data. | Required admin/auth/hash inputs, defense-in-depth Ubuntu 24.04/codename/architecture check, candidate floors before cloud-init package install including removed-`config-files` state, complete post-install base-package floors, cleanup trap before fallible commands, SSH hardening, UFW, unattended upgrades, AppArmor, journald, pinned Tailscale version/checksums, no `curl\|sh`, executable amd64/arm64 success and checksum/architecture failure paths, no secret leaks in errors. |
 | `internal/compute` | Full registry-facing provider facade, catalogs, diagnostics, registry. Consumer packages own narrower discovery/create contracts. | Registry validation/sorting, diagnostics semantics and wrapped-cause identity, managed-resource typed/legacy canonicalization and conflict rejection, provider account tokens excluded from all request JSON, full adapters composing through narrow consumer fakes. |
 | `internal/config` | Defaults, paths, names, validation, YAML IO. | Strict supported-key decoding, byte-snapshot parsing, conditional locked publication, locked read-modify-write preservation, source appearance/removal/edit rejection, retired inert-key rejection, namespace/server validity, explicit create catalog requirements, typed Git access values, deploy repository scope rules and round trips, omitted lockdown defaults to enabled while explicit false is preserved, Tailscale mandatory defaults, ingress choices, private paths, schema stamping with legacy `store_console_password: false` migrated to stored, stamped opt-outs honored, unknown schema versions rejected. |
@@ -220,7 +261,7 @@ status/count data and failures disguised as success.
 | `internal/tailscaletools` | Shared Tailscale release manifest, remote version check, and live updater. | Exact version/digest pins, Ubuntu 24.04/codename/architecture gate before apt mutation, prerequisite candidate floors before install plus post-install floors, removed-`config-files` state rejection, client plus daemon checks, syntax, production `/bin/sh`/POSIX-mode delivery with bounded Bash re-exec, checksum extraction markers, TLS hybrid-default retention, and delayed restart that preserves the updating SSH command. |
 | `internal/state` | Provider-neutral state/registry IO, workflow lock ownership, and shared local-artifact coordination. | Schema normalization, Cloudflare tunnel provenance ownership matrix, canonical/legacy registry union and conflict rejection, typed-only managed-resource writes with legacy-key migration/conflict rejection, per-server locked read-modify-write concurrency, cross-process registry updates, context cancellation/deadline behavior, partial-acquisition release, canonical namespace-before-server ordering, shared/exclusive namespace and tailnet locks, token-relative global policy exclusion, propagated save errors, missing-vs-stat-error checks, durable private writes. |
 | `internal/testhttp` | Concurrency-safe HTTP fixture failure recorder. | Concurrent recording and outer-test-goroutine assertions; handlers record and return instead of calling fatal test methods. |
-| `internal/tunnel` | Cloudflared install and diagnostic scripts. | Ubuntu 24.04/codename/architecture gate before mutation, explicit noble apt source, candidate floor before install plus post-install minimum and service check, removed-`config-files` state rejection in install and diagnosis, executable exact-primary-key acceptance, mismatch/additional-primary rejection before trusted install, and shell syntax. |
+| `internal/tunnel` | Cloudflared install, diagnostic, and doctor repair scripts. | Ubuntu 24.04/codename/architecture gate before mutation, explicit noble apt source, candidate floor before install plus post-install minimum and service check, removed-`config-files` state rejection in install and diagnosis, executable exact-primary-key acceptance, mismatch/additional-primary rejection before trusted install, and shell syntax. Container dogfood covers check reasons and repair trust gates (see Cloudflared check and repair dogfood). |
 
 ## Feature/use-case matrix
 

@@ -515,7 +515,8 @@ then checks exact managed pins, the Tailscale client and running daemon, and
 updates visible in the existing apt cache; it does not refresh package metadata.
 A platform failure disables every requested `--fix` action. If sudo authentication requires a prompt, only remote inventory/checks
 rerun; provider and local results remain from the original report.
-Failed package and tool checks include captured command output in `evidence`.
+Failed package, tool, and other fixable remote checks include the check's own
+command output in `evidence`.
 Doctor redacts known credentials before it limits failure evidence to 4 KiB.
 Long failures retain the beginning and end, separated by `... [truncated] ...`,
 so terminal errors remain visible after bootstrap progress. Successful checks
@@ -552,8 +553,15 @@ the reviewed binary when apt is below its floor, then returns to a safe apt
 package once available. Operator-owned overrides require operator action;
 repair does not delete them. Tailscale daemon restart is delayed until the updating
 SSH command returns, then doctor waits and rechecks it. When ingress is enabled, doctor verifies cloudflared is active and at or above
-its reviewed `2026.9.3` package floor. Cloudflared remains conditional ingress
-infrastructure and is not upgraded by generic host-tool repair. Bootstrap reruns managed host-tool setup through Tailscale SSH with
+its reviewed `2026.9.3` package floor. A failed `cloudflared` check names one
+reason: the package is not installed, its package status, the installed version
+below the floor, or the service state from `systemctl is-active`.
+Cloudflared remains conditional ingress infrastructure and is not upgraded by
+generic host-tool repair. Instead, `--fix` runs a dedicated cloudflared repair.
+It upgrades from the Cloudflare apt repository that provisioning trusted, then
+enables and restarts the service. It does not change the tunnel token. It fails
+with a "reprovision the server" message when the service unit, token file,
+pinned keyring, or exact apt source line is missing or changed. Bootstrap reruns managed host-tool setup through Tailscale SSH with
 password-required sudo. The default `all` target
 installs the full managed toolset; run `serverpro server bootstrap --help` for
 the canonical list and pinned versions. Focused targets stay `git`, `docker`,

@@ -113,6 +113,35 @@ func TestInstallScriptPreflightsCloudflaredCandidateBeforeInstall(t *testing.T) 
 	}
 }
 
+// TestUpgradeScriptGatesTrustBeforeApt pins the doctor repair's safety order:
+// it may only reuse provisioning's pinned key and exact source, so every trust
+// gate must run before apt, and it must never fetch a key or write the token.
+func TestUpgradeScriptGatesTrustBeforeApt(t *testing.T) {
+	s := UpgradeScript()
+	if out, err := exec.Command("sh", "-n", "-c", s).CombinedOutput(); err != nil {
+		t.Fatalf("upgrade script syntax: %v\n%s", err, out)
+	}
+	mainStart := strings.Index(s, "main() {")
+	if mainStart < 0 {
+		t.Fatalf("upgrade script has no main\n%s", s)
+	}
+	body := s[mainStart:]
+	aptUpdate := strings.Index(body, "apt-get update")
+	if aptUpdate < 0 {
+		t.Fatalf("upgrade script never refreshes apt\n%s", body)
+	}
+	for _, gate := range []string{"require_supported_host", "require_cloudflared_service_setup", "verify_trusted_cloudflare_apt_key", "verify_cloudflared_apt_source"} {
+		if i := strings.Index(body, gate); i < 0 || i > aptUpdate {
+			t.Fatalf("%s must run before apt-get update\n%s", gate, body)
+		}
+	}
+	for _, forbidden := range []string{"install_cloudflare_apt_key", "> " + cloudflaredTokenPath, "> " + cloudflaredUnitPath} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("upgrade script must not contain %q\n%s", forbidden, body)
+		}
+	}
+}
+
 func TestInstallScriptRejectsUnsupportedHostBeforeMutation(t *testing.T) {
 	s := InstallScript("cf-tunnel-token")
 	hostGate := strings.Index(s, "main() {\n  require_supported_host")
