@@ -113,7 +113,7 @@ func TestRenderPreflightsPackageCandidatesBeforeCloudInitInstall(t *testing.T) {
 		t.Fatal(err)
 	}
 	candidateCheck := strings.Index(out, "\n    verify_package_candidates\n")
-	packageInstall := strings.Index(out, "DEBIAN_FRONTEND=noninteractive apt-get install")
+	packageInstall := strings.Index(out, "DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install")
 	if candidateCheck < 0 || packageInstall < 0 || candidateCheck > packageInstall {
 		t.Fatalf("candidate floors must be checked before cloud-init package installation\n%s", out)
 	}
@@ -178,7 +178,7 @@ func TestRenderedPackageCandidateFloorExecutableMatrix(t *testing.T) {
 			writeCloudInitFakeCommand(t, binDir, "dpkg-query", "if [ -f \"$INSTALL_MARKER\" ]; then state=installed; version=$CANDIDATE_VERSION; elif [ -n \"$INSTALLED_STATE\" ]; then state=$INSTALLED_STATE; version=$INSTALLED_VERSION; else exit 1; fi\ncase \"$*\" in *db:Status-Status*) printf '%s|%s' \"$state\" \"$version\" ;; *) printf '%s' \"$version\" ;; esac\n")
 			writeCloudInitFakeCommand(t, binDir, "dpkg", "case \"${2:-}\" in 3.0|\"$CANDIDATE_VERSION\") [ \"${2:-}\" != 0.0.0 ] ;; *) exit 1 ;; esac\n")
 			writeCloudInitFakeCommand(t, binDir, "apt-cache", "printf '  Candidate: %s\\n' \"$CANDIDATE_VERSION\"\n")
-			writeCloudInitFakeCommand(t, binDir, "apt-get", "if [ \"${1:-}\" = update ]; then exit 0; fi\nprintf ran >\"$INSTALL_MARKER\"\n")
+			writeCloudInitFakeCommand(t, binDir, "apt-get", "while [ \"${1:-}\" = -o ]; do shift 2; done\nif [ \"${1:-}\" = update ]; then exit 0; fi\nprintf ran >\"$INSTALL_MARKER\"\n")
 			cmd := exec.Command("sh", scriptPath)
 			cmd.Env = append(os.Environ(),
 				"PATH="+binDir+":"+os.Getenv("PATH"),

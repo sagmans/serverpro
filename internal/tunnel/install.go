@@ -24,12 +24,19 @@ const (
 	cloudflareAPTComponent      = "main"
 	cloudflareKeyringPath       = "/usr/share/keyrings/cloudflare-main.gpg"
 	cloudflaredAPTSourcePath    = "/etc/apt/sources.list.d/cloudflared.list"
-	cloudflaredServiceName      = "cloudflared"
-	cloudflaredServiceUser      = "cloudflared"
-	cloudflaredConfigDir        = "/etc/cloudflared"
-	cloudflaredTokenPath        = cloudflaredConfigDir + "/token"
-	cloudflaredUnitPath         = "/etc/systemd/system/cloudflared.service"
-	cloudflaredBinaryPath       = "/usr/bin/cloudflared"
+	// cloudflaredAPTPreferencesPath pins the cloudflared package to the
+	// Cloudflare origin so no other configured repository can supply it.
+	cloudflaredAPTPreferencesPath = "/etc/apt/preferences.d/serverpro-cloudflared"
+	cloudflareAPTOrigin           = "pkg.cloudflare.com"
+	// aptLockTimeoutSeconds lets apt wait for a concurrent unattended-upgrades
+	// run instead of failing on the dpkg lock.
+	aptLockTimeoutSeconds  = "300"
+	cloudflaredServiceName = "cloudflared"
+	cloudflaredServiceUser = "cloudflared"
+	cloudflaredConfigDir   = "/etc/cloudflared"
+	cloudflaredTokenPath   = cloudflaredConfigDir + "/token"
+	cloudflaredUnitPath    = "/etc/systemd/system/cloudflared.service"
+	cloudflaredBinaryPath  = "/usr/bin/cloudflared"
 )
 
 // cloudflaredAPTSource is the exact source line provisioning writes. The
@@ -37,6 +44,14 @@ const (
 // never be treated as the trusted repository.
 func cloudflaredAPTSource() string {
 	return "deb [signed-by=" + cloudflareKeyringPath + "] " + cloudflareAPTRepositoryURL + " " + hostplatform.ManagedHostCodename + " " + cloudflareAPTComponent
+}
+
+// cloudflaredAPTPreferences pins cloudflared to the Cloudflare origin at a
+// priority above every default (500) repository, so a higher cloudflared
+// version from another configured source can never become the candidate.
+// verify_cloudflared_candidate still checks the candidate's origin.
+func cloudflaredAPTPreferences() string {
+	return "Package: " + hostplatform.CloudflaredPackageBaseline().Name + "\nPin: origin \"" + cloudflareAPTOrigin + "\"\nPin-Priority: 990\n"
 }
 
 // CheckCommand prints exactly one reason when the connector is unhealthy.
@@ -91,6 +106,10 @@ CLOUDFLARE_KEY_URL=%s
 CLOUDFLARE_KEYRING=%s
 CLOUDFLARED_APT_SOURCE_PATH=%s
 CLOUDFLARED_APT_SOURCE=%s
+CLOUDFLARED_APT_REPOSITORY_URL=%s
+CLOUDFLARED_APT_PREFERENCES_PATH=%s
+CLOUDFLARED_APT_PREFERENCES=%s
+APT_LOCK_TIMEOUT=%s
 CLOUDFLARED_UNIT=%s
 CLOUDFLARED_TOKEN=%s
 `,
@@ -106,6 +125,10 @@ CLOUDFLARED_TOKEN=%s
 		cloudflareKeyringPath,
 		cloudflaredAPTSourcePath,
 		shell.Quote(cloudflaredAPTSource()),
+		cloudflareAPTRepositoryURL,
+		cloudflaredAPTPreferencesPath,
+		shell.Quote(cloudflaredAPTPreferences()),
+		aptLockTimeoutSeconds,
 		cloudflaredUnitPath,
 		cloudflaredTokenPath,
 	)
@@ -160,8 +183,45 @@ verify_cloudflared_minimum() {
   fi
 }
 
+# apt_get waits for a concurrent apt or unattended-upgrades run instead of
+# failing on the dpkg lock, and never prompts.
+apt_get() {
+  DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout="${APT_LOCK_TIMEOUT}" "$@"
+}
+
+# write_cloudflared_apt_pin narrows trust: it only restricts which repository
+# may supply cloudflared, so the repair may (re)write it too.
+write_cloudflared_apt_pin() {
+  install -d -m 0755 "$(dirname "${CLOUDFLARED_APT_PREFERENCES_PATH}")"
+  printf '%s' "${CLOUDFLARED_APT_PREFERENCES}" > "${CLOUDFLARED_APT_PREFERENCES_PATH}.serverpro-new"
+  chmod 0644 "${CLOUDFLARED_APT_PREFERENCES_PATH}.serverpro-new"
+  mv -f "${CLOUDFLARED_APT_PREFERENCES_PATH}.serverpro-new" "${CLOUDFLARED_APT_PREFERENCES_PATH}"
+}
+
+# cloudflared_candidate_from_trusted_origin succeeds only when every
+# repository offering the candidate version is the pinned Cloudflare one, so
+# apt cannot fetch that version from anywhere else.
+cloudflared_candidate_from_trusted_origin() {
+  apt-cache policy "${CLOUDFLARED_PACKAGE}" | awk -v want="$1" -v repo="${CLOUDFLARED_APT_REPOSITORY_URL}" '
+    /Version table:/ { table = 1; next }
+    !table { next }
+    {
+      line = $0
+      sub(/^[[:space:]]*[*][*][*][[:space:]]+/, "", line)
+      n = split(line, field, " ")
+      if (n == 2) { current = field[1]; next }
+      if (current != want || n < 2) { next }
+      if (field[2] == "/var/lib/dpkg/status") { next }
+      total++
+      if (field[2] == repo) { trusted++ }
+    }
+    END { exit !(total > 0 && total == trusted) }
+  '
+}
+
 verify_cloudflared_candidate() {
   if installed_version=$(installed_cloudflared_version) && dpkg --compare-versions "${installed_version}" ge "${CLOUDFLARED_MINIMUM_VERSION}"; then
+    candidate_version=
     return 0
   fi
   candidate_version=$(apt-cache policy "${CLOUDFLARED_PACKAGE}" | awk '$1 == "Candidate:" { print $2; exit }')
@@ -172,6 +232,17 @@ verify_cloudflared_candidate() {
   if ! dpkg --compare-versions "${candidate_version}" ge "${CLOUDFLARED_MINIMUM_VERSION}"; then
     printf 'cloudflared candidate is below minimum %s: %s\n' "${CLOUDFLARED_MINIMUM_VERSION}" "${candidate_version}" >&2
     return 1
+  fi
+  if ! cloudflared_candidate_from_trusted_origin "${candidate_version}"; then
+    printf 'cloudflared candidate %s is not offered only by %s\n' "${candidate_version}" "${CLOUDFLARED_APT_REPOSITORY_URL}" >&2
+    return 1
+  fi
+}
+
+# install_cloudflared_candidate installs the exact verified candidate version.
+install_cloudflared_candidate() {
+  if [ -n "${candidate_version:-}" ]; then
+    apt_get install -y "${CLOUDFLARED_PACKAGE}=${candidate_version}"
   fi
 }
 
@@ -259,9 +330,10 @@ main() {
   install_cloudflare_apt_key %[4]s
   printf '%%s\n' "${CLOUDFLARED_APT_SOURCE}" > %[5]s
   chmod 0644 %[5]s
-  apt-get update
+  write_cloudflared_apt_pin
+  apt_get update
   verify_cloudflared_candidate
-  apt-get install -y "${CLOUDFLARED_PACKAGE}"
+  install_cloudflared_candidate
   verify_cloudflared_minimum
   id -u %[6]s >/dev/null 2>&1 || useradd --system --home %[3]s --shell /usr/sbin/nologin %[6]s
   printf '%%s' %[7]s > %[8]s
@@ -317,9 +389,10 @@ main() {
   if ! verify_cloudflared_minimum; then
     verify_trusted_cloudflare_apt_key
     verify_cloudflared_apt_source
-    DEBIAN_FRONTEND=noninteractive apt-get update
+    write_cloudflared_apt_pin
+    apt_get update
     verify_cloudflared_candidate
-    DEBIAN_FRONTEND=noninteractive apt-get install -y "${CLOUDFLARED_PACKAGE}"
+    install_cloudflared_candidate
     verify_cloudflared_minimum
   fi
   # Restart even when enabled so the running connector loads the new binary.

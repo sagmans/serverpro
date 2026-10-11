@@ -472,7 +472,7 @@ TARGET_PATH=
 apt_update_once() {
   if [[ ${APT_UPDATED} -eq 0 ]]; then
     log 'updating apt package index'
-    apt-get update || return 1
+    apt-get -o DPkg::Lock::Timeout=300 update || return 1
     APT_UPDATED=1
   fi
 }
@@ -480,7 +480,7 @@ apt_update_once() {
 apt_install() {
   apt_update_once || return 1
   verify_package_candidates "$@" || return 1
-  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@" || return 1
+  DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends "$@" || return 1
   verify_package_minimums "$@"
 }
 
@@ -973,7 +973,7 @@ install_htop() {
 
 remove_docker_conflicts() {
   # Official Docker docs require removing distro packages before using Docker's apt repository.
-  DEBIAN_FRONTEND=noninteractive apt-get remove -y \
+  DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y \
     docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc \
     >/dev/null 2>&1 || true
 }
@@ -1106,7 +1106,7 @@ install_docker() {
   remove_docker_conflicts
   if [[ ${fallback} == 1 ]]; then
     if installed=$(installed_package_version "${BUILDX_PACKAGE}"); then
-      DEBIAN_FRONTEND=noninteractive apt-get remove -y "${BUILDX_PACKAGE}" || return 1
+      DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y "${BUILDX_PACKAGE}" || return 1
     fi
     # Optional apt recommendations must not pull the rejected old plugin back in.
     apt_install "${selected[@]#apt:}" || return 1

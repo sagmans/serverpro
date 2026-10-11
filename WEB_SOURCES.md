@@ -405,6 +405,31 @@ https://documentation.ubuntu.com/server/how-to/security/openssh-server/
 
 Use: public, root, and password SSH hardening.
 
+### sshd and sshd_config
+
+```text
+https://manpages.ubuntu.com/manpages/noble/en/man8/sshd.8.html
+https://manpages.ubuntu.com/manpages/noble/en/man5/sshd_config.5.html
+```
+
+Use: `sshd -t` test mode and `-f` for validating a candidate config before the
+doctor repair commits it, and `Include` glob semantics (files are read in
+lexical order and the first value obtained wins). Checked against OpenSSH
+9.6p1 (Ubuntu 24.04) on 2026-10-11.
+
+### apt preferences and lock waiting
+
+```text
+https://manpages.ubuntu.com/manpages/noble/en/man5/apt_preferences.5.html
+https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=864681
+https://bugs.launchpad.net/cloud-init/+bug/1693361
+```
+
+Use: `Pin: origin "pkg.cloudflare.com"` for the cloudflared pin (priorities
+above 500 win over default repositories), and `-o DPkg::Lock::Timeout=300`,
+which apt-get honours since apt 1.9.11 to wait for the dpkg lock instead of
+failing while apt-daily or unattended-upgrades runs.
+
 ### sudo
 
 ```text

@@ -280,6 +280,13 @@ Managed host tools install through integrity-checked sources, not
   primary keys fail before the key can enter the trusted keyring. The installer
   uses the explicit noble repository and requires cloudflared `2026.9.3` or
   newer; ingress-enabled doctor runs verify both that floor and service state.
+  Install and repair pin the `cloudflared` package to origin
+  `pkg.cloudflare.com` (apt preferences, priority 990) and refuse a candidate
+  version that any other configured repository also offers, so another source
+  cannot supply the connector even with a higher version.
+- The doctor sshd repair validates a candidate config with `sshd -t -f`
+  before it touches the live files and restores them if the live config then
+  fails `sshd -t`, so a repair cannot leave sshd unable to start.
 - Every directly installed Ubuntu, Docker, and Cloudflare apt package has a
   reviewed minimum in `internal/hostplatform`. Installs preflight signed current
   candidates before package scripts run, reject missing/below-floor packages,

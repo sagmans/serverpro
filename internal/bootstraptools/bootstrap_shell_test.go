@@ -479,7 +479,7 @@ func TestShellVerifyPackageCandidatesBeforeInstall(t *testing.T) {
 				t.Fatal(err)
 			}
 			installMarker := filepath.Join(t.TempDir(), "installed")
-			if err := os.WriteFile(filepath.Join(binDir, "apt-get"), []byte("#!/bin/sh\nif [ \"${1:-}\" = update ]; then exit 0; fi\nprintf ran >\"$INSTALL_MARKER\"\n"), 0o700); err != nil {
+			if err := os.WriteFile(filepath.Join(binDir, "apt-get"), []byte("#!/bin/sh\nwhile [ \"${1:-}\" = -o ]; do shift 2; done\nif [ \"${1:-}\" = update ]; then exit 0; fi\nprintf ran >\"$INSTALL_MARKER\"\n"), 0o700); err != nil {
 				t.Fatal(err)
 			}
 			code, _, _ := runHelper(t, `

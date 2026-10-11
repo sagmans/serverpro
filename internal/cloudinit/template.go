@@ -162,10 +162,10 @@ runcmd:
       done
     }
 
-    apt-get update
+    apt-get -o DPkg::Lock::Timeout=300 update
     verify_package_candidates
-    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ` + strings.Join(hostplatform.PackageNames(hostplatform.BasePackageBaselines()), " ") + `
+    DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 upgrade -y
+    DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends ` + strings.Join(hostplatform.PackageNames(hostplatform.BasePackageBaselines()), " ") + `
     verify_package_minimums
   - mkdir -p /var/log/journal /var/lib/serverpro
   - systemctl restart systemd-journald

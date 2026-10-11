@@ -244,7 +244,7 @@ func Checks(user string) []Check {
 }
 
 func ManagedPackageRefreshCommand() string {
-	return "DEBIAN_FRONTEND=noninteractive apt-get update"
+	return "DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 update"
 }
 
 func managedPackageUpdatesCommand() string {
