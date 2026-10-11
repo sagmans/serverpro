@@ -86,7 +86,7 @@ lowest=$(printf '%s\n%s\n' "$2" "$4" | sort -V | head -n 1)
 // origin pin in place: the version line carries the pin priority (990), each
 // source line its own priority (500), the installed version is marked "***",
 // and the dpkg status pseudo-source follows the real sources at 100.
-const fakeAptCachePolicy = `installed=(none)
+const fakeAptCachePolicy = `installed='(none)'
 [ "${INSTALLED_STATE}" = installed ] && installed=${INSTALLED_VERSION}
 printf 'cloudflared:\n  Installed: %s\n  Candidate: %s\n  Version table:\n' "${installed}" "${CANDIDATE_VERSION}"
 if [ -n "${CANDIDATE_MARKED}" ]; then printf ' *** %s 990\n' "${CANDIDATE_VERSION}"; else printf '     %s 990\n' "${CANDIDATE_VERSION}"; fi
