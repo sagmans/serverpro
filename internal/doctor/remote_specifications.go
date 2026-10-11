@@ -28,7 +28,10 @@ type remoteCheckSpecification struct {
 	readCommands         []string
 	liveCommands         []string
 	blocksFixesOnFailure bool
-	run                  func(context.Context, remote.Runner, string, string, Options) []Result
+	// refreshAfterLive names repairs that change what this check reads; when
+	// one ran earlier in the run, the check ignores its batch baseline.
+	refreshAfterLive []string
+	run              func(context.Context, remote.Runner, string, string, Options) []Result
 }
 
 func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
@@ -52,7 +55,7 @@ func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
 	} {
 		specifications = append(specifications, remoteSSHDSettingSpecification(setting.name, setting.keyword))
 	}
-	specifications = append(specifications, remoteFixableSpecification("sshd challenge-response auth", sshdChallengeResponseCommand(), sshdSettingsFixCommand()))
+	specifications = append(specifications, refreshAfterSSHDRepair(remoteFixableSpecification("sshd challenge-response auth", sshdChallengeResponseCommand(), sshdSettingsFixCommand())))
 	for _, setting := range []struct {
 		name    string
 		keyword string
@@ -65,9 +68,9 @@ func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
 	} {
 		specifications = append(specifications, remoteSSHDSettingSpecification(setting.name, setting.keyword))
 	}
-	// Runs after the setting checks so their shared repair, which may reload
-	// ssh, settles before the unit state is judged.
-	specifications = append(specifications, remoteFixableSpecification(sshdUnitsCheckName, sshdUnitsReadCommand(), sshdUnitsFixCommand()))
+	// Runs after the setting checks. Their shared repair can reload ssh, and the
+	// batch baseline predates it, so the unit check re-reads live after it ran.
+	specifications = append(specifications, refreshAfterSSHDRepair(remoteFixableSpecification(sshdUnitsCheckName, sshdUnitsReadCommand(), sshdUnitsFixCommand())))
 	specifications = append(specifications,
 		remoteFixableSpecification("apparmor", "systemctl is-active apparmor && aa-status --enabled", "systemctl enable --now apparmor"),
 		remoteFixableSpecification("unattended upgrades", "systemctl is-enabled unattended-upgrades || systemctl is-enabled apt-daily.timer", "systemctl enable --now unattended-upgrades || systemctl enable --now apt-daily.timer"),
@@ -77,7 +80,7 @@ func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
 		// auth is dead.
 		remoteGHTokenParitySpecification(user),
 		remoteToolSpecification(user),
-		remoteFixableSpecification("listening ports", "ss -H -tuln", ""),
+		refreshAfterSSHDRepair(remoteFixableSpecification("listening ports", "ss -H -tuln", ""), sshdUnitsFixCommand()),
 		remoteDNSResolutionSpecification(),
 		remoteEgressPositiveSpecification(),
 	)
@@ -142,7 +145,16 @@ func remoteCloudflaredSpecification() remoteCheckSpecification {
 
 func remoteSSHDSettingSpecification(name, keyword string) remoteCheckSpecification {
 	value := sshdHardeningExpectations[keyword]
-	return remoteFixableSpecification(name, sshdSettingValueCommand(keyword, value), sshdSettingsFixCommand())
+	return refreshAfterSSHDRepair(remoteFixableSpecification(name, sshdSettingValueCommand(keyword, value), sshdSettingsFixCommand()))
+}
+
+// refreshAfterSSHDRepair marks a check whose reads the shared sshd repair (or
+// the extra repairs named) can change. Once that repair ran in this doctor
+// run, the check reads the host live instead of its stale batch baseline, so
+// one repair also settles the later sshd checks without running it again.
+func refreshAfterSSHDRepair(specification remoteCheckSpecification, extra ...string) remoteCheckSpecification {
+	specification.refreshAfterLive = append([]string{sshdSettingsFixCommand()}, extra...)
+	return specification
 }
 
 func remoteSudoSpecification(user string) remoteCheckSpecification {

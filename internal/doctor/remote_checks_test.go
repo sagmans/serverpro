@@ -150,7 +150,10 @@ func TestRemoteChecksBatchDelegatesFixAndRecheck(t *testing.T) {
 	if !hasResult(Report{Results: results}, "sshd agent forwarding", Pass, "fixed") {
 		t.Fatalf("missing fixed batch result: %+v", results)
 	}
-	if runner.batchCalls != 1 || runner.runCalls != 4 {
+	// fix + its recheck + package refresh + its recheck, then live re-reads for
+	// the checks the sshd repair can change: tcp, tunnel and open forwarding,
+	// sshd units, and listening ports.
+	if runner.batchCalls != 1 || runner.runCalls != 9 {
 		t.Fatalf("remote calls batch=%d sequential=%d scripts=%+v", runner.batchCalls, runner.runCalls, runner.runScripts)
 	}
 	if !hasCommand(runner.runScripts, "systemctl try-reload-or-restart ssh") ||

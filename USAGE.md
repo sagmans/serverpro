@@ -517,11 +517,15 @@ A platform failure disables every requested `--fix` action. If sudo authenticati
 rerun; provider and local results remain from the original report.
 Failed package, tool, and other fixable remote checks include the check's own
 command output in `evidence`.
-The sshd hardening checks share one `--fix` action. It changes and reloads ssh
-only when the serverpro sshd config differs, and it never starts an inactive,
-socket-activated `ssh.service`. The `sshd units` check reports an
-`ssh.socket` or `ssh.service` that is failed, or enabled but not running;
-`--fix` clears the failure and starts the unit the host enables.
+The sshd hardening checks share one `--fix` action. It validates the new sshd
+config with `sshd -t` before writing it, restores the previous files if the
+live config then fails validation, changes the config only when the serverpro
+sshd config differs, and never starts an inactive, socket-activated
+`ssh.service`. After it runs, the remaining sshd checks, `sshd units`, and
+`listening ports` read the host again instead of reusing the start-of-run
+baseline. The `sshd units` check reports an `ssh.socket` or `ssh.service` that
+is failed, or enabled but not running; `--fix` clears the failure and starts
+the unit the host enables.
 Doctor redacts known credentials before it limits failure evidence to 4 KiB.
 Long failures retain the beginning and end, separated by `... [truncated] ...`,
 so terminal errors remain visible after bootstrap progress. Successful checks
