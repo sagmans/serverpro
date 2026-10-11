@@ -162,7 +162,7 @@ access paths for app-owned deployment flows.
     rotation is recommended once the stored PAT is proven stale too.
     Managed-package diagnostics verify package floors and use cached apt
     candidates without mutating; ingress-enabled diagnostics also verify the
-    cloudflared floor and service. A first, blocking platform check disables
+    cloudflared floor, its install receipt, and service. A first, blocking platform check disables
     every requested fix when the actual OS, codename, or architecture is outside
     support. `--fix` refreshes repositories, upgrades the
     general managed package set, repairs exact tool pins, and stages Tailscale
@@ -262,8 +262,12 @@ and repaired separately from generic bootstrap repair. Provisioning runs it with
 raised floor reaches existing hosts only through `doctor --fix`. Both the
 install and the repair write `/etc/apt/preferences.d/serverpro-cloudflared`,
 which pins the `cloudflared` package to origin `pkg.cloudflare.com` at
-priority 990, then install only a candidate version that every offering
-repository lists as `https://pkg.cloudflare.com/cloudflared`.
+priority 990, then install the newest version that only
+`https://pkg.cloudflare.com/cloudflared` offers. That repository's index lists
+only the latest release, so after each install they record the version and
+binary SHA-256 in `/var/lib/serverpro/cloudflared.receipt`. The doctor check
+compares the installed connector with that receipt, and the repair reinstalls
+the Cloudflare build when they differ, even over a newer foreign build.
 
 Every managed-host apt call shares one lock wait budget,
 `hostplatform.APTLockTimeoutSeconds` (300 seconds), so a concurrent

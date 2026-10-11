@@ -310,7 +310,45 @@ configured source.
 - With a newer `2099.1.0` from the local repository installed, apt kept it as
   candidate despite the pin and the origin check rejected it. The gate still
   passed, because a connector at or above the floor needs no install. The gate
-  does not judge where an installed connector came from.
+  did not judge where an installed connector came from. The install receipt
+  now closes this gap (see Cloudflared install receipt dogfood).
+
+### Cloudflared install receipt dogfood
+
+On 2026-10-11 the rendered install, repair, and check scripts ran with `sh`
+(dash) in a disposable `ubuntu:24.04` arm64 container with apt 2.8.3 and the
+real `pkg.cloudflare.com` repository. A second local `file:` repository (built
+with `apt-ftparchive`, `trusted=yes`) offered a foreign `2099.1.0` before
+provisioning. The check ran as an unprivileged user. A `systemctl` stub
+answered `is-active` and ran the binary's `--version` on `restart`. All 32
+assertions passed.
+
+- Fresh install: the install chose Cloudflare `2026.10.0` over `2099.1.0`,
+  wrote the receipt `0644 root` with no staging file left, and the check
+  printed `cloudflared 2026.10.0 active`.
+- Healthy host: the repair ran no apt install and left the receipt unchanged.
+- `dpkg -i` of the foreign `2099.1.0` (the reported bypass): the check printed
+  `cloudflared 2099.1.0 is not the build serverpro installed from
+  https://pkg.cloudflare.com/cloudflared`. The repair downgraded to Cloudflare
+  `2026.10.0` and the check passed.
+- `2099.1.0` installed with apt from the second repository, then the install
+  script ran again: the check rejected it and the install restored
+  `2026.10.0`.
+- A foreign `.deb` with the same version `2026.10.0` (different
+  `Installed-Size`): apt listed it as a separate status-only entry. The check
+  rejected it on the digest, and the repair's `--reinstall` fetched the
+  Cloudflare build.
+- `/usr/bin/cloudflared` overwritten in place: the check rejected it and the
+  repair restored it.
+- Receipt removed, as on a host provisioned before receipts: the check printed
+  `cloudflared install receipt is missing: /var/lib/serverpro/cloudflared.receipt`.
+  The repair reinstalled `2026.10.0`, wrote the receipt, and the check passed.
+- The second repository also offered a different `2026.10.0` while the
+  foreign `2099.1.0` was installed: the repair stopped with `no cloudflared
+  version is offered only by https://pkg.cloudflare.com/cloudflared` and made
+  no package change. With that duplicate removed, the repair succeeded.
+
+Not covered: amd64, and real unit activation under systemd.
 
 ## Command surface matrix
 
@@ -393,7 +431,7 @@ configured source.
 | `internal/tailscaletools` | Shared Tailscale release manifest, remote version check, and live updater. | Exact version/digest pins, Ubuntu 24.04/codename/architecture gate before apt mutation, prerequisite candidate floors before install plus post-install floors, removed-`config-files` state rejection, client plus daemon checks, the bash `apt_update` lists-lock retry, budget exhaustion, and immediate non-lock failure, shared wait values in the script env, syntax, production `/bin/sh`/POSIX-mode delivery with bounded Bash re-exec, checksum extraction markers, TLS hybrid-default retention, and delayed restart that preserves the updating SSH command. |
 | `internal/state` | Provider-neutral state/registry IO, workflow lock ownership, and shared local-artifact coordination. | Schema normalization, Cloudflare tunnel provenance ownership matrix, canonical/legacy registry union and conflict rejection, typed-only managed-resource writes with legacy-key migration/conflict rejection, per-server locked read-modify-write concurrency, cross-process registry updates, context cancellation/deadline behavior, partial-acquisition release, canonical namespace-before-server ordering, shared/exclusive namespace and tailnet locks, token-relative global policy exclusion, propagated save errors, missing-vs-stat-error checks, durable private writes. |
 | `internal/testhttp` | Concurrency-safe HTTP fixture failure recorder. | Concurrent recording and outer-test-goroutine assertions; handlers record and return instead of calling fatal test methods. |
-| `internal/tunnel` | Cloudflared install, diagnostic, and doctor repair scripts. | Ubuntu 24.04/codename/architecture gate before mutation, explicit noble apt source, candidate floor before install plus post-install minimum and service check, removed-`config-files` state rejection in install and diagnosis, the `pkg.cloudflare.com` origin pin written before apt in install and repair, candidate-origin rejection when another repository offers the version (real-compare floor including one step below it, the `***` installed marker, the dpkg status line before or after another source, an unrecognised source line, and replayed apt 2.8.3 output; see Cloudflared candidate-origin gate dogfood), exact-version install, package-list refresh through the shared lists-lock `apt_update` helper (executed in the upgrade script with one lock failure, then success), the shared `DPkg::Lock::Timeout` budget on every install, executable exact-primary-key acceptance, mismatch/additional-primary rejection before trusted install, and shell syntax. Container dogfood covers check reasons and repair trust gates (see Cloudflared check and repair dogfood). |
+| `internal/tunnel` | Cloudflared install, diagnostic, and doctor repair scripts. | Ubuntu 24.04/codename/architecture gate before mutation, explicit noble apt source, candidate floor before install plus post-install minimum and service check, removed-`config-files` state rejection in install and diagnosis, the `pkg.cloudflare.com` origin pin written before apt in install and repair, candidate-origin rejection when another repository offers the version (real-compare floor including one step below it, the `***` installed marker, the dpkg status line before or after another source, an unrecognised source line, and replayed apt 2.8.3 output; see Cloudflared candidate-origin gate dogfood), exact-version install of the newest Cloudflare-only version, install-receipt match before an installed connector is kept (a missing receipt or one for another build forces a reinstall, including over a newer foreign version), package-list refresh through the shared lists-lock `apt_update` helper (executed in the upgrade script with one lock failure, then success), the shared `DPkg::Lock::Timeout` budget on every install, executable exact-primary-key acceptance, mismatch/additional-primary rejection before trusted install, and shell syntax. Container dogfood covers check reasons and repair trust gates (see Cloudflared check and repair dogfood) and installed-connector provenance (see Cloudflared install receipt dogfood). |
 
 ## Feature/use-case matrix
 
