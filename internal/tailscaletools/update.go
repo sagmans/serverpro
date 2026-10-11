@@ -2,6 +2,7 @@ package tailscaletools
 
 import (
 	_ "embed"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,6 +34,9 @@ func UpdateScript() string {
 		{"SERVERPRO_TAILSCALE_HOST_ARCHITECTURES", strings.Join(hostplatform.ManagedHostKernelArchitectures(), " ")},
 		{"SERVERPRO_TAILSCALE_PACKAGE_BASELINES", hostplatform.PackageBaselineManifest(hostplatform.TailscalePrerequisitePackageBaselines())},
 		{"SERVERPRO_TAILSCALE_PACKAGES", strings.Join(hostplatform.PackageNames(hostplatform.TailscalePrerequisitePackageBaselines()), " ")},
+		{"SERVERPRO_TAILSCALE_APT_LOCK_TIMEOUT", strconv.Itoa(hostplatform.APTLockTimeoutSeconds)},
+		{"SERVERPRO_TAILSCALE_APT_LISTS_LOCK_RETRY_SECONDS", strconv.Itoa(hostplatform.APTListsLockRetrySeconds)},
+		{"SERVERPRO_TAILSCALE_APT_LISTS_LOCK_ERROR", hostplatform.APTListsLockError},
 		{"SERVERPRO_TAILSCALE_VERSION", Version},
 		{"SERVERPRO_TAILSCALE_SHA256_AMD64", AMD64SHA256},
 		{"SERVERPRO_TAILSCALE_SHA256_ARM64", ARM64SHA256},

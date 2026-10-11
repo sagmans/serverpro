@@ -113,13 +113,51 @@ func TestRenderPreflightsPackageCandidatesBeforeCloudInitInstall(t *testing.T) {
 		t.Fatal(err)
 	}
 	candidateCheck := strings.Index(out, "\n    verify_package_candidates\n")
-	packageInstall := strings.Index(out, "DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install")
+	packageInstall := strings.Index(out, "DEBIAN_FRONTEND=noninteractive apt-get -o "+hostplatform.APTLockTimeoutOption()+" install")
 	if candidateCheck < 0 || packageInstall < 0 || candidateCheck > packageInstall {
 		t.Fatalf("candidate floors must be checked before cloud-init package installation\n%s", out)
 	}
 	for _, forbidden := range []string{"package_update:", "package_upgrade:", "\npackages:"} {
 		if strings.Contains(out, forbidden) {
 			t.Fatalf("independent cloud-init package module bypasses candidate preflight: %q\n%s", forbidden, out)
+		}
+	}
+}
+
+// TestRenderRefreshesPackageListsThroughListsLockWait guards first boot, where
+// apt-daily often holds the lists lock: the refresh must use the host-wide
+// wait verbatim (indentation must survive YAML) and precede the candidate
+// preflight, while upgrade and install keep the shared dpkg-lock budget.
+func TestRenderRefreshesPackageListsThroughListsLockWait(t *testing.T) {
+	cfg := config.Example("prod")
+	out, err := Render(Input{Config: cfg, TailscaleAuthKey: "tskey-auth-oneoff"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		RunCmd []any `yaml:"runcmd"`
+	}
+	if err := yaml.Unmarshal([]byte(out), &document); err != nil {
+		t.Fatal(err)
+	}
+	script, ok := document.RunCmd[0].(string)
+	if !ok {
+		t.Fatalf("first runcmd is not a shell script: %#v", document.RunCmd[0])
+	}
+	refresh := strings.Index(script, hostplatform.APTUpdateShellFunction()+"apt_update\n")
+	candidates := strings.Index(script, "\nverify_package_candidates\n")
+	if refresh < 0 || candidates < 0 || refresh > candidates {
+		t.Fatalf("package lists must refresh through apt_update before the candidate preflight\n%s", script)
+	}
+	if strings.Count(script, "apt-get update") != 1 {
+		t.Fatalf("apt-get update must run only inside apt_update\n%s", script)
+	}
+	for _, want := range []string{
+		"apt-get -o " + hostplatform.APTLockTimeoutOption() + " upgrade -y",
+		"apt-get -o " + hostplatform.APTLockTimeoutOption() + " install -y",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("cloud-init missing %q\n%s", want, script)
 		}
 	}
 }

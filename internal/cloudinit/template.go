@@ -12,6 +12,16 @@ import (
 // removes it once the password is set.
 const BootstrapSudoersPath = "/etc/sudoers.d/90-serverpro-bootstrap"
 
+// runCmdIndent is the block-scalar indentation of each runcmd script, so
+// multi-line values spliced into a script stay inside its YAML literal.
+const runCmdIndent = "    "
+
+// indentRunCmd keeps every line of a spliced multi-line value inside the
+// runcmd literal; an unindented line would end the YAML block scalar.
+func indentRunCmd(value string) string {
+	return strings.ReplaceAll(strings.TrimSuffix(value, "\n"), "\n", "\n"+runCmdIndent)
+}
+
 const (
 	tailscaleVersion     = tailscaletools.Version
 	tailscaleAMD64SHA256 = tailscaletools.AMD64SHA256
@@ -122,7 +132,7 @@ runcmd:
         ;;
     esac
 
-    PACKAGE_BASELINES='` + strings.ReplaceAll(hostplatform.PackageBaselineManifest(hostplatform.BasePackageBaselines()), "\n", "\n    ") + `'
+    PACKAGE_BASELINES='` + indentRunCmd(hostplatform.PackageBaselineManifest(hostplatform.BasePackageBaselines())) + `'
 
     installed_package_version() {
       package_record=$(dpkg-query -W -f='${db:Status-Status}|${Version}' "$1" 2>/dev/null) || return 1
@@ -162,10 +172,11 @@ runcmd:
       done
     }
 
-    apt-get -o DPkg::Lock::Timeout=300 update
+    ` + indentRunCmd(hostplatform.APTUpdateShellFunction()) + `
+    apt_update
     verify_package_candidates
-    DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 upgrade -y
-    DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends ` + strings.Join(hostplatform.PackageNames(hostplatform.BasePackageBaselines()), " ") + `
+    DEBIAN_FRONTEND=noninteractive apt-get -o ` + hostplatform.APTLockTimeoutOption() + ` upgrade -y
+    DEBIAN_FRONTEND=noninteractive apt-get -o ` + hostplatform.APTLockTimeoutOption() + ` install -y --no-install-recommends ` + strings.Join(hostplatform.PackageNames(hostplatform.BasePackageBaselines()), " ") + `
     verify_package_minimums
   - mkdir -p /var/log/journal /var/lib/serverpro
   - systemctl restart systemd-journald

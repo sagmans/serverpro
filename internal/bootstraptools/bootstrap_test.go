@@ -108,13 +108,6 @@ func TestManualScriptRunsCanonicalWithoutExecutableBit(t *testing.T) {
 	}
 }
 
-func TestManagedPackageRefreshCommand(t *testing.T) {
-	const want = "DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 update"
-	if got := ManagedPackageRefreshCommand(); got != want {
-		t.Fatalf("ManagedPackageRefreshCommand() = %q, want %q", got, want)
-	}
-}
-
 func TestInstallScriptMutatesUserFilesAsTargetUser(t *testing.T) {
 	script := InstallScriptForUser("deploy")
 	for _, want := range []string{

@@ -489,14 +489,15 @@ apt-cache() {
   awk -v count="$POLICY_TRAILING_LINES" 'BEGIN { for (i = 0; i < count; i++) print "trailing policy data" }'
 }
 apt_install test-package`,
-				"SERVERPRO_BOOTSTRAP_PACKAGE_BASELINES=test-package|2.0",
-				"PATH="+binDir+":"+os.Getenv("PATH"),
-				"INSTALLED_VERSION="+tc.installed,
-				"INSTALLED_STATE="+tc.installedState,
-				"INSTALLED_STATUS="+tc.installedStatus,
-				"CANDIDATE_VERSION="+tc.candidate,
-				"POLICY_TRAILING_LINES="+candidatePolicyTrailingLines,
-				"INSTALL_MARKER="+installMarker)
+				append(manifestEnv(),
+					"SERVERPRO_BOOTSTRAP_PACKAGE_BASELINES=test-package|2.0",
+					"PATH="+binDir+":"+os.Getenv("PATH"),
+					"INSTALLED_VERSION="+tc.installed,
+					"INSTALLED_STATE="+tc.installedState,
+					"INSTALLED_STATUS="+tc.installedStatus,
+					"CANDIDATE_VERSION="+tc.candidate,
+					"POLICY_TRAILING_LINES="+candidatePolicyTrailingLines,
+					"INSTALL_MARKER="+installMarker)...)
 			if tc.wantOK && code != 0 {
 				t.Fatalf("safe candidate rejected with exit %d", code)
 			}

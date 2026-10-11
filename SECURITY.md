@@ -297,6 +297,11 @@ Managed host tools install through integrity-checked sources, not
   force the C locale while parsing apt output, require dpkg state `installed`
   rather than trusting stale `config-files` version metadata, verify installed
   floors, preserve newer versions, and never request a downgrade.
+- apt work waits for a concurrent apt run within one bounded budget
+  (`internal/hostplatform`, 300 seconds) rather than failing or hanging.
+  Package-list refreshes retry only apt's C-locale package-lists lock error;
+  repository, signature, and network errors are never retried or hidden, and
+  keep apt's exit status and output.
 - Node.js `24.21.0` LTS and bundled npm `11.19.0` are exact. Node/npm drift
   forces same-version Node replacement; `pi` and `all` reinstall Pi afterward
   because replacing Node can remove its global npm package. Pi `0.87.1` is
