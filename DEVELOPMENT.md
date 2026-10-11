@@ -10,6 +10,12 @@ DEVELOPMENT.md is contributor workflow. User docs live in `README.md`,
   dogfood target.
 - Go 1.26.9 is the supported development, CI, and release toolchain.
 - `mise.toml` owns the exact Go version pin.
+- The `go` directive is a minimum, not a pin. `GOTOOLCHAIN=auto` runs any
+  newer local Go as-is, so an unpatched Go 1.27.0 or 1.27.1 on `PATH` would
+  run the gates and fail `make vuln`. The Makefile therefore exports
+  `GOTOOLCHAIN=go<go.mod floor>+auto`, so every target uses the patched floor
+  (Go fetches and checksum-verifies it once). Set `GOTOOLCHAIN` in the
+  environment to override.
 - `make check` is the primary local and CI gate;
   `make test-full-chain-e2e` is the separate required full-chain gate.
 - Tool installers write under `.bin/`; caches stay under `.cache/`.
@@ -55,7 +61,9 @@ rejects aggregate coverage below 81.8% and any 0%-covered function.
 `make check` also runs `make lint-shell`, which needs ShellCheck on `PATH`
 (preinstalled on the CI runner; install it locally with your system package
 manager, for example `brew install shellcheck` or `apt install shellcheck`).
-The Makefile does not install it.
+The Makefile does not install it. The target lints every Git-tracked `*.sh`
+file, so a new script is covered once it is added to Git. Suppress a finding
+only with a targeted `# shellcheck disable=SCxxxx # WHY: ...` line.
 
 `TESTING.md` owns the full capability matrix. Update it when adding or removing
 commands, packages, providers, ingress modes, lifecycle steps, or dogfood paths.

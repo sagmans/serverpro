@@ -1,6 +1,12 @@
 SHELL := /bin/sh
 
 GO ?= go
+# GO_FLOOR is the patched minimum from go.mod. GOTOOLCHAIN=auto never switches
+# down, so a newer but unpatched local Go (1.27.0, 1.27.1) would otherwise run
+# every gate; pinning the default to the floor keeps local runs on the same
+# toolchain as CI while +auto still allows a higher go.mod requirement.
+GO_FLOOR := $(shell awk '/^go /{print $$2}' go.mod)
+export GOTOOLCHAIN ?= go$(GO_FLOOR)+auto
 BIN_DIR := .bin
 BINARY ?= serverpro
 LINK_BIN_DIR ?= $(HOME)/.local/bin
@@ -22,25 +28,10 @@ HARNESS_ENV_SENTINEL := serverpro-no-token-sentinel
 # tool, so lint-shell fails with guidance instead of installing anything.
 SHELLCHECK ?= shellcheck
 # ShellCheck reports findings only for the files it is given, so sourced flow
-# files are listed too; -x lets each see the shared lib it sources.
-SHELL_LINT_SCRIPTS := \
-	scripts/test-dogfood-live.sh \
-	scripts/test-dogfood-live-selftest.sh \
-	scripts/dogfood-live-lib.sh \
-	scripts/dogfood-live-readonly.sh \
-	scripts/dogfood-live-create.sh \
-	scripts/dogfood-live-identity.sh \
-	scripts/dogfood-live-prompt.sh \
-	scripts/check-coverage.sh \
-	scripts/classify-release-tag.sh \
-	scripts/go-format.sh \
-	scripts/serverpro-bootstrap-tools.sh \
-	scripts/test-cli-no-token-surface.sh \
-	scripts/test-coverage-policy.sh \
-	scripts/test-make-gates.sh \
-	scripts/test-release-contract.sh \
-	scripts/validate-release-provenance.sh \
-	scripts/validate-release-tag.sh
+# files are linted too; -x lets each see the shared lib it sources. The list
+# comes from Git so a new tracked script is linted without editing this file;
+# a hand-kept list once left the root bootstrap script unlinted.
+SHELL_LINT_SCRIPTS := $(shell git ls-files -- '*.sh')
 
 .PHONY: ci check fmt fmt-check tidy-check test test-unit test-go-check test-harness test-smoke test-integration test-e2e test-full-chain-e2e test-release test-release-shell test-dogfood-readonly test-dogfood-live test-dogfood-live-selftest vet build bin dogfood-no-token link-bin lint lint-shell vuln race cover install-tools install-hooks gen-bootstrap-wrapper
 .SILENT: fmt fmt-check link-bin

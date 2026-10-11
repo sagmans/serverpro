@@ -23,8 +23,9 @@ DNS records, run databases, or store application secrets.
 The supported controller is macOS 27 on arm64. Managed hosts are Ubuntu 24.04
 LTS (`noble`) on amd64 or arm64. Live create rejects unsupported provider
 catalog images before provider mutation; remote installers reject unsupported
-actual hosts before managed mutation. Go 1.26.9+ is required for source builds. See
-[Installation](INSTALLATION.md) for the full tool and package baseline.
+actual hosts before managed mutation. Go 1.26.9+ (1.27.2+ on the 1.27 line)
+is required for source builds. See [Installation](INSTALLATION.md) for the
+full tool and package baseline.
 
 ## Status
 

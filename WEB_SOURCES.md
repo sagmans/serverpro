@@ -116,6 +116,12 @@ https://pkg.go.dev/vuln/GO-2026-6611
 https://pkg.go.dev/vuln/GO-2026-6612
 https://pkg.go.dev/vuln/GO-2026-6613
 https://pkg.go.dev/vuln/GO-2026-6617
+https://pkg.go.dev/vuln/GO-2026-6603
+https://pkg.go.dev/vuln/GO-2026-6605
+https://pkg.go.dev/vuln/GO-2026-6607
+https://pkg.go.dev/vuln/GO-2026-6608
+https://pkg.go.dev/vuln/GO-2026-6610
+https://vuln.go.dev/ID/GO-2026-6603.json
 ```
 
 Use: minimum supported Go version and official vulnerability evidence. Reviewed
@@ -129,7 +135,14 @@ the vendored `x/net/idna` path). Reviewed 2026-10-11: Go 1.26.9 (released
 the four `net/http` advisories govulncheck reported reachable from serverpro
 under Go 1.26.6 (GO-2026-6611, GO-2026-6612, GO-2026-6613, GO-2026-6617). The
 `go` directive is the mandatory minimum toolchain version, so source builds
-require Go 1.26.9 or newer.
+require Go 1.26.9 or newer. Reviewed 2026-10-11 (second pass): govulncheck
+under a local Go 1.27.1 reported eight reachable advisories (GO-2026-6603,
+GO-2026-6605, GO-2026-6607, GO-2026-6608, GO-2026-6610, GO-2026-6611,
+GO-2026-6613, GO-2026-6617). The official vulnerability database records
+each as fixed in Go 1.26.9 and Go 1.27.2, both released 2026-10-08 with the
+same security fix set; none is withdrawn. The 1.26.9 floor stays. Go 1.27.0
+and 1.27.1 are newer than the floor but unpatched, and `GOTOOLCHAIN=auto`
+never switches down, so a local 1.27.0 or 1.27.1 must not run project gates.
 
 ### Go quality tools
 
