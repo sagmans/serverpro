@@ -715,12 +715,18 @@ require_target_user() {
   fi
 }
 
+# run_as_target drops from root to the admin user for user-level installs.
+# runuser, not sudo: sudo runs the PAM account stage for the invoking user
+# even when root needs no password, so a provider image that ships root with
+# an expired password (DigitalOcean) makes every drop fail with "Account or
+# password is expired". runuser's PAM stack has no account stage, matching the
+# other root-to-admin hops in internal/lifecycle and internal/doctor.
 run_as_target() {
   local script=$1
   if [[ -z ${TARGET_USER:-} || -z ${TARGET_HOME:-} ]]; then
     return 0
   fi
-  sudo -H -u "${TARGET_USER}" \
+  runuser -u "${TARGET_USER}" -- \
     env -i HOME="${TARGET_HOME}" USER="${TARGET_USER}" LOGNAME="${TARGET_USER}" PATH="${TARGET_PATH}" MISE_EXPERIMENTAL=1 \
     bash -c 'cd "$HOME" && exec bash -c "$1"' sh "${script}"
 }

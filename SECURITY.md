@@ -292,7 +292,9 @@ Managed host tools install through integrity-checked sources, not
   managed-artifact download, verification, extraction, and staging. Read-only
   doctor uses existing apt candidate metadata; `--fix` refreshes metadata before
   upgrading the declared package set. Final user-home installation runs as the
-  target user; root does not write into user home paths.
+  target user through `runuser`; root does not write into user home paths. The
+  drop does not use sudo, because sudo checks root's own account and fails on
+  hosts that ship root with an expired password.
 
 Treat fingerprints, versions, and checksums as reviewed trust roots. Rotate them
 only after checking the new value through the official source recorded in

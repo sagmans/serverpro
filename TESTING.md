@@ -124,6 +124,14 @@ Release fixtures need isolated HOME/XDG_CONFIG_HOME when operator-wide Git
 hooks enforce commit-message rules on synthetic fixture commits. Keep the
 real repository’s commit hooks and signing configuration unchanged.
 
+The 2026-10-11 root-to-user drop fix kept the production transport. A
+disposable Ubuntu 24.04 amd64 container ran the real bootstrap wrapper as root
+with root's password expired, the state DigitalOcean images ship. Before the
+fix, every drop to the admin user failed with `sudo: Account or password is
+expired`. After it, target `mise` installed and verified for the admin user.
+Earlier container runs above used `runuser` in place of sudo, so they could
+not show this failure.
+
 ## Doctor output coverage
 
 Doctor and create tests verify non-pass summary results, status counts,
