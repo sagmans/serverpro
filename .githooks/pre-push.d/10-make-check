@@ -1,8 +1,14 @@
 #!/bin/sh
 # Full local gate. Push and PR CI were removed to save Actions minutes, so
-# this is now where the complete non-live suite (race tests, coverage, e2e,
-# lint, shellcheck, govulncheck) must pass before code leaves the machine.
+# the complete non-live suite (race tests, coverage, e2e, lint, shellcheck,
+# govulncheck) must pass on every commit being pushed, not on whatever is
+# checked out. at_sha tests in place only when that commit is a clean HEAD.
 set -eu
+. "$(dirname -- "$0")/../_lib/hook-env.sh"
 . "$(dirname -- "$0")/../_lib/clean-git-env.sh"
-echo "pre-push: make check" >&2
-exec make --no-print-directory check
+
+shas=$(pushed_shas <"${HOOK_STDIN_FILE:?}") || exit 1
+for sha in $shas; do
+	echo "pre-push: make check @ $sha" >&2
+	at_sha "$sha" make --no-print-directory check || exit 1
+done

@@ -1,7 +1,13 @@
 #!/bin/sh
 # The hermetic full-chain journeys used to run as a separate CI job. They
-# stay a separate step so a failure is reported apart from make check.
+# stay a separate step so a failure is reported apart from make check, and
+# run on each pushed commit for the same reason.
 set -eu
+. "$(dirname -- "$0")/../_lib/hook-env.sh"
 . "$(dirname -- "$0")/../_lib/clean-git-env.sh"
-echo "pre-push: make test-full-chain-e2e" >&2
-exec make --no-print-directory test-full-chain-e2e
+
+shas=$(pushed_shas <"${HOOK_STDIN_FILE:?}") || exit 1
+for sha in $shas; do
+	echo "pre-push: make test-full-chain-e2e @ $sha" >&2
+	at_sha "$sha" make --no-print-directory test-full-chain-e2e || exit 1
+done

@@ -6,12 +6,10 @@
 # the gate active on machines without it (installing tools needs approval).
 #
 # Usage: secret-scan.sh staged   (pre-commit: staged changes)
-#        secret-scan.sh push     (pre-push: ref lines on stdin)
+#        secret-scan.sh commits <sha>...  (pre-push: each pushed commit)
 set -euo pipefail
 
 GITLEAKS=${GITLEAKS:-gitleaks}
-# All-zero object name marks a ref that does not exist on one side of a push.
-ZERO_OID_RE='^0+$'
 # High-confidence token shapes only; a noisy gate gets bypassed. Covers the
 # credentials this project handles (GitHub PAT, Tailscale, Cloudflare via
 # generic bearer/key assignments) plus private keys and cloud keys.
@@ -51,28 +49,24 @@ staged)
 	echo "secret-scan: gitleaks not found; using built-in patterns" >&2
 	git diff --cached -U0 --diff-filter=ACMR | scan_diff
 	;;
-push)
-	while read -r _local_ref local_oid _remote_ref remote_oid; do
-		# A deleted ref pushes no content.
-		[[ $local_oid =~ $ZERO_OID_RE ]] && continue
-		if [[ $remote_oid =~ $ZERO_OID_RE ]]; then
-			# New branch: only commits the remote does not have yet.
-			range=("$local_oid" --not --remotes)
-			log_opts="$local_oid --not --remotes"
-		else
-			range=("$remote_oid..$local_oid")
-			log_opts="$remote_oid..$local_oid"
-		fi
+commits)
+	# One run per pushed commit (the hook passes each pushed SHA); only the
+	# history the remote does not have yet is scanned, which also covers a
+	# brand-new branch.
+	shift
+	(($# > 0)) || { echo "usage: $0 commits <sha>..." >&2; exit 2; }
+	for sha in "$@"; do
+		git rev-parse --verify -q "${sha}^{commit}" >/dev/null || { echo "secret-scan: unknown commit ${sha}" >&2; exit 1; }
 		if have_gitleaks; then
-			"$GITLEAKS" git --log-opts="$log_opts" --redact --no-banner
+			"$GITLEAKS" git --log-opts="${sha} --not --remotes" --redact --no-banner
 		else
 			echo "secret-scan: gitleaks not found; using built-in patterns" >&2
-			git log -p -U0 --format= "${range[@]}" | scan_diff
+			git log -p -U0 --format= "$sha" --not --remotes | scan_diff
 		fi
 	done
 	;;
 *)
-	echo "usage: $0 staged|push" >&2
+	echo "usage: $0 staged|commits <sha>..." >&2
 	exit 2
 	;;
 esac

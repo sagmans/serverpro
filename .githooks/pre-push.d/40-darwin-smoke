@@ -1,15 +1,12 @@
 #!/bin/sh
 # Release ships native macOS binaries, and the main user runs the CLI on a
 # Mac. A native build smoke there catches darwin-only breakage that a Linux
-# machine cannot run; elsewhere the step says it was skipped.
+# machine cannot run; elsewhere darwin_only prints a skip notice.
 set -eu
+. "$(dirname -- "$0")/../_lib/hook-env.sh"
 . "$(dirname -- "$0")/../_lib/clean-git-env.sh"
 
-DARWIN='Darwin'
-
-if [ "$(uname -s)" != "$DARWIN" ]; then
-	echo "pre-push: darwin smoke skipped (not macOS)" >&2
-	exit 0
-fi
-echo "pre-push: darwin native smoke" >&2
-exec make --no-print-directory test-smoke
+shas=$(pushed_shas <"${HOOK_STDIN_FILE:?}") || exit 1
+for sha in $shas; do
+	darwin_only at_sha "$sha" make --no-print-directory test-smoke || exit 1
+done
