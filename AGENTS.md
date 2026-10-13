@@ -24,6 +24,13 @@ to a later pass or a separate ticket.
 If a change touches a topic a document does not yet cover, add the coverage
 rather than leaving a gap. A doc that drifts from code is worse than no doc.
 
+## Git hooks
+
+- Run `scripts/setup-hooks` once in every clone before the first commit.
+- All hook checks must pass before a push. Fix the failure; never push past it.
+- Never use `--no-verify`.
+- Never edit the generic hook files copied from the template; repo checks go in `.githooks/<hook>.d/`.
+
 ## Document Index
 
 - `AGENTS.md` — agent document index. (this file)
@@ -36,7 +43,8 @@ rather than leaving a gap. A doc that drifts from code is worse than no doc.
 - `TESTING.md` — test matrix, quality gates, and dogfood reference.
 - `CONTRIBUTING.md` — public contribution guidance.
 - `.github/pull_request_template.md` — pull request author checklist.
-- `.githooks/` — repo hook checks in `<hook>.d/`, run by the global dotf hooks; never set a local `core.hooksPath` (see "Git hooks" in `DEVELOPMENT.md`).
+- `.githooks/` — repo hooks: generic template copies plus repo checks in `<hook>.d/` (see "Git hooks" in `DEVELOPMENT.md`).
+- `scripts/setup-hooks` — turns on `.githooks` for a clone.
 - `SECURITY.md` — security reference.
 - `CODE_OF_CONDUCT.md` — public collaboration rules.
 - `WEB_SOURCES.md` — external source reference.

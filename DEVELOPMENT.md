@@ -24,28 +24,32 @@ DEVELOPMENT.md is contributor workflow. User docs live in `README.md`,
 ## Git hooks
 
 Push and PR CI is off to save Actions minutes; the checks run in local Git
-hooks instead. They are run by the global dotf hooks (local-hooks standard
-v2, [ASG-745](https://linear.app/assagman/issue/ASG-745)): each global hook
-runs its own check first, then this worktree's `.githooks/<hook>.d/*` in
-sorted order with the same arguments and stdin. The first failure stops the
-commit or push. Nothing is installed per clone.
+hooks instead ([ASG-745](https://linear.app/assagman/issue/ASG-745)). The
+repo carries its own hooks in `.githooks/`. Git runs none of them until the
+clone opts in, so run this once after cloning (it covers every worktree):
 
-| Hook | Checks |
-| --- | --- |
-| `pre-commit` (staged files, seconds) | gofmt, `go vet`, fast golangci-lint on changed code, secret scan, debug-print grep |
-| `pre-push` (full, each pushed commit) | `make check`, `make test-full-chain-e2e`, secret scan, native smoke on macOS only |
-| `prepare-commit-msg`, `commit-msg` | global hooks only |
+```sh
+scripts/setup-hooks   # or: make hooks
+```
 
-- **Never set a local core.hooksPath.** A repository or worktree value hides
-  the global hooks, including the sign-off and signing guards. Clones set up
-  with the old router: run `make hooks` (dry run), then
-  `bash scripts/setup-hooks.sh --apply`. It removes only the local and
-  worktree `core.hooksPath` and the old `<git common dir>/project-hooks/`
-  router; global config is never touched.
-- **Trust.** Repo checks run only after the worktree's `.githooks` is
-  reviewed with `githooks-trust`. Until then commits run the global checks
-  only (with a notice) and pushes are refused. Any change to `.githooks`
-  needs a new review.
+It sets only this clone's local `core.hooksPath=.githooks` and is idempotent.
+Each hook runs the generic checks first, then `.githooks/<hook>.d/*` in name
+order with the same arguments and stdin. The first failure stops the commit
+or push.
+
+| Hook | Generic checks | Repo checks (`<hook>.d/`) |
+| --- | --- | --- |
+| `prepare-commit-msg` | adds `Signed-off-by` | none |
+| `commit-msg` | subject, blank line, body; `Signed-off-by` present | none |
+| `pre-commit` / `pre-merge-commit` (staged, seconds) | gitleaks on the staged change | gofmt, `go vet`, fast golangci-lint on changed code, secret scan, debug-print grep |
+| `pre-push` (each pushed commit) | `Signed-off-by`, verified signature, gitleaks on new commits | `make check`, `make test-full-chain-e2e`, full-range secret scan, native smoke on macOS only |
+
+- **Generic files are copies.** `.githooks/{pre-commit,pre-merge-commit,prepare-commit-msg,commit-msg,pre-push}`,
+  `.githooks/lib/` and `scripts/setup-hooks` come unedited from the shared
+  hook template. Never edit them here; update by copying the template again.
+  Repo-specific checks live only in `.githooks/<hook>.d/` and `.githooks/_lib/`.
+- **All checks must pass before a push.** Do not use `--no-verify`; fix the
+  failure instead. The release workflow still re-runs the full gate on tags.
 - **Pre-commit** reads the commit's own index through `staged_git` (from
   `$HOOK_HELPERS`), so `commit -a` and `commit <paths>` are checked as
   committed. `go vet` and fast lint read the working tree for speed.
@@ -53,12 +57,13 @@ commit or push. Nothing is installed per clone.
   `pushed_shas` with a `for` loop and runs each check through `at_sha`
   (in place for a clean HEAD, otherwise in a temporary detached worktree).
   Deleted refs are skipped.
-- **Git environment.** The dispatcher clears git's per-repo variables before
-  repo checks; `.githooks/_lib/clean-git-env.sh` clears them again for steps
+- **Git environment.** The hook runner (`.githooks/lib/run-local.sh`) clears
+  git's per-repo variables before repo checks; `.githooks/_lib/clean-git-env.sh` clears them again for steps
   that run test suites, so a fixture repo can never write this repo's config.
 - Add a check: an executable `.githooks/<hook>.d/NN-name` script whose top
   comment says why it exists; source `../_lib/hook-env.sh` relative to the
-  script, and call a Makefile target rather than copying it.
+  script (it fails with `run from .githooks (scripts/setup-hooks)` when the
+  helpers are missing), and call a Makefile target rather than copying it.
 - Secret scan uses `gitleaks` when it is on `PATH`, otherwise built-in
   high-confidence patterns (`scripts/secret-scan.sh`). The scanner always
   comes from the commit being checked: pre-commit runs the staged copy,
@@ -68,8 +73,6 @@ commit or push. Nothing is installed per clone.
   even commits another remote branch already has; a new branch scans its
   whole history, which needs `gitleaks`. Reviewed false positives live in
   `.gitleaksignore`, each pinned to one commit, file, rule and line.
-- Do not use `--no-verify`. The release workflow still re-runs the full gate
-  on tags.
 
 ## Workflow
 
