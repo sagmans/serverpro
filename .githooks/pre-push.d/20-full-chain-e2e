@@ -1,0 +1,7 @@
+#!/bin/sh
+# The hermetic full-chain journeys used to run as a separate CI job. They
+# stay a separate step so a failure is reported apart from make check.
+set -eu
+. "$(dirname -- "$0")/../_lib/clean-git-env.sh"
+echo "pre-push: make test-full-chain-e2e" >&2
+exec make --no-print-directory test-full-chain-e2e

@@ -16,7 +16,7 @@ to a later pass or a separate ticket.
 - Commands, targets, flags, or operator flow → `USAGE.md`
 - Security controls, supply-chain, or access model → `SECURITY.md`
 - External URLs, key fingerprints, or upstream version pins → `WEB_SOURCES.md`
-- Contributor workflow → `DEVELOPMENT.md`
+- Contributor workflow or Git hooks → `DEVELOPMENT.md`
 - Test approach, quality gates, or capability matrix → `TESTING.md`
 - Purpose, scope, or top-level navigation → `README.md`
 - New or removed documents → this index (`AGENTS.md`)
@@ -36,6 +36,7 @@ rather than leaving a gap. A doc that drifts from code is worse than no doc.
 - `TESTING.md` — test matrix, quality gates, and dogfood reference.
 - `CONTRIBUTING.md` — public contribution guidance.
 - `.github/pull_request_template.md` — pull request author checklist.
+- `.githooks/` — local Git hooks (see "Git hooks" in `DEVELOPMENT.md`).
 - `SECURITY.md` — security reference.
 - `CODE_OF_CONDUCT.md` — public collaboration rules.
 - `WEB_SOURCES.md` — external source reference.

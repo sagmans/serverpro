@@ -1,0 +1,8 @@
+#!/bin/sh
+# Full local gate. Push and PR CI were removed to save Actions minutes, so
+# this is now where the complete non-live suite (race tests, coverage, e2e,
+# lint, shellcheck, govulncheck) must pass before code leaves the machine.
+set -eu
+. "$(dirname -- "$0")/../_lib/clean-git-env.sh"
+echo "pre-push: make check" >&2
+exec make --no-print-directory check

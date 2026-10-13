@@ -16,9 +16,39 @@ DEVELOPMENT.md is contributor workflow. User docs live in `README.md`,
   `GOTOOLCHAIN=go<go.mod floor>+auto`, so every target uses the patched floor
   (Go fetches and checksum-verifies it once). Set `GOTOOLCHAIN` in the
   environment to override.
-- `make check` is the primary local and CI gate;
-  `make test-full-chain-e2e` is the separate required full-chain gate.
+- `make check` is the primary local gate and `make test-full-chain-e2e` is
+  the separate full-chain gate. Both run in the `pre-push` hook; CI runs them
+  only inside the tag-triggered release workflow.
 - Tool installers write under `.bin/`; caches stay under `.cache/`.
+
+## Git hooks
+
+Push and PR CI is off to save Actions minutes; the checks run in local Git
+hooks instead. Run `make hooks` once per clone (rerun after moving the clone
+or adding a global hook).
+
+| Hook | Checks |
+| --- | --- |
+| `pre-commit` (staged files, seconds) | gofmt, `go vet`, fast golangci-lint on changed code, secret scan, debug-print grep |
+| `pre-push` (full) | `make check`, `make test-full-chain-e2e`, secret scan of pushed commits, native smoke on macOS only |
+| `prepare-commit-msg`, `commit-msg` | global hooks only |
+
+Global hooks are kept. Git reads one `core.hooksPath`, and a repository
+value hides the global one, so `make hooks` points it at a router in the Git
+common directory instead of at `.githooks`. Each `.githooks/<hook>` wrapper
+runs the global hook of the same name first (found with
+`git config --global --includes --path --get core.hooksPath`), with the same
+arguments and stdin, then `.githooks/<hook>.d/*` in order. The first failure
+stops the commit or push. `make hooks` never edits global config or the
+global hooks directory.
+
+- Add a check: an executable `.githooks/<hook>.d/NN-name` script whose top
+  comment says why it exists; call a Makefile target rather than copying it.
+  Rerun `make hooks` when you add a new hook name.
+- Secret scan uses `gitleaks` when it is on `PATH`, otherwise built-in
+  high-confidence patterns (`scripts/secret-scan.sh`).
+- Do not use `--no-verify`. The release workflow still re-runs the full gate
+  on tags.
 
 ## Workflow
 
@@ -56,7 +86,7 @@ race and one merged coverage profile. Its release shell contract does not rerun
 the Go release package; `make test-release` remains the focused target that
 runs that package once plus the shell assertions. Standalone unit, integration,
 race, and cover targets support focused development. Build-tagged full-chain
-journeys run through `make test-full-chain-e2e` in a distinct CI job. The gate
+journeys run through `make test-full-chain-e2e` as a separate pre-push step. The gate
 rejects aggregate coverage below 81.8% and any 0%-covered function.
 `make check` also runs `make lint-shell`, which needs ShellCheck on `PATH`
 (preinstalled on the CI runner; install it locally with your system package

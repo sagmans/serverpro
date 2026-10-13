@@ -103,6 +103,10 @@ assert_contains "${INSTALLATION_DOC}" "--bundle \"\${provenance_bundle}\""
 assert_contains "${INSTALLATION_DOC}" '--predicate-type https://spdx.dev/Document/v2.3'
 
 # --- release provenance validator scenarios (mocked gh API) ---
+# Run from a Git hook, Git exports GIT_DIR and friends; without this the
+# sandbox commands below would rewrite the caller's repository config.
+# shellcheck disable=SC2046 # WHY: one variable name per word is intended.
+unset $(git rev-parse --local-env-vars)
 PROV_SANDBOX=$(mktemp -d)
 git init -q --bare "${PROV_SANDBOX}/origin.git"
 git init -q -b main "${PROV_SANDBOX}/repo"

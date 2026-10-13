@@ -1,0 +1,19 @@
+#!/bin/sh
+# Rejects unformatted Go before it enters history. CI no longer runs on
+# pushes or PRs, so this is the first gate that keeps diffs gofmt-clean.
+# Reads the staged blob so partially staged files are judged as committed.
+set -eu
+. "$(dirname -- "$0")/../_lib/staged.sh"
+
+GO_PATHSPEC='*.go'
+
+bad=''
+for file in $(staged_files "$GO_PATHSPEC"); do
+	if [ -n "$(git show ":$file" | gofmt -l)" ]; then
+		bad="$bad $file"
+	fi
+done
+if [ -n "$bad" ]; then
+	echo "pre-commit: gofmt needed:$bad (run: make fmt)" >&2
+	exit 1
+fi

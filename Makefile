@@ -33,7 +33,7 @@ SHELLCHECK ?= shellcheck
 # a hand-kept list once left the root bootstrap script unlinted.
 SHELL_LINT_SCRIPTS := $(shell git ls-files -- '*.sh')
 
-.PHONY: ci check fmt fmt-check tidy-check test test-unit test-go-check test-harness test-smoke test-integration test-e2e test-full-chain-e2e test-release test-release-shell test-dogfood-readonly test-dogfood-live test-dogfood-live-selftest vet build bin dogfood-no-token link-bin lint lint-shell vuln race cover install-tools install-hooks gen-bootstrap-wrapper
+.PHONY: ci check fmt fmt-check tidy-check test test-unit test-go-check test-harness test-smoke test-integration test-e2e test-full-chain-e2e test-release test-release-shell test-dogfood-readonly test-dogfood-live test-dogfood-live-selftest vet build bin dogfood-no-token link-bin lint lint-shell vuln race cover install-tools hooks install-hooks lint-fast gen-bootstrap-wrapper
 .SILENT: fmt fmt-check link-bin
 
 ci: build check
@@ -121,6 +121,11 @@ link-bin: bin
 lint: ${GOLANGCI_LINT_STAMP}
 	GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE}" "${GOLANGCI_LINT}" run
 
+# Commit-time lint: fast analyzers on changed code only, so pre-commit stays
+# within seconds; the full lint runs in pre-push via check.
+lint-fast: ${GOLANGCI_LINT_STAMP}
+	GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE}" "${GOLANGCI_LINT}" run --fast-only --new-from-rev=HEAD
+
 # An empty script list (no Git, tarball checkout, dubious-ownership refusal)
 # must fail loudly rather than reach shellcheck with no files.
 lint-shell:
@@ -140,10 +145,13 @@ cover:
 
 install-tools: ${GOLANGCI_LINT_STAMP} ${GOVULNCHECK_STAMP}
 
-install-hooks:
-	mkdir -p "$$(git rev-parse --git-common-dir)/hooks"
-	cp .githooks/pre-commit "$$(git rev-parse --git-common-dir)/hooks/pre-commit"
-	chmod +x "$$(git rev-parse --git-common-dir)/hooks/pre-commit"
+# Wires .githooks for this clone while keeping the global hooks chained;
+# rerun after moving the clone or adding a global hook.
+hooks:
+	bash scripts/setup-hooks.sh
+
+# Kept as an alias so existing setup notes and muscle memory still work.
+install-hooks: hooks
 
 ${GOLANGCI_LINT_STAMP}:
 	mkdir -p "${BIN_DIR}"
