@@ -1,0 +1,12 @@
+#!/bin/sh
+# Runs only the fast golangci-lint analyzers on code changed since HEAD, so
+# lint feedback arrives at commit time without the full suite's cost. The
+# full lint still runs in pre-push through make check.
+set -eu
+. "$(dirname -- "$0")/../_lib/staged.sh"
+
+GO_PATHSPEC='*.go'
+
+[ -n "$(staged_files "$GO_PATHSPEC")" ] || exit 0
+echo "pre-commit: golangci-lint (fast, changed code)" >&2
+exec make --no-print-directory lint-fast

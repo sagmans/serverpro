@@ -1,0 +1,14 @@
+#!/bin/sh
+# Release ships native macOS binaries, and the main user runs the CLI on a
+# Mac. A native build smoke there catches darwin-only breakage that a Linux
+# machine cannot run; elsewhere the step says it was skipped.
+set -eu
+
+DARWIN='Darwin'
+
+if [ "$(uname -s)" != "$DARWIN" ]; then
+	echo "pre-push: darwin smoke skipped (not macOS)" >&2
+	exit 0
+fi
+echo "pre-push: darwin native smoke" >&2
+exec make --no-print-directory test-smoke

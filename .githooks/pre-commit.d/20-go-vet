@@ -1,0 +1,13 @@
+#!/bin/sh
+# Catches compile and vet errors in seconds, so broken code is not committed
+# and only discovered by the slower pre-push gate. Skipped when no Go or
+# module file is staged, to keep docs-only commits instant.
+set -eu
+. "$(dirname -- "$0")/../_lib/staged.sh"
+
+GO_PATHSPECS='*.go go.mod go.sum'
+
+# shellcheck disable=SC2086 # WHY: the pathspec list is split on purpose.
+[ -n "$(staged_files $GO_PATHSPECS)" ] || exit 0
+echo "pre-commit: go vet" >&2
+exec make --no-print-directory vet
