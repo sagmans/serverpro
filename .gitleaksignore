@@ -1,0 +1,9 @@
+# Reviewed gitleaks false positives in past history. The pre-push scan now
+# covers a new branch's whole history, so these old findings would block
+# every first push. Each entry is pinned to one commit, file, rule and line:
+# test fixtures with placeholder values, and Cloudflare's public APT signing
+# key fingerprint. A new finding anywhere still blocks.
+9493134426c8a76bf6408a1e9471a211b625cae2:internal/credentials/load_test.go:generic-api-key:101
+c3e3ce8f3f427e92871473f89daab360d31fdac1:internal/tunnel/install.go:cloudflare-api-key:12
+57e91914725a9c5230b90ee0e6595c80a9641cd4:internal/doctor/remote_git_test.go:generic-api-key:49
+4cde18ce4db3913118c4d8ac98f3a4d67c724d05:internal/tunnel/install.go:cloudflare-api-key:9
