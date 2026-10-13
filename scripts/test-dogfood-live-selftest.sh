@@ -14,7 +14,10 @@ trap 'rm -rf "$tmp"' EXIT
 
 fakebin="$tmp/fakebin"
 mkdir -p "$fakebin"
-real_python="$(command -v python3)"
+# The interpreter itself, not a version-manager shim: the harness runs under
+# env -i with a temp HOME, where a shim (mise, pyenv, asdf) cannot resolve
+# a version and would loop back into the fake python3 below.
+real_python="$(python3 -c 'import sys; print(sys.executable)')"
 
 SENT_HETZNER='SENTINEL_HETZNER_SECRET'
 SENT_VULTR='SENTINEL_VULTR_SECRET'
