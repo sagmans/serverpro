@@ -32,14 +32,14 @@ instead.
 Follow the end-to-end workflow in `DEVELOPMENT.md`.
 
 ```sh
-make hooks   # once per clone
+githooks-trust   # review the repo hooks once per worktree
 make test
 make check
 ```
 
-Checks run locally in Git hooks, not in push or PR CI. `make hooks` keeps
-any global Git hooks you have and runs them first. See "Git hooks" in
-`DEVELOPMENT.md`.
+Checks run locally in Git hooks, not in push or PR CI. The global dotf hooks
+run them from `.githooks/<hook>.d/`; never set a local `core.hooksPath`. See
+"Git hooks" in `DEVELOPMENT.md`.
 
 Add tests next to changed code. Prefer fake providers over live infrastructure.
 Use `--dry-run` for provisioning flows while developing. If live infrastructure
