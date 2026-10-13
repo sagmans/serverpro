@@ -25,7 +25,8 @@ why a layer is not applicable.
 | Live harness self-test | `make test-dogfood-live-selftest` | Unit-test every importable output contract, then prove malformed/invalid-success rejection, fallback-delete evidence, guards, secret transport, and cleanup retention through the shell orchestrator with a fake binary; no tokens or network. | No |
 | Shell lint | `make lint-shell` | Run `shellcheck -x` on every Git-tracked `*.sh` file, including the root bootstrap script and the Tailscale updater. Suppressions are targeted `# shellcheck disable=SCxxxx # WHY: ...` lines. ShellCheck is a system tool, not installed by the Makefile; the target fails with guidance when it is missing. | No |
 
-The `pre-push` hook runs `make check` and then `make test-full-chain-e2e`;
+The `pre-push` hook runs `make check` and then `make test-full-chain-e2e` on
+every pushed commit;
 the release workflow runs both again on tags (see `DEVELOPMENT.md`).
 `make check` runs the primary non-live gates once; release workflow Go tests
 stay in that consolidated invocation while the shell-only release contract runs
