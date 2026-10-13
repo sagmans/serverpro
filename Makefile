@@ -145,11 +145,10 @@ cover:
 
 install-tools: ${GOLANGCI_LINT_STAMP} ${GOVULNCHECK_STAMP}
 
-# Lists what the old per-repo hook setup left behind (a local core.hooksPath
-# that hides the global hooks, and its router). Dry run; the global hooks
-# need nothing installed here. Apply with: bash scripts/setup-hooks.sh --apply
+# Git never runs hooks that ship in a repo until the clone opts in, so this
+# turns on .githooks for this clone and all its worktrees.
 hooks:
-	bash scripts/setup-hooks.sh
+	sh scripts/setup-hooks
 
 # Kept as an alias so existing setup notes and muscle memory still work.
 install-hooks: hooks
