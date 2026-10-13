@@ -6,10 +6,12 @@
 # the gate active on machines without it (installing tools needs approval).
 #
 # Usage: secret-scan.sh staged   (pre-commit: staged changes)
-#        secret-scan.sh commits <sha>...  (pre-push: each pushed commit)
+#        secret-scan.sh range <local-sha> <remote-sha>  (pre-push: one pushed ref)
 set -euo pipefail
 
 GITLEAKS=${GITLEAKS:-gitleaks}
+# All-zero object name: the ref does not exist on that side of the push.
+ZERO_OID_RE='^0+$'
 # High-confidence token shapes only; a noisy gate gets bypassed. Covers the
 # credentials this project handles (GitHub PAT, Tailscale, Cloudflare via
 # generic bearer/key assignments) plus private keys and cloud keys.
@@ -49,24 +51,36 @@ staged)
 	echo "secret-scan: gitleaks not found; using built-in patterns" >&2
 	git diff --cached -U0 --diff-filter=ACMR | scan_diff
 	;;
-commits)
-	# One run per pushed commit (the hook passes each pushed SHA); only the
-	# history the remote does not have yet is scanned, which also covers a
-	# brand-new branch.
-	shift
-	(($# > 0)) || { echo "usage: $0 commits <sha>..." >&2; exit 2; }
-	for sha in "$@"; do
-		git rev-parse --verify -q "${sha}^{commit}" >/dev/null || { echo "secret-scan: unknown commit ${sha}" >&2; exit 1; }
-		if have_gitleaks; then
-			"$GITLEAKS" git --log-opts="${sha} --not --remotes" --redact --no-banner
-		else
-			echo "secret-scan: gitleaks not found; using built-in patterns" >&2
-			git log -p -U0 --format= "$sha" --not --remotes | scan_diff
-		fi
-	done
+range)
+	# One pushed ref: <local sha> <remote sha>. Scans every commit the ref
+	# update brings, whether or not another remote branch already has it,
+	# because "already on some remote" is not proof it was ever scanned. A
+	# new branch, or a remote tip this clone does not have, has no trusted
+	# base, so the whole history of the pushed commit is scanned.
+	(($# == 3)) || { echo "usage: $0 range <local-sha> <remote-sha>" >&2; exit 2; }
+	local_sha=$2
+	remote_sha=$3
+	git rev-parse --verify -q "${local_sha}^{commit}" >/dev/null || { echo "secret-scan: unknown commit ${local_sha}" >&2; exit 1; }
+	if [[ ! $remote_sha =~ $ZERO_OID_RE ]] && git rev-parse --verify -q "${remote_sha}^{commit}" >/dev/null; then
+		log_range="${remote_sha}..${local_sha}"
+	else
+		log_range="$local_sha"
+	fi
+	if have_gitleaks; then
+		exec "$GITLEAKS" git --log-opts="$log_range" --redact --no-banner
+	fi
+	# The built-in patterns have no reviewed ignore list, and whole-history
+	# scans hit known test fixtures, so they would block every new branch.
+	# Fail closed instead of narrowing the range.
+	if [[ $log_range != *..* ]]; then
+		echo "secret-scan: a new branch needs gitleaks for its full-history scan (install gitleaks)" >&2
+		exit 1
+	fi
+	echo "secret-scan: gitleaks not found; using built-in patterns" >&2
+	git log -p -U0 --format= "$log_range" | scan_diff
 	;;
 *)
-	echo "usage: $0 staged|commits <sha>..." >&2
+	echo "usage: $0 staged|range <local-sha> <remote-sha>" >&2
 	exit 2
 	;;
 esac
