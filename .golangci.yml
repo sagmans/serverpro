@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
 version: "2"
 run:
-  go: "1.26"
+  go: "1.27"
   tests: true
 linters:
   default: none

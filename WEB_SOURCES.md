@@ -147,17 +147,17 @@ never switches down, so a local 1.27.0 or 1.27.1 must not run project gates.
 ### Go quality tools
 
 ```text
-https://github.com/golangci/golangci-lint/releases/tag/v2.12.2
-https://api.github.com/repos/golangci/golangci-lint/releases/tags/v2.12.2
+https://github.com/golangci/golangci-lint/releases/tag/v2.14.0
+https://api.github.com/repos/golangci/golangci-lint/releases/tags/v2.14.0
 https://golangci-lint.run/docs/product/migration-guide/
 https://github.com/golang/vuln/tree/v1.6.0
 https://api.github.com/repos/golang/vuln/git/ref/tags/v1.6.0
 ```
 
 Use: project-local lint and vulnerability scanner pins. Reviewed 2026-08-11:
-golangci-lint `v2.12.2` is an immutable stable release; govulncheck `v1.6.0`
+golangci-lint `v2.14.0` (bumped 2026-10-13 for Go 1.27 export data) is an immutable stable release; govulncheck `v1.6.0`
 is an exact official repository tag. Both require Go 1.25 or newer and support
-the Go 1.26.9 project toolchain.
+the Go 1.27.2 project toolchain.
 
 ### Hetzner Cloud API
 
@@ -813,7 +813,7 @@ Use: release workflow, native runner architecture, artifact transport, SPDX
 SBOM, signed provenance, attached-bundle verification, and release-integrity
 guidance. Reviewed 2026-08-11: checkout is pinned to `v7.0.1` and setup-go to
 `v7.0.0`; both declare the supported Node 24 JavaScript action runtime, and the
-release runner uses Go `1.26.9`. Upload/download/attestation actions are pinned
+release runner uses Go `1.27.2`. Upload/download/attestation actions are pinned
 to the tags listed above, with commit SHAs recorded in workflow comments; Syft
 is pinned to `v1.48.0`.
 `macos-15-intel` supplies amd64 and `macos-15` supplies arm64 for native smoke

@@ -14,7 +14,7 @@ for required in '-race' '-covermode=atomic' '-coverprofile="coverage.out"' 'scri
 	fi
 done
 for required in \
-	'GOLANGCI_LINT_VERSION := v2.12.2' \
+	'GOLANGCI_LINT_VERSION := v2.14.0' \
 	'GOVULNCHECK_VERSION := v1.6.0' \
 	'GOLANGCI_LINT_MODULE := github.com/golangci/golangci-lint/v2/cmd/golangci-lint' \
 	'GOVULNCHECK_MODULE := golang.org/x/vuln/cmd/govulncheck'; do
@@ -25,9 +25,9 @@ for required in \
 done
 install_plan="$(make -Bn install-tools GO=__SERVERPRO_GO__)"
 for required in \
-	'github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2' \
+	'github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0' \
 	'golang.org/x/vuln/cmd/govulncheck@v1.6.0' \
-	'.golangci-lint-v2.12.2' \
+	'.golangci-lint-v2.14.0' \
 	'.govulncheck-v1.6.0'; do
 	if ! grep -F -- "$required" <<<"$install_plan" >/dev/null; then
 		printf 'make install-tools missing exact tool contract: %s\n%s\n' "$required" "$install_plan" >&2
