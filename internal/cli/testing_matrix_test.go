@@ -180,7 +180,7 @@ func TestTestingMatrixDocumentsCoverageTracking(t *testing.T) {
 func TestTestingMatrixSeparatesPrimaryAndFullChainGates(t *testing.T) {
 	doc := readTestingMatrix(t)
 	for _, want := range []string{
-		"CI combines `make check` with a separate `make test-full-chain-e2e` job",
+		"The `pre-push` hook runs `make check` and then `make test-full-chain-e2e`",
 		"| Enforced minimum | 81.8% |",
 	} {
 		if !strings.Contains(doc, want) {
@@ -190,6 +190,7 @@ func TestTestingMatrixSeparatesPrimaryAndFullChainGates(t *testing.T) {
 	for _, stale := range []string{
 		"`make check` runs each non-live evidence kind once",
 		"| Current | 81.8% |",
+		"CI combines `make check` with a separate `make test-full-chain-e2e` job",
 	} {
 		if strings.Contains(doc, stale) {
 			t.Fatalf("TESTING.md retains stale gate contract %q", stale)
