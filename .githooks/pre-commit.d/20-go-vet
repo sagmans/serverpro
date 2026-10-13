@@ -4,6 +4,7 @@
 # module file is staged, to keep docs-only commits instant.
 set -eu
 . "$(dirname -- "$0")/../_lib/staged.sh"
+. "$(dirname -- "$0")/../_lib/clean-git-env.sh"
 
 GO_PATHSPECS='*.go go.mod go.sum'
 

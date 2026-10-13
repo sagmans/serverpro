@@ -3,6 +3,7 @@
 # Mac. A native build smoke there catches darwin-only breakage that a Linux
 # machine cannot run; elsewhere the step says it was skipped.
 set -eu
+. "$(dirname -- "$0")/../_lib/clean-git-env.sh"
 
 DARWIN='Darwin'
 
