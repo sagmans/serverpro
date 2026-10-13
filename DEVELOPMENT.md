@@ -60,7 +60,14 @@ commit or push. Nothing is installed per clone.
   comment says why it exists; source `../_lib/hook-env.sh` relative to the
   script, and call a Makefile target rather than copying it.
 - Secret scan uses `gitleaks` when it is on `PATH`, otherwise built-in
-  high-confidence patterns (`scripts/secret-scan.sh`).
+  high-confidence patterns (`scripts/secret-scan.sh`). The scanner always
+  comes from the commit being checked: pre-commit runs the staged copy,
+  pre-push runs each pushed commit's own copy through `at_sha`, so editing
+  the scanner in the checkout cannot weaken a scan.
+- Pre-push scans every commit the ref update brings (`<remote>..<local>`),
+  even commits another remote branch already has; a new branch scans its
+  whole history, which needs `gitleaks`. Reviewed false positives live in
+  `.gitleaksignore`, each pinned to one commit, file, rule and line.
 - Do not use `--no-verify`. The release workflow still re-runs the full gate
   on tags.
 
