@@ -2,6 +2,13 @@
 
 Thanks for helping improve serverpro.
 
+## Pull requests from outside contributors
+
+serverpro is in an early, experimental phase and can change a lot. Outside
+pull requests are not accepted for now and will be closed; no CI runs on
+them. Open an issue to report a bug or propose an idea instead. Security
+reports follow `SECURITY.md`.
+
 ## Before work
 
 - Read `README.md`, `USAGE.md`, `DEVELOPMENT.md`, `ARCHITECTURE.md`, and
@@ -25,9 +32,14 @@ instead.
 Follow the end-to-end workflow in `DEVELOPMENT.md`.
 
 ```sh
+make hooks   # once per clone
 make test
 make check
 ```
+
+Checks run locally in Git hooks, not in push or PR CI. `make hooks` keeps
+any global Git hooks you have and runs them first. See "Git hooks" in
+`DEVELOPMENT.md`.
 
 Add tests next to changed code. Prefer fake providers over live infrastructure.
 Use `--dry-run` for provisioning flows while developing. If live infrastructure

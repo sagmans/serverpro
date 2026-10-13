@@ -1,7 +1,5 @@
 # serverpro
 
-[![CI](https://github.com/sagmans/serverpro/actions/workflows/ci.yml/badge.svg)](https://github.com/sagmans/serverpro/actions/workflows/ci.yml)
-
 Small, security-focused server provisioner.
 
 serverpro creates hardened Ubuntu 24.04 LTS servers on Hetzner, Vultr, or
@@ -96,6 +94,12 @@ for provider catalog choices such as location, size, and image.
 - Remote admin sudo password is runtime-only.
 - Destructive operations require known state, provider ownership metadata, and
   confirmation.
+
+## Project status
+
+serverpro is early and experimental; its design can change a lot. Outside
+pull requests are not accepted for now, and CI does not run on them. Bug
+reports in GitHub Issues are welcome. See [Contributing](CONTRIBUTING.md).
 
 ## Docs
 
