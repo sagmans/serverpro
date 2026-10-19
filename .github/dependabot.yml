@@ -1,6 +1,33 @@
+# Dependabot policy. Go has no package-manager release-age gate, so the
+# cooldown is the only supply-chain window: a release must survive a week of
+# public scrutiny before a bot pull request proposes it.
 version: 2
 updates:
+  # Every action is pinned by commit SHA, and nothing else raises those pins.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      # Pending action bumps once had to be consolidated by hand; one grouped
+      # pull request keeps the release workflow reviewed as a whole.
+      actions:
+        patterns: ["*"]
+
+  # The binary ships these modules to managed hosts, so they get the same
+  # watch as the workflows that build it.
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      # Minor and patch bumps share one pull request so one `make check` run
+      # covers them; a major bump stays separate because it is an API change.
+      go-modules:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
