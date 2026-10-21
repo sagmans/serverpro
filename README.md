@@ -21,7 +21,7 @@ DNS records, run databases, or store application secrets.
 The supported controller is macOS 27 on arm64. Managed hosts are Ubuntu 24.04
 LTS (`noble`) on amd64 or arm64. Live create rejects unsupported provider
 catalog images before provider mutation; remote installers reject unsupported
-actual hosts before managed mutation. Go 1.27.2+
+actual hosts before managed mutation. Go 1.27.3+
 is required for source builds. See [Installation](INSTALLATION.md) for the
 full tool and package baseline.
 
@@ -51,7 +51,7 @@ Install a specific release (recommended):
 go install github.com/sagmans/serverpro/cmd/serverpro@vX.Y.Z
 ```
 
-If `GOBIN` is set, add that directory to `PATH` instead. Requires Go 1.27.2+.
+If `GOBIN` is set, add that directory to `PATH` instead. Requires Go 1.27.3+.
 
 ## Provider setup
 

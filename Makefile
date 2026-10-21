@@ -2,7 +2,7 @@ SHELL := /bin/sh
 
 GO ?= go
 # GO_FLOOR is the patched minimum from go.mod. GOTOOLCHAIN=auto never switches
-# down, so a newer but unpatched local Go (1.27.0, 1.27.1) would otherwise run
+# down, so a newer but unpatched local Go (1.27.0 through 1.27.2) would otherwise run
 # every gate; pinning the default to the floor keeps local runs on the same
 # toolchain as CI while +auto still allows a higher go.mod requirement.
 GO_FLOOR := $(shell awk '/^go /{print $$2}' go.mod)

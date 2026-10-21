@@ -8,7 +8,7 @@ DEVELOPMENT.md is contributor workflow. User docs live in `README.md`,
 - macOS 27 arm64 is the supported local controller/development runtime.
 - Ubuntu 24.04 LTS (`noble`) amd64/arm64 is the only supported managed-host
   dogfood target.
-- Go 1.27.2 is the supported development, CI, and release toolchain.
+- Go 1.27.3 is the supported development, CI, and release toolchain.
 - `mise.toml` owns the exact Go version pin.
 - The `go` directive is a minimum, not a pin. `GOTOOLCHAIN=auto` runs any
   newer local Go as-is, so an unpatched Go 1.27.0 or 1.27.1 on `PATH` would
