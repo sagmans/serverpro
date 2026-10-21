@@ -55,7 +55,7 @@ reviewed pins, integrity checks, and replacement lifecycle.
 | Docker Buildx | 0.37.2 | Minimum vendor package `0.37.2-1~ubuntu.24.04~noble`, or exact checksum-verified official fallback. |
 | Docker Compose | 5.5.1 | Minimum vendor package version `5.5.1-1~ubuntu.24.04~noble`. |
 | htop | 3.3.0 | Minimum Ubuntu package version `3.3.0-4build1`. |
-| mise | 2026.10.0 | Minimum release; newer compatible mise remains installed. |
+| mise | 2026.10.17 | Minimum release; newer compatible mise remains installed. |
 | Node.js | 24.21.0 LTS | Exact mise-managed runtime. |
 | npm | 11.19.0 | Exact npm bundled with the managed Node.js release. |
 | Pi | 0.87.1 | Exact global package under managed Node.js. |
