@@ -18,6 +18,11 @@ sem `0.26.0`, and Pi `1.0.0` remain younger than seven days.
 containerd `2.4.1` is old enough upstream but absent from Docker’s Noble packages;
 retain vendor-compatible `2.3.6`. Do not downgrade approved security floors.
 Mise `2026.10.0` fixes medium-severity `GHSA-wcqh-j26q-g44x`, published 2026-10-02.
+Reviewed 2026-10-22: the mise floor moves to `2026.10.17`, published 2026-10-21.
+Its built-in npm backend no longer trusts eight eMudhra intermediate CA
+certificates whose private keys were compromised. It is younger than seven
+days; the owner approved this security exception. It keeps the
+`GHSA-wcqh-j26q-g44x` fix.
 Both mise GNU/Linux archives were downloaded independently and matched published checksums.
 
 | Updated tool | Selected release | Published (UTC) | Selection |
@@ -27,7 +32,7 @@ Both mise GNU/Linux archives were downloaded independently and matched published
 | containerd | 2.3.6 | 2026-09-24 23:13:08 | Normal age gate; preserve Docker's 2.3 package line |
 | Buildx | 0.37.2 | 2026-09-30 | Approved security exception; reviewed official binary fallback |
 | Compose | 5.5.1 | 2026-09-03 | Normal age gate |
-| mise | 2026.10.0 | 2026-10-02 01:42:32 | Approved security exception; fixes inline-options token exfiltration |
+| mise | 2026.10.17 | 2026-10-21 01:29:26 | Approved security exception; distrusts compromised eMudhra intermediate CAs and keeps the inline-options token exfiltration fix |
 | Node.js | 24.21.0 LTS | 2026-09-07 | Normal age gate |
 | Pi | 0.87.1 | 2026-09-22 | Normal age gate |
 | uv | 0.12.19 | 2026-09-25 00:33:02 | Normal age gate; retains the wheel traversal fix |
@@ -56,7 +61,9 @@ Primary selection and security evidence:
 - https://github.com/astral-sh/uv/releases/tag/0.12.19
 - https://github.com/cli/cli/releases/tag/v2.102.0
 - https://github.com/astral-sh/uv/security/advisories/GHSA-2cv4-cqwr-gwf7
-- https://github.com/jdx/mise/releases/download/v2026.10.0/SHASUMS256.txt
+- https://github.com/jdx/mise/releases/tag/v2026.10.17
+- https://github.com/jdx/mise/pull/14781
+- https://github.com/jdx/mise/releases/download/v2026.10.17/SHASUMS256.txt
 - https://github.com/Ataraxy-Labs/sem/releases/download/v0.25.0/checksums.txt
 
 The Docker repository contains Engine 29.8.2 and containerd 2.3.6 on both
@@ -563,16 +570,22 @@ https://mise.jdx.dev/installing-mise.html
 https://mise.jdx.dev/cli/install.html
 https://mise.jdx.dev/cli/unuse.html
 https://mise.jdx.dev/dev-tools/backends/github.html
-https://github.com/jdx/mise/releases/tag/v2026.10.0
-https://api.github.com/repos/jdx/mise/releases/tags/v2026.10.0
+https://github.com/jdx/mise/releases/tag/v2026.10.17
+https://api.github.com/repos/jdx/mise/releases/tags/v2026.10.17
+https://github.com/jdx/mise/releases/download/v2026.10.17/SHASUMS256.txt
 ```
 
 Use: mise prerequisite, scoped managed-tool installation, legacy managed-tool
-removal, and reviewed minimum version `2026.10.0`. Pinned release artifact
-SHA-256 values:
+removal, and reviewed minimum version `2026.10.17`. Pinned release artifact
+SHA-256 values, matched against the release `SHASUMS256.txt` on 2026-10-22:
 
-- Linux x64: `6ae3d2bda39cca86713501317edf623b59b75cd8afa2e31c20b1ee6500b4b739`
-- Linux arm64: `107c5e46693cdfeb1fdec91717078b298d6fcc9ebbd14f8333917cfe37965138`
+- Linux x64: `17565e268c5542d8ce944321e17af81e0b741b65af4aa7e8e010ee77376a4aa3`
+- Linux arm64: `cac510e51793ad45e65fe92305bdbe4309c9c60b5907badbc7eba111738ab08f`
+
+The `2026.10.17` floor is an owner-approved exception to the seven-day release
+age gate. It removes trust in eight compromised eMudhra intermediate CA
+certificates from the npm backend's bundled roots. Its only listed upgrade
+note changes relative `find_up` in `env._.file`; serverpro does not use it.
 
 ### mise bootstrap
 

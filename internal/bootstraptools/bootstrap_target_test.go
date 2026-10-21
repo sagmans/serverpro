@@ -335,12 +335,12 @@ func TestPiManifestPinsRequiredVersion(t *testing.T) {
 }
 
 func TestMiseReleaseManifestPinsRequiredVersion(t *testing.T) {
-	if MinimumMiseVersion != "2026.10.0" {
-		t.Fatalf("mise version = %q, want 2026.10.0", MinimumMiseVersion)
+	if MinimumMiseVersion != "2026.10.17" {
+		t.Fatalf("mise version = %q, want 2026.10.17", MinimumMiseVersion)
 	}
 	want := map[string]string{
-		"linux-x64":   "6ae3d2bda39cca86713501317edf623b59b75cd8afa2e31c20b1ee6500b4b739",
-		"linux-arm64": "107c5e46693cdfeb1fdec91717078b298d6fcc9ebbd14f8333917cfe37965138",
+		"linux-x64":   "17565e268c5542d8ce944321e17af81e0b741b65af4aa7e8e010ee77376a4aa3",
+		"linux-arm64": "cac510e51793ad45e65fe92305bdbe4309c9c60b5907badbc7eba111738ab08f",
 	}
 	got := map[string]string{
 		"linux-x64":   MiseLinuxX64TarGzSHA256,

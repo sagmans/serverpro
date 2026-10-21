@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	MinimumMiseVersion                = "2026.10.0"
-	MiseLinuxX64TarGzSHA256           = "6ae3d2bda39cca86713501317edf623b59b75cd8afa2e31c20b1ee6500b4b739"
-	MiseLinuxArm64TarGzSHA256         = "107c5e46693cdfeb1fdec91717078b298d6fcc9ebbd14f8333917cfe37965138"
+	MinimumMiseVersion                = "2026.10.17"
+	MiseLinuxX64TarGzSHA256           = "17565e268c5542d8ce944321e17af81e0b741b65af4aa7e8e010ee77376a4aa3"
+	MiseLinuxArm64TarGzSHA256         = "cac510e51793ad45e65fe92305bdbe4309c9c60b5907badbc7eba111738ab08f"
 	NodeVersion                       = "24.21.0"
 	NPMVersion                        = "11.19.0"
 	PiVersion                         = "0.87.1"
