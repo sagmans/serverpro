@@ -62,6 +62,20 @@ received zero requests. The probe used only a synthetic token and no
 `MISE_SAFE` override. No live systems or credentials were used.
 See `WEB_SOURCES.md` for the public evidence.
 
+The 2026-10-22 refresh ran the real bootstrap wrapper with target `all` as root
+in a disposable, privileged, systemd-booted Ubuntu 24.04 arm64 container, twice.
+Both runs completed, and the second run proved idempotence. Apt installed Docker
+Engine `29.9.2`, containerd `2.4.2`, Buildx `0.38.1`, and Compose `5.6.1` from
+Docker’s signed repository, so the Buildx fallback was not used. The Docker
+daemon became active. A test container could not start because nested overlay
+mounts are not supported in this environment. As the admin user, every managed
+tool reported its pinned version. Real uv created a Python virtual environment.
+Cargo check, Clippy, and rustfmt passed on a new crate. Linking needs a system C
+toolchain, which bootstrap does not install. ast-grep matched a Python pattern.
+Pi help and the Herdr Pi integration passed. Pi’s runtime audit found zero
+vulnerabilities. amd64 was not run; its new asset digests were verified by download.
+No host home, credentials, or live servers were used.
+
 The Buildx fallback ran through the production Docker install and shared
 diagnostic probe in disposable Ubuntu 24.04 amd64 and arm64 containers.
 Real Docker CLI and Buildx version checks, repeated convergence, altered-byte
