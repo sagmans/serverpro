@@ -101,17 +101,17 @@ func TestManagedAstGrepContractOmitsDeprecatedSGIdentity(t *testing.T) {
 
 func TestManagedVersionManifestPinsApprovedReleases(t *testing.T) {
 	want := map[string]string{
-		"node":     "24.21.0",
-		"npm":      "11.19.0",
+		"node":     "24.22.1",
+		"npm":      "11.19.1",
 		"pi":       "0.87.1",
-		"uv":       "0.12.19",
-		"rust":     "1.98.1",
+		"uv":       "0.13.5",
+		"rust":     "1.99.0",
 		"tmux":     "3.7c",
-		"gh":       "2.102.0",
+		"gh":       "2.102.1",
 		"rg":       "15.2.0",
 		"fd":       "10.5.0",
-		"ast-grep": "0.45.3",
-		"sem":      "0.25.0",
+		"ast-grep": "0.51.0",
+		"sem":      "0.27.0",
 		"inspect":  "0.1.1",
 	}
 	got := map[string]string{
@@ -133,7 +133,7 @@ func TestManagedVersionManifestPinsApprovedReleases(t *testing.T) {
 			t.Fatalf("%s version = %q, want %q", tool, got[tool], version)
 		}
 	}
-	for _, pin := range []string{"SERVERPRO_BOOTSTRAP_NPM_VERSION='11.19.0'", "SERVERPRO_BOOTSTRAP_UV_VERSION='0.12.19'", "SERVERPRO_BOOTSTRAP_RUST_VERSION='1.98.1'", "SERVERPRO_BOOTSTRAP_AST_GREP_VERSION='0.45.3'", "SERVERPRO_BOOTSTRAP_SEM_VERSION='0.25.0'", "SERVERPRO_BOOTSTRAP_INSPECT_VERSION='0.1.1'"} {
+	for _, pin := range []string{"SERVERPRO_BOOTSTRAP_NPM_VERSION='11.19.1'", "SERVERPRO_BOOTSTRAP_UV_VERSION='0.13.5'", "SERVERPRO_BOOTSTRAP_RUST_VERSION='1.99.0'", "SERVERPRO_BOOTSTRAP_AST_GREP_VERSION='0.51.0'", "SERVERPRO_BOOTSTRAP_SEM_VERSION='0.27.0'", "SERVERPRO_BOOTSTRAP_INSPECT_VERSION='0.1.1'"} {
 		if !contains(InstallScriptForUser("deploy"), pin) {
 			t.Fatalf("managed version manifest missing %q", pin)
 		}
@@ -142,8 +142,8 @@ func TestManagedVersionManifestPinsApprovedReleases(t *testing.T) {
 
 func TestManagedReleaseChecksumsPinApprovedAssets(t *testing.T) {
 	want := map[string][2]string{
-		"ast-grep": {"f8ac830881339d1edee6b2652f54798c0f4da5a827f2db38a08ee31117783ce8", "b39cfbc58da4b869a88b8a4bc57bd5deb0d24541e704cf7c257da7b53ec81c8f"},
-		"sem":      {"7151f577f84eef16b32ab67bbf4336b1878de1f4d7a087583b0a08ee4e0fb4fd", "ce0ab8f8c7bbacde1c8ed87e5a10b4cd10737870597285da8cd62e905ad3bd8c"},
+		"ast-grep": {"a7eead5552d3a8daad70f5d50d935da44bd0c138e946b5b0a96b1d38169fa639", "73af0ebe5958acee012754a5b2826a186580ef83333092408a7a01096fc30b8b"},
+		"sem":      {"3f588a3c62e2d34ba427d51e754f31977922227e5f99a9c69e05977f16900713", "48875c490af25a114c5e8a36a4187a4c1e49e5e1868c5b9f969725420dd6993c"},
 		"inspect":  {"99cf4ea2a2a1048d8e9369a6a5a11e5f84ee3f3c706e0bde072f9b2bd44e96ba", "2327c1de10ecf40e5199c15fdc4c4b3c173735640294e779c635f4c15771e4f6"},
 	}
 	got := map[string][2]string{
@@ -356,10 +356,10 @@ func TestMiseReleaseManifestPinsRequiredVersion(t *testing.T) {
 func TestInstallScriptExportsPinnedHerdrManifest(t *testing.T) {
 	script := InstallScriptForUser("deploy")
 	for _, want := range []string{
-		"SERVERPRO_BOOTSTRAP_HERDR_VERSION='0.9.1'",
+		"SERVERPRO_BOOTSTRAP_HERDR_VERSION='0.9.5'",
 		"SERVERPRO_BOOTSTRAP_HERDR_BACKEND='github:herdrdev/herdr'",
-		"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64='2a02fed16beb651ef006e1d43f048f652ca4dc58ad053cd2d44450563d5c54b7'",
-		"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_ARM64='f4ccf4de745f2cb9a39a983e9ba3703dad50ec2a58dea83026ceab721bbd8d9e'",
+		"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64='14d9e8bc8b4a9e0118d77c32266f76d461f09b40342eb23752960bd89f59929d'",
+		"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_ARM64='17d7536f2da50859523680ef279dffcac8e4a235f4e46fe8da6c2ec44141897c'",
 	} {
 		if !contains(script, want) {
 			t.Fatalf("install script missing pinned Herdr manifest %q", want)

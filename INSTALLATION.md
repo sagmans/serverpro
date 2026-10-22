@@ -56,19 +56,19 @@ reviewed pins, integrity checks, and replacement lifecycle.
 | Docker Compose | 5.5.1 | Minimum vendor package version `5.5.1-1~ubuntu.24.04~noble`. |
 | htop | 3.3.0 | Minimum Ubuntu package version `3.3.0-4build1`. |
 | mise | 2026.10.17 | Minimum release; newer compatible mise remains installed. |
-| Node.js | 24.21.0 LTS | Exact mise-managed runtime. |
-| npm | 11.19.0 | Exact npm bundled with the managed Node.js release. |
+| Node.js | 24.22.1 LTS | Exact mise-managed runtime. |
+| npm | 11.19.1 | Exact npm bundled with the managed Node.js release. |
 | Pi | 0.87.1 | Exact global package under managed Node.js. |
-| uv | 0.12.19 | Exact mise-managed release. |
-| Rust | 1.98.1 | Exact rustup toolchain with default profile. |
+| uv | 0.13.5 | Exact mise-managed release. |
+| Rust | 1.99.0 | Exact rustup toolchain with default profile. |
 | tmux | 3.7c | Exact mise-managed release. |
-| GitHub CLI (`gh`) | 2.102.0 | Exact mise-managed release. |
+| GitHub CLI (`gh`) | 2.102.1 | Exact mise-managed release. |
 | ripgrep (`rg`) | 15.2.0 | Exact mise-managed release. |
 | fd | 10.5.0 | Exact mise-managed release. |
-| ast-grep | 0.45.3 | Exact release and architecture-specific asset digest. |
-| sem | 0.25.0 | Exact release and architecture-specific asset digest. |
+| ast-grep | 0.51.0 | Exact release and architecture-specific asset digest. |
+| sem | 0.27.0 | Exact release and architecture-specific asset digest. |
 | inspect | 0.1.1 | Exact architecture-specific binary digest. |
-| Herdr | 0.9.1 | Exact release and architecture-specific binary digest. |
+| Herdr | 0.9.5 | Exact release and architecture-specific binary digest. |
 | cloudflared | 2026.9.3 | Minimum Cloudflare apt package version when ingress is enabled. |
 
 Pi `0.87.1` and upstream `1.0.0` contain vulnerable `brace-expansion@5.0.9`

@@ -609,19 +609,19 @@ minimum age. Bootstrap requires a clean runtime dependency audit; doctor also
 rejects incorrect dependency versions or shrinkwrap integrity. No upstream
 release changes. Other dependencies are not fully vendored, so residual npm
 supply-chain risk remains. The `all`
-target also installs Node.js `24.21.0` LTS with bundled npm `11.19.0`, Pi
-`0.87.1`, uv `0.12.19` through mise's explicit `aqua:astral-sh/uv` backend, and
-Rust `1.98.1` through `core:rust` with the default rustc, Cargo, rustfmt, Clippy,
+target also installs Node.js `24.22.1` LTS with bundled npm `11.19.1`, Pi
+`0.87.1`, uv `0.13.5` through mise's explicit `aqua:astral-sh/uv` backend, and
+Rust `1.99.0` through `core:rust` with the default rustc, Cargo, rustfmt, Clippy,
 and docs profile. Doctor checks those exact versions and all Rust
 default-profile components. Wrong Node/npm state forces same-version Node
 replacement; `pi` and `all` reinstall Pi afterward because its global npm
-package belongs to that Node installation. It also installs tmux `3.7c`, gh `2.102.0`, rg
-`15.2.0`, fd `10.5.0`, ast-grep `0.45.3`, sem `0.25.0`, and inspect `0.1.1`.
+package belongs to that Node installation. It also installs tmux `3.7c`, gh `2.102.1`, rg
+`15.2.0`, fd `10.5.0`, ast-grep `0.51.0`, sem `0.27.0`, and inspect `0.1.1`.
 ast-grep, sem, and inspect use checksum-pinned GitHub release assets; inspect's bare binary
 digest is checked before execution. On existing hosts, `all` removes the active
 deprecated `sg` mise key before managing `ast-grep`; mise prunes the old install
 when unused.
-The same target installs Herdr `0.9.1` through mise's explicit GitHub backend,
+The same target installs Herdr `0.9.5` through mise's explicit GitHub backend,
 verifies the installed Linux release
 binary against its architecture-specific SHA-256 digest, and runs
 `herdr integration install pi` as the admin user; the
