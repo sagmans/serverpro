@@ -21,6 +21,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/sagmans/serverpro/internal/shell"
 )
 
 const (
@@ -1286,9 +1288,13 @@ func TestManagedPackageUpdatesCommandReportsSimulationState(t *testing.T) {
 		{name: "below-baseline", status: "0", dpkgStatus: "1", packageState: "installed", wantErr: true, wantOutput: "managed package below baseline"},
 		{name: "simulation-fails", output: "package metadata unavailable", status: "100", dpkgStatus: "0", packageState: "installed", wantErr: true, wantOutput: "package metadata unavailable"},
 	}
+	// The managed Buildx path is absolute, so a developer host with Docker
+	// Desktop would route these apt-floor cases into the fallback-binary gate.
+	// Pointing the probe at an absent path keeps the cases on the apt branch.
+	command := strings.ReplaceAll(managedPackageUpdatesCommand(), shell.Quote(BuildxPluginPath), shell.Quote(filepath.Join(binDir, "absent-docker-buildx")))
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cmd := exec.Command("bash", "-c", managedPackageUpdatesCommand())
+			cmd := exec.Command("bash", "-c", command)
 			cmd.Env = append(os.Environ(),
 				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 				"FAKE_APT_OUTPUT="+tc.output,
