@@ -26,14 +26,14 @@ counterpart on DigitalOcean. Confirm current catalog availability before create.
 
 ### Managed tool baseline
 
-Reviewed 2026-10-03. Stable releases normally require seven days of age.
-Docker Engine, Buildx, mise, and gh use explicitly approved security
-exceptions; `WEB_SOURCES.md` records the release dates and advisories. Node.js
+Reviewed 2026-10-22. Stable releases normally require seven days of age.
+Docker Engine, Buildx, Compose, mise, Node.js, uv, and gh use explicitly
+approved security exceptions; `WEB_SOURCES.md` records the release dates and advisories. Node.js
 stays on the supported 24 LTS line with its bundled npm.
 
 Docker bootstrap prefers a signed apt Buildx package at or above its security
 floor. If neither the installed package nor candidate meets that floor, it
-uses the reviewed official `0.37.2` binary for amd64 or arm64. SHA-256 and
+uses the reviewed official `0.38.1` binary for amd64 or arm64. SHA-256 and
 version checks run before Docker package scripts. Other package floors remain
 mandatory; an unavailable or corrupt fallback stops installation.
 
@@ -50,25 +50,25 @@ reviewed pins, integrity checks, and replacement lifecycle.
 | Tailscale | 1.102.4 | Exact client/daemon release and architecture-specific archive digest. |
 | Git | 1:2.43.0-1ubuntu7.3 | Minimum Ubuntu package version. |
 | OpenSSH client | 1:9.6p1-3ubuntu13.19 | Minimum Ubuntu package version. |
-| Docker Engine / CLI | 29.8.2 | Minimum vendor package version `5:29.8.2-1~ubuntu.24.04~noble`. |
-| containerd | 2.3.6 | Minimum vendor package version `2.3.6-1~ubuntu.24.04~noble`. |
-| Docker Buildx | 0.37.2 | Minimum vendor package `0.37.2-1~ubuntu.24.04~noble`, or exact checksum-verified official fallback. |
-| Docker Compose | 5.5.1 | Minimum vendor package version `5.5.1-1~ubuntu.24.04~noble`. |
+| Docker Engine / CLI | 29.9.2 | Minimum vendor package version `5:29.9.2-1~ubuntu.24.04~noble`. |
+| containerd | 2.4.2 | Minimum vendor package version `2.4.2-3~ubuntu.24.04~noble`. |
+| Docker Buildx | 0.38.1 | Minimum vendor package `0.38.1-1~ubuntu.24.04~noble`, or exact checksum-verified official fallback. |
+| Docker Compose | 5.6.1 | Minimum vendor package version `5.6.1-1~ubuntu.24.04~noble`. |
 | htop | 3.3.0 | Minimum Ubuntu package version `3.3.0-4build1`. |
 | mise | 2026.10.17 | Minimum release; newer compatible mise remains installed. |
-| Node.js | 24.21.0 LTS | Exact mise-managed runtime. |
-| npm | 11.19.0 | Exact npm bundled with the managed Node.js release. |
+| Node.js | 24.22.1 LTS | Exact mise-managed runtime. |
+| npm | 11.19.1 | Exact npm bundled with the managed Node.js release. |
 | Pi | 0.87.1 | Exact global package under managed Node.js. |
-| uv | 0.12.19 | Exact mise-managed release. |
-| Rust | 1.98.1 | Exact rustup toolchain with default profile. |
+| uv | 0.13.5 | Exact mise-managed release. |
+| Rust | 1.99.0 | Exact rustup toolchain with default profile. |
 | tmux | 3.7c | Exact mise-managed release. |
-| GitHub CLI (`gh`) | 2.102.0 | Exact mise-managed release. |
+| GitHub CLI (`gh`) | 2.102.1 | Exact mise-managed release. |
 | ripgrep (`rg`) | 15.2.0 | Exact mise-managed release. |
 | fd | 10.5.0 | Exact mise-managed release. |
-| ast-grep | 0.45.3 | Exact release and architecture-specific asset digest. |
-| sem | 0.25.0 | Exact release and architecture-specific asset digest. |
+| ast-grep | 0.51.0 | Exact release and architecture-specific asset digest. |
+| sem | 0.27.0 | Exact release and architecture-specific asset digest. |
 | inspect | 0.1.1 | Exact architecture-specific binary digest. |
-| Herdr | 0.9.1 | Exact release and architecture-specific binary digest. |
+| Herdr | 0.9.5 | Exact release and architecture-specific binary digest. |
 | cloudflared | 2026.9.3 | Minimum Cloudflare apt package version when ingress is enabled. |
 
 Pi `0.87.1` and upstream `1.0.0` contain vulnerable `brace-expansion@5.0.9`
@@ -104,11 +104,11 @@ connector serverpro did not install from `pkg.cloudflare.com`: install and
 | `jq` | `1.7.1-3ubuntu0.24.04.2` |
 | `git` | `1:2.43.0-1ubuntu7.3` |
 | `openssh-client` | `1:9.6p1-3ubuntu13.19` |
-| `docker-ce` | `5:29.8.2-1~ubuntu.24.04~noble` |
-| `docker-ce-cli` | `5:29.8.2-1~ubuntu.24.04~noble` |
-| `containerd.io` | `2.3.6-1~ubuntu.24.04~noble` |
-| `docker-buildx-plugin` | `0.37.2-1~ubuntu.24.04~noble` |
-| `docker-compose-plugin` | `5.5.1-1~ubuntu.24.04~noble` |
+| `docker-ce` | `5:29.9.2-1~ubuntu.24.04~noble` |
+| `docker-ce-cli` | `5:29.9.2-1~ubuntu.24.04~noble` |
+| `containerd.io` | `2.4.2-3~ubuntu.24.04~noble` |
+| `docker-buildx-plugin` | `0.38.1-1~ubuntu.24.04~noble` |
+| `docker-compose-plugin` | `5.6.1-1~ubuntu.24.04~noble` |
 | `htop` | `3.3.0-4build1` |
 | `cloudflared` | `2026.9.3` |
 

@@ -35,11 +35,11 @@ func TestReviewedPackageBaselines(t *testing.T) {
 		"git":                   "1:2.43.0-1ubuntu7.3",
 		"openssh-client":        "1:9.6p1-3ubuntu13.19",
 		"htop":                  "3.3.0-4build1",
-		"docker-ce":             "5:29.8.2-1~ubuntu.24.04~noble",
-		"docker-ce-cli":         "5:29.8.2-1~ubuntu.24.04~noble",
-		"containerd.io":         "2.3.6-1~ubuntu.24.04~noble",
-		"docker-buildx-plugin":  "0.37.2-1~ubuntu.24.04~noble",
-		"docker-compose-plugin": "5.5.1-1~ubuntu.24.04~noble",
+		"docker-ce":             "5:29.9.2-1~ubuntu.24.04~noble",
+		"docker-ce-cli":         "5:29.9.2-1~ubuntu.24.04~noble",
+		"containerd.io":         "2.4.2-3~ubuntu.24.04~noble",
+		"docker-buildx-plugin":  "0.38.1-1~ubuntu.24.04~noble",
+		"docker-compose-plugin": "5.6.1-1~ubuntu.24.04~noble",
 		"cloudflared":           "2026.9.3",
 	}
 	got := make(map[string]string)

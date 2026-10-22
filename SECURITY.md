@@ -196,22 +196,31 @@ without one get this secure default.
 
 ## Supply-chain verification
 
-The 2026-10-03 managed-tool review selects stable releases at least seven days
+The 2026-10-03 managed-tool review, refreshed 2026-10-22, selects stable releases at least seven days
 old, except explicitly approved fixes for disclosed vulnerabilities. Docker
-Engine `29.8.2`, Buildx `0.37.2`, mise `2026.10.17`, and gh
-`2.102.0` use those exceptions; `WEB_SOURCES.md` records the evidence. The age
+Engine `29.9.2`, Buildx `0.38.1`, Compose `5.6.1`, mise `2026.10.17`,
+Node.js `24.22.1`, uv `0.13.5`, and gh `2.102.1` use those exceptions; `WEB_SOURCES.md` records the evidence. The age
 threshold governs release selection. Signed apt candidates can be newer.
 Pi installation and local dependency repair also enforce seven days through
-npm’s `--min-release-age` option. containerd `2.3.6` now meets seven days.
+npm’s `--min-release-age` option. containerd `2.4.2` meets seven days and
+fixes `CVE-2026-95839`, `GHSA-8647-2jxj-p2rc`, and `GHSA-hc94-p972-ch66`.
+Docker Engine, Buildx, and Compose are rebuilt with Go releases that reject
+the eight revoked eMudhra intermediate certificates (`CVE-2026-111943`).
 The mise exception fixes `GHSA-wcqh-j26q-g44x`: untrusted inline
 `.tool-versions` options can disclose `GITHUB_TOKEN` on releases through `2026.9.18`.
 A 2026-10-22 follow-up exception raises the mise floor from `2026.10.0` to
 `2026.10.17`. That release stops mise’s built-in npm backend from trusting
 eight eMudhra intermediate CA certificates whose private keys were compromised.
+The same 2026-10-22 review takes Node.js `24.22.1` for its security release,
+uv `0.13.5` for `GHSA-hq85-5cpj-mr62` (its own trust store kept the compromised
+emSign root), and gh `2.102.1` for its Go `1.27.3` standard-library fixes,
+all younger than seven days. ast-grep `0.51.0` passes the age gate and fixes
+critical `GHSA-xx6h-xcfw-vf5j` and high `GHSA-cmvf-x8f7-rvp6`: a project
+configuration could load native code as a custom language library.
 `MISE_SAFE=1` skips mise’s trust check; never use it to inspect untrusted projects.
 
-Buildx `0.37.2` was absent from Docker’s Noble apt repository for both supported
-architectures at review time. Bootstrap instead permits only the reviewed
+Buildx `0.38.1` is in Docker’s Noble apt repository for both supported
+architectures at review time. The fallback stays for hosts whose apt candidate is older. Bootstrap instead permits only the reviewed
 official binary with a Go-owned architecture-specific SHA-256. It verifies
 the digest before execution and before Docker package scripts. Vulnerable
 `0.37.1` is never installed as the fallback. All other apt preflights remain.
@@ -246,15 +255,15 @@ Managed host tools install through integrity-checked sources, not
 - mise `2026.10.17` is fetched as a release tarball and verified against its
   published SHA-256 checksum before the target user installs it into
   `~/.local/bin`; newer compatible mise releases remain valid.
-- uv `0.12.19` is pinned and installed through mise's explicit
+- uv `0.13.5` is pinned and installed through mise's explicit
   `aqua:astral-sh/uv` backend. That registry entry advertises release SHA-256
   and GitHub-attestation verification; doctor verifies the exact version.
-- Rust `1.98.1` is pinned and installed through mise's `core:rust` backend with
+- Rust `1.99.0` is pinned and installed through mise's `core:rust` backend with
   the default rustup profile. Doctor verifies rustc, Cargo, rustfmt, Clippy, and Rust
   docs. rustup downloads over HTTPS, but its official security documentation
   states download signatures are not yet enforced; this remains a trust
   boundary despite the exact version pin.
-- ast-grep `0.45.3`, sem `0.25.0`, and inspect `0.1.1` are installed from exact
+- ast-grep `0.51.0`, sem `0.27.0`, and inspect `0.1.1` are installed from exact
   mise GitHub backends and versions. Their x86_64/arm64 release assets are pinned by reviewed
   SHA-256 values; unsupported architectures fail before mutation. Doctor checks
   exact ast-grep and sem version output. Existing active `sg` mise configuration
@@ -262,7 +271,7 @@ Managed host tools install through integrity-checked sources, not
   deprecated binary. Inspect has no upstream version flag, so its bare release
   binary is hashed before any inspect execution and reported with
   sanitized evidence. A failed integrity probe forces same-version replacement.
-- Herdr `0.9.1` is installed for the target user through mise's explicit GitHub
+- Herdr `0.9.5` is installed for the target user through mise's explicit GitHub
   backend; bootstrap and doctor verify the resulting Linux binary
   against the architecture-specific SHA-256 digest published with that GitHub
   release. Bootstrap installs the bundled Pi integration under the target user's
@@ -321,7 +330,7 @@ Managed host tools install through integrity-checked sources, not
   Package-list refreshes retry only apt's C-locale package-lists lock error;
   repository, signature, and network errors are never retried or hidden, and
   keep apt's exit status and output.
-- Node.js `24.21.0` LTS and bundled npm `11.19.0` are exact. Node/npm drift
+- Node.js `24.22.1` LTS and bundled npm `11.19.1` are exact. Node/npm drift
   forces same-version Node replacement; `pi` and `all` reinstall Pi afterward
   because replacing Node can remove its global npm package. Pi `0.87.1` is
   installed and locally repaired with lifecycle scripts disabled. Its npm

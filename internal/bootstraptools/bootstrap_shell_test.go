@@ -21,6 +21,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/sagmans/serverpro/internal/shell"
 )
 
 const (
@@ -951,7 +953,7 @@ func TestManagedMiseDoctorProbeMatrix(t *testing.T) {
 		"npm":       "#!/bin/sh\nprintf '" + NPMVersion + "\\n'\n",
 		"uv":        "#!/bin/sh\nprintf 'uv %s (fixture metadata)\\n' \"$FAKE_UV_VERSION\"\n",
 		"rustc":     "#!/bin/sh\nprintf 'rustc %s (fixture)\\n' \"$FAKE_RUST_VERSION\"\n",
-		"cargo":     "#!/bin/sh\nif [ \"${1:-}\" = clippy ]; then printf 'clippy 0.1.98\\n'; else printf 'cargo 1.98.1\\n'; fi\n",
+		"cargo":     "#!/bin/sh\nif [ \"${1:-}\" = clippy ]; then printf 'clippy 0.1.99\\n'; else printf 'cargo 1.99.0\\n'; fi\n",
 		"rustfmt":   "#!/bin/sh\nprintf 'rustfmt 1.8.0\\n'\n",
 		"rustup":    "#!/bin/sh\nprintf 'rust-docs-x86_64-unknown-linux-gnu (installed)\\n'\n",
 		"tmux":      "#!/bin/sh\nprintf 'tmux %s\\n' \"$FAKE_TMUX_VERSION\"\n",
@@ -1286,9 +1288,19 @@ func TestManagedPackageUpdatesCommandReportsSimulationState(t *testing.T) {
 		{name: "below-baseline", status: "0", dpkgStatus: "1", packageState: "installed", wantErr: true, wantOutput: "managed package below baseline"},
 		{name: "simulation-fails", output: "package metadata unavailable", status: "100", dpkgStatus: "0", packageState: "installed", wantErr: true, wantOutput: "package metadata unavailable"},
 	}
+	// The managed Buildx path is absolute, so a developer host with Docker
+	// Desktop would route these apt-floor cases into the fallback-binary gate.
+	// Pointing the probe at an absent path keeps the cases on the apt branch.
+	// Fail loudly if the probe stops using the quoted path, because the replace
+	// would then be a silent no-op and the host plugin would leak back in.
+	command := managedPackageUpdatesCommand()
+	if !strings.Contains(command, shell.Quote(BuildxPluginPath)) {
+		t.Fatalf("managed package update command no longer probes %s", BuildxPluginPath)
+	}
+	command = strings.ReplaceAll(command, shell.Quote(BuildxPluginPath), shell.Quote(filepath.Join(binDir, "absent-docker-buildx")))
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cmd := exec.Command("bash", "-c", managedPackageUpdatesCommand())
+			cmd := exec.Command("bash", "-c", command)
 			cmd.Env = append(os.Environ(),
 				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 				"FAKE_APT_OUTPUT="+tc.output,
