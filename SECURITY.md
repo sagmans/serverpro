@@ -198,11 +198,14 @@ without one get this secure default.
 
 The 2026-10-03 managed-tool review selects stable releases at least seven days
 old, except explicitly approved fixes for disclosed vulnerabilities. Docker
-Engine `29.8.2`, Buildx `0.37.2`, mise `2026.10.17`, Node.js `24.22.1`,
-uv `0.13.5`, and gh `2.102.1` use those exceptions; `WEB_SOURCES.md` records the evidence. The age
+Engine `29.9.2`, Buildx `0.38.1`, Compose `5.6.1`, mise `2026.10.17`,
+Node.js `24.22.1`, uv `0.13.5`, and gh `2.102.1` use those exceptions; `WEB_SOURCES.md` records the evidence. The age
 threshold governs release selection. Signed apt candidates can be newer.
 Pi installation and local dependency repair also enforce seven days through
-npm’s `--min-release-age` option. containerd `2.3.6` now meets seven days.
+npm’s `--min-release-age` option. containerd `2.4.2` meets seven days and
+fixes `CVE-2026-95839`, `GHSA-8647-2jxj-p2rc`, and `GHSA-hc94-p972-ch66`.
+Docker Engine, Buildx, and Compose are rebuilt with Go releases that reject
+the eight revoked eMudhra intermediate certificates (`CVE-2026-111943`).
 The mise exception fixes `GHSA-wcqh-j26q-g44x`: untrusted inline
 `.tool-versions` options can disclose `GITHUB_TOKEN` on releases through `2026.9.18`.
 A 2026-10-22 follow-up exception raises the mise floor from `2026.10.0` to
@@ -216,8 +219,8 @@ critical `GHSA-xx6h-xcfw-vf5j` and high `GHSA-cmvf-x8f7-rvp6`: a project
 configuration could load native code as a custom language library.
 `MISE_SAFE=1` skips mise’s trust check; never use it to inspect untrusted projects.
 
-Buildx `0.37.2` was absent from Docker’s Noble apt repository for both supported
-architectures at review time. Bootstrap instead permits only the reviewed
+Buildx `0.38.1` is in Docker’s Noble apt repository for both supported
+architectures at review time. The fallback stays for hosts whose apt candidate is older. Bootstrap instead permits only the reviewed
 official binary with a Go-owned architecture-specific SHA-256. It verifies
 the digest before execution and before Docker package scripts. Vulnerable
 `0.37.1` is never installed as the fallback. All other apt preflights remain.

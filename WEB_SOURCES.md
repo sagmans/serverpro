@@ -41,10 +41,10 @@ days and fix no disclosed vulnerability. ripgrep, fd, and inspect have no newer 
 | Updated tool | Selected release | Published (UTC) | Selection |
 | --- | --- | --- | --- |
 | Tailscale | 1.102.4 | 2026-09-10 | Normal age gate |
-| Docker Engine / CLI | 29.8.2 | 2026-09-30 | Approved security exception |
-| containerd | 2.3.6 | 2026-09-24 23:13:08 | Normal age gate; preserve Docker's 2.3 package line |
-| Buildx | 0.37.2 | 2026-09-30 | Approved security exception; reviewed official binary fallback |
-| Compose | 5.5.1 | 2026-09-03 | Normal age gate |
+| Docker Engine / CLI | 29.9.2 | 2026-10-20 20:51:17 | Approved security exception; Go `CVE-2026-111943` rebuild |
+| containerd | 2.4.2 | 2026-10-13 22:35:06 | Normal age gate; Docker's Noble package line is now 2.4 |
+| Buildx | 0.38.1 | 2026-10-20 22:09:11 | Approved security exception; Go `CVE-2026-111943` rebuild; reviewed official binary fallback |
+| Compose | 5.6.1 | 2026-10-21 07:54:18 | Approved security exception; Go `CVE-2026-111943` rebuild |
 | mise | 2026.10.17 | 2026-10-21 01:29:26 | Approved security exception; distrusts compromised eMudhra intermediate CAs and keeps the inline-options token exfiltration fix |
 | Node.js | 24.22.1 LTS | 2026-10-20 | Approved security exception; Node 24 security release |
 | Pi | 0.87.1 | 2026-09-22 | Normal age gate |
@@ -63,10 +63,12 @@ Primary selection and security evidence:
 - https://api.launchpad.net/1.0/ubuntu/+archive/primary
 - https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-amd64/Packages.gz
 - https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-arm64/Packages.gz
-- https://github.com/moby/moby/releases/tag/docker-v29.8.2
-- https://github.com/containerd/containerd/releases/tag/v2.3.6
+- https://github.com/moby/moby/releases/tag/docker-v29.9.2
+- https://github.com/containerd/containerd/releases/tag/v2.4.2
+- https://github.com/docker/compose/releases/tag/v5.6.1
+- https://go.dev/issue/82345
 - https://github.com/containerd/containerd/security/advisories/GHSA-pg57-6jwg-q645
-- https://github.com/docker/buildx/releases/tag/v0.37.2
+- https://github.com/docker/buildx/releases/tag/v0.38.1
 - https://github.com/docker/buildx/security/advisories/GHSA-gwr2-q96m-6682
 - https://github.com/docker/buildx/security/advisories/GHSA-p54p-jq4x-rc28
 - https://github.com/jdx/mise/security/advisories/GHSA-333c-h2jr-xv83
@@ -83,15 +85,15 @@ Primary selection and security evidence:
 - https://github.com/jdx/mise/releases/download/v2026.10.17/SHASUMS256.txt
 - https://github.com/Ataraxy-Labs/sem/releases/download/v0.27.0/checksums.txt
 
-The Docker repository contains Engine 29.8.2 and containerd 2.3.6 on both
-architectures, but only Buildx 0.37.1. Keep the patched floor; use the reviewed
-official binary when apt cannot satisfy it. Both Linux binaries were independently
+On 2026-10-22 the Docker repository contains Engine 29.9.2, containerd 2.4.2,
+Buildx 0.38.1, and Compose 5.6.1 on both architectures. Keep the reviewed
+official binary for hosts whose apt candidate cannot satisfy the Buildx floor. Both Linux binaries were independently
 downloaded and matched `checksums.txt` and GitHub release asset digests.
 
-- amd64 SHA-256: `982ca20490b45ed1ec8d99795974d3d874a358f75938c9c237305010e6b7e548`
-- arm64 SHA-256: `efa38cb7aa7db2dbb9ad049b00b0a9737f66f033626177b5a4e845184ad7ab29`
-- https://github.com/docker/buildx/releases/tag/v0.37.2
-- https://github.com/docker/buildx/releases/download/v0.37.2/checksums.txt
+- amd64 SHA-256: `e25d5cd675092bb5d1d03632fdc46cdf3fede7b514dc5f023a105e00d3ce5ad4`
+- arm64 SHA-256: `3b83b3731916ba433feccaaa689fe5bcdc81c641d92c8e6c2ea865dfa141c97a`
+- https://github.com/docker/buildx/releases/tag/v0.38.1
+- https://github.com/docker/buildx/releases/download/v0.38.1/checksums.txt
 - https://github.com/docker/buildx#manual-download
 - https://github.com/docker/cli/blob/master/cli-plugins/manager/manager.go
 
@@ -565,12 +567,12 @@ https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/arm64/
 ```
 
 Use: managed Docker bootstrap. Docker's apt signing key is pinned to fingerprint
-`9DC858229FC7DD38854AE2D88D81803C0EBFCD88`. Reviewed 2026-10-01 floors for
+`9DC858229FC7DD38854AE2D88D81803C0EBFCD88`. Reviewed 2026-10-22 floors for
 Ubuntu 24.04 amd64/arm64: Docker Engine and CLI
-`5:29.8.2-1~ubuntu.24.04~noble`, containerd.io
-`2.3.6-1~ubuntu.24.04~noble`, Buildx
-`0.37.2-1~ubuntu.24.04~noble`, and Compose
-`5.5.1-1~ubuntu.24.04~noble`.
+`5:29.9.2-1~ubuntu.24.04~noble`, containerd.io
+`2.4.2-3~ubuntu.24.04~noble`, Buildx
+`0.38.1-1~ubuntu.24.04~noble`, and Compose
+`5.6.1-1~ubuntu.24.04~noble`.
 
 ### Docker Linux postinstall
 
