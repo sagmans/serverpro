@@ -1291,7 +1291,13 @@ func TestManagedPackageUpdatesCommandReportsSimulationState(t *testing.T) {
 	// The managed Buildx path is absolute, so a developer host with Docker
 	// Desktop would route these apt-floor cases into the fallback-binary gate.
 	// Pointing the probe at an absent path keeps the cases on the apt branch.
-	command := strings.ReplaceAll(managedPackageUpdatesCommand(), shell.Quote(BuildxPluginPath), shell.Quote(filepath.Join(binDir, "absent-docker-buildx")))
+	// Fail loudly if the probe stops using the quoted path, because the replace
+	// would then be a silent no-op and the host plugin would leak back in.
+	command := managedPackageUpdatesCommand()
+	if !strings.Contains(command, shell.Quote(BuildxPluginPath)) {
+		t.Fatalf("managed package update command no longer probes %s", BuildxPluginPath)
+	}
+	command = strings.ReplaceAll(command, shell.Quote(BuildxPluginPath), shell.Quote(filepath.Join(binDir, "absent-docker-buildx")))
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := exec.Command("bash", "-c", command)
