@@ -123,7 +123,7 @@ the actual OCI identity chain; the final build and all eleven Docker commands
 passed. Owned images and temporary files were removed; shared build cache was
 not pruned. No runtime upgrade, image execution, networked build step, external
 frontend, image pull, or publication was needed. These existing local runtime
-versions do not establish the managed Linux Buildx `0.37.2` security baseline.
+versions do not establish the managed Linux Buildx security baseline.
 
 The macOS smoke check does not prove Linux Buildx-to-daemon integration or
 native amd64 and arm64 builder execution. Those checks are outside this

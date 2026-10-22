@@ -1,12 +1,12 @@
 # Web Sources for serverpro
 
-Date: 2026-10-03
+Date: 2026-10-22
 Scope: provider-agnostic serverpro references
 
 Prefer official provider/API docs. If guides conflict with API references, trust
 API references.
 
-## Managed-tool review: 2026-10-03
+## Managed-tool review: 2026-10-03, refreshed 2026-10-22
 
 The normal cutoff is 2026-09-26 09:13:29 UTC: stable releases must be at least
 seven days old. Preserve Ubuntu 24.04 packages and Node.js 24 LTS. Keep npm
@@ -67,6 +67,9 @@ Primary selection and security evidence:
 - https://github.com/containerd/containerd/releases/tag/v2.4.2
 - https://github.com/docker/compose/releases/tag/v5.6.1
 - https://go.dev/issue/82345
+- https://github.com/containerd/containerd/security/advisories/GHSA-vwhp-8p66-mq4f
+- https://github.com/containerd/containerd/security/advisories/GHSA-8647-2jxj-p2rc
+- https://github.com/containerd/containerd/security/advisories/GHSA-hc94-p972-ch66
 - https://github.com/containerd/containerd/security/advisories/GHSA-pg57-6jwg-q645
 - https://github.com/docker/buildx/releases/tag/v0.38.1
 - https://github.com/docker/buildx/security/advisories/GHSA-gwr2-q96m-6682

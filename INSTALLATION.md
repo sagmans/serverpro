@@ -26,7 +26,7 @@ counterpart on DigitalOcean. Confirm current catalog availability before create.
 
 ### Managed tool baseline
 
-Reviewed 2026-10-03. Stable releases normally require seven days of age.
+Reviewed 2026-10-22. Stable releases normally require seven days of age.
 Docker Engine, Buildx, Compose, mise, Node.js, uv, and gh use explicitly
 approved security exceptions; `WEB_SOURCES.md` records the release dates and advisories. Node.js
 stays on the supported 24 LTS line with its bundled npm.

@@ -196,7 +196,7 @@ without one get this secure default.
 
 ## Supply-chain verification
 
-The 2026-10-03 managed-tool review selects stable releases at least seven days
+The 2026-10-03 managed-tool review, refreshed 2026-10-22, selects stable releases at least seven days
 old, except explicitly approved fixes for disclosed vulnerabilities. Docker
 Engine `29.9.2`, Buildx `0.38.1`, Compose `5.6.1`, mise `2026.10.17`,
 Node.js `24.22.1`, uv `0.13.5`, and gh `2.102.1` use those exceptions; `WEB_SOURCES.md` records the evidence. The age
