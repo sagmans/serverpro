@@ -28,10 +28,10 @@ func TestImageUsersRemovalScriptRefusesProtectedAccounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The order is the safety argument: lock, archive, sudoers with visudo,
-	// and only then delete.
+	// The order is the safety argument: lock before the process check,
+	// archive, sudoers with visudo, and only then delete.
 	last := -1
-	for _, step := range []string{"pgrep -u", "usermod -L", "tar -C", "visudo -c", "userdel -r"} {
+	for _, step := range []string{"usermod -L", "pgrep -u", "tar -C", "visudo -c", "userdel -r"} {
 		at := strings.Index(script, step)
 		if at <= last {
 			t.Fatalf("step %q out of order in:\n%s", step, script)

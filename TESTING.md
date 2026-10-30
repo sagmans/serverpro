@@ -459,6 +459,26 @@ file, and a sudoers.d file with rules for both.
   change. With an invalid sudoers.d file present, `visudo -c` failed and the
   removal moved the image account's file back and stopped.
 
+A second run on 2026-10-30, in the same kind of container with `sudo` and
+`procps`, compared the earlier script with the current one. The image
+account had its own and a wrapped rule in a sudoers.d file that also had a
+`deploy` rule.
+
+- Earlier script: it kept the shared file whole and removed the account. A
+  new account with the same name then had all the old sudo rules
+  (`sudo -l -U`). It did the same with a `User_Alias` that named the
+  account.
+- Current script: it removed only the image account's rules (the wrapped
+  rule as a whole), archived the original, passed `visudo -c`, and removed
+  the account; a new account with the same name had no sudo. With the
+  `User_Alias`, it stopped before `userdel` and left the file unchanged.
+  With only a comment naming the account, it left the file unchanged and
+  removed the account. With an invalid second drop-in, the live
+  `visudo -c` failed, and it put the original file back unchanged and
+  stopped. With a process running as the account, it stopped after it
+  locked and expired the account, and the undo command in its message gave
+  back the password, the expiry, and the shell.
+
 Not covered: a real Vultr host (doctor `--fix` was not run against
 production).
 

@@ -34,11 +34,17 @@ var imageUserNamePattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 // script after the admin user works through sudo, and doctor --fix runs it
 // again for hosts created before it existed.
 //
-// The order keeps every step reversible until the last: lock the account so
-// no new session starts, archive its home and crontab, move a sudoers.d file
-// away only when every rule in it is for that account (and put it back when
-// visudo -c then fails), and only then userdel. An account with running
-// processes stops the removal, because deleting it would orphan them. The
+// The order keeps every step reversible until the last: lock and expire the
+// account first, so no session can start between the process check and the
+// removal, archive its home and crontab, move a sudoers.d file away when
+// every rule in it is for that account, or else take only that account's
+// rules out of the file, and only then userdel. Each sudoers change keeps the
+// original in the archive and puts it back when visudo -c then fails. A rule
+// left behind would grant sudo to any later account created with the same
+// name, so a shared file that still names the account elsewhere (an alias or
+// a rule for several accounts) stops the removal before userdel. An account
+// with running processes also stops it, because deleting the account would
+// orphan them; it stays locked and the message says how to undo that. The
 // script never touches root, the admin user, or a uid 0 account, and it is a
 // no-op for an account that is already gone.
 func ImageUsersRemovalScript(admin string, users []string) (string, error) {
@@ -60,22 +66,45 @@ stop() {
   printf '` + imageUserRemovalFailedPrefix + `%s\n' "$1" >&2
   exit 1
 }
-# rules_for_others prints the sudoers rules in a file that are not for $1.
-# #include and #includedir are directives, not comments, so they count.
-rules_for_others() {
-  sed -e '/^[[:space:]]*#include/b' -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$2" |
-    awk -v user="$1" '{ split($0, field, /[[:space:]]+/); token = (field[1] == "" ? field[2] : field[1]); if (token != user) print }'
+# without_user_rules prints sudoers file $2 without the rules for $1. It joins
+# continued lines first, so a wrapped rule goes as a whole and leaves no
+# orphaned continuation behind.
+without_user_rules() {
+  awk -v user="$1" '
+    { block = block $0 "\n"; logical = logical $0 }
+    /\\$/ { sub(/\\$/, "", logical); next }
+    {
+      split(logical, field, /[[:space:]]+/)
+      token = (field[1] == "" ? field[2] : field[1])
+      if (token != user) printf "%s", block
+      block = ""; logical = ""
+    }
+    END { printf "%s", block }
+  ' "$2"
 }
+# without_comments drops comments and blank lines from stdin. #include and
+# #includedir are directives, not comments, so they stay.
+without_comments() {
+  sed -e '/^[[:space:]]*#include/b' -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d'
+}
+# names_user succeeds when a rule or directive in file $2 names account $1.
+names_user() {
+  without_comments <"$2" | grep -Eq "(^|[^a-z0-9_-])$1([^a-z0-9_-]|\$)"
+}
+# A candidate left by an early exit would keep a copy of sudoers rules.
+candidate=
+trap '[ -z "$candidate" ] || rm -f "$candidate"' EXIT
 remove_image_user() {
   user=$1
   dest="$archive_root/$user-$stamp"
   if entry=$(getent passwd "$user"); then
     uid=$(printf '%s\n' "$entry" | cut -d: -f3)
     [ "$uid" != 0 ] || stop "$user has uid 0"
-    if pgrep -u "$user" >/dev/null 2>&1; then
-      stop "$user has running processes; end them (loginctl terminate-user $user) and rerun"
-    fi
+    login_shell=$(printf '%s\n' "$entry" | cut -d: -f7)
     usermod -L -e 1 -s /usr/sbin/nologin "$user"
+    if pgrep -u "$user" >/dev/null 2>&1; then
+      stop "$user has running processes and is now locked; end them (loginctl terminate-user $user) and rerun, or undo the lock (usermod -U -e '' -s $login_shell $user)"
+    fi
     install -d -m 0700 "$archive_root" "$dest"
     home=$(printf '%s\n' "$entry" | cut -d: -f6)
     if [ -d "$home" ] && [ "$home" != / ]; then
@@ -88,17 +117,41 @@ remove_image_user() {
   for file in /etc/sudoers.d/*; do
     [ -f "$file" ] || continue
     grep -Eq "(^|[^a-z0-9_-])$user([^a-z0-9_-]|\$)" "$file" || continue
-    if [ -n "$(rules_for_others "$user" "$file")" ]; then
-      printf 'kept %s: it has rules for other accounts\n' "$file"
+    name=$(basename "$file")
+    if [ -z "$(without_user_rules "$user" "$file" | without_comments)" ]; then
+      install -d -m 0700 "$archive_root" "$dest"
+      mv "$file" "$dest/"
+      if ! visudo -c >/dev/null 2>&1; then
+        mv "$dest/$name" "$file" || stop "visudo -c failed without $file, and moving it back from $dest failed"
+        stop "visudo -c failed without $file; restored it"
+      fi
+      printf 'moved %s to %s\n' "$file" "$dest"
       continue
     fi
-    install -d -m 0700 "$archive_root" "$dest"
-    mv "$file" "$dest/"
-    if ! visudo -c >/dev/null 2>&1; then
-      mv "$dest/$(basename "$file")" "$file"
-      stop "visudo -c failed without $file; restored it"
+    # The candidate's name has a dot, so sudo skips it while it is checked.
+    candidate=$(mktemp "$file.serverpro.XXXXXX") || stop "cannot create a candidate next to $file"
+    without_user_rules "$user" "$file" >"$candidate"
+    if names_user "$user" "$candidate"; then
+      stop "$file still names $user outside its own rules (an alias or a rule for several accounts); remove $user there with visudo -f $file and rerun"
     fi
-    printf 'moved %s to %s\n' "$file" "$dest"
+    # Only a comment named the account, so the file grants it nothing.
+    if cmp -s "$candidate" "$file"; then
+      rm -f "$candidate"
+      candidate=
+      continue
+    fi
+    visudo -cf "$candidate" >/dev/null 2>&1 || stop "$file without the rules for $user fails visudo -c; remove them with visudo -f $file and rerun"
+    install -d -m 0700 "$archive_root" "$dest"
+    cp -p "$file" "$dest/$name"
+    chown root:root "$candidate"
+    chmod 0440 "$candidate"
+    mv "$candidate" "$file"
+    candidate=
+    if ! visudo -c >/dev/null 2>&1; then
+      cp -p "$dest/$name" "$file" || stop "visudo -c failed after the rules for $user left $file, and restoring it from $dest failed"
+      stop "visudo -c failed after the rules for $user left $file; restored it"
+    fi
+    printf 'removed the rules for %s from %s; the original is in %s\n' "$user" "$file" "$dest"
   done
   if getent passwd "$user" >/dev/null; then
     # userdel exits non-zero for a missing mail spool after it removed the

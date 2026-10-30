@@ -406,8 +406,11 @@ flowchart LR
    (`remote_image_users` phase), because the admin user now works through
    sudo: `lifecycle.ImageUsersRemovalScript` locks each account, archives its
    home, crontab, and single-account sudoers.d files under
-   `/root/serverpro-removed-accounts`, checks `visudo -c`, and then runs
-   `userdel -r`. It stops on running processes and never touches root, the
+   `/root/serverpro-removed-accounts`, removes only that account's rules from
+   a shared sudoers.d file (archiving the original), checks `visudo -c`, and
+   then runs `userdel -r`. It stops on running processes after the lock, and
+   before userdel when a shared file still names the account outside its own
+   rules, and it never touches root, the
    admin user, or uid 0. Then converge the managed host tools through the
    embedded bootstrap script and apply the egress lockdown. With
    `reboot.enabled: true`, install the gated reboot (`remote_reboot_gate`

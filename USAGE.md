@@ -791,23 +791,31 @@ removes these accounts after the admin password step proves that the admin
 user works through sudo. `serverpro server doctor NAME --fix` removes them
 from older hosts. For each account, the removal:
 
-1. Stops if the account has running processes. End them first, for example
-   with `sudo loginctl terminate-user linuxuser`.
-2. Locks the account and expires it, so no new session starts.
+1. Locks the account and expires it, so no new session starts.
+2. Stops if the account has running processes. The account stays locked, and
+   the message names the command that undoes the lock. End the processes, for
+   example with `sudo loginctl terminate-user linuxuser`, and rerun.
 3. Archives its home and crontab under
    `/root/serverpro-removed-accounts/<account>-<UTC time>/`.
 4. Moves each `/etc/sudoers.d` file whose rules are all for that account into
-   the same archive, then runs `visudo -c`. If that fails, it moves the file
-   back and stops. A file with rules for other accounts stays.
-5. Runs `userdel -r`.
+   the same archive. From a file that also has rules for other accounts, it
+   removes only that account's rules and keeps the original in the archive.
+   It stops before any change when such a file still names the account in
+   another place, for example a `User_Alias` or a rule for several accounts:
+   edit that file with `visudo -f` and rerun. After each change it runs
+   `visudo -c`. If that fails, it puts the original back and stops.
+5. Runs `userdel -r`. No sudoers.d rule for the name stays, so an account
+   created later with the same name gets no sudo from it.
 
 Any other account that `privileged accounts` lists is report-only, also
 with `--fix`, and doctor never suggests removing it. A CI deploy user that
 logs in through Tailscale SSH is the usual case: its sudoers.d rule should
 list the commands it needs, and then the finding is only a warning that names
-them. Check that the list is still what CI needs. A command such as
-`/usr/bin/docker` or a shell is still root in practice. If the rule grants
-`ALL`, limit it to those commands and run `visudo -c`.
+them. Check that the list is still what CI needs. A root-equivalent command
+such as `/usr/bin/docker`, `systemctl`, or a shell still fails: give the
+account a root-owned wrapper script that it cannot write and that runs one
+fixed action. If the rule grants `ALL`, limit it to those commands and run
+`visudo -c`.
 
 ### Reboots and kernel cleanup
 
