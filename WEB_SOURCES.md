@@ -614,6 +614,22 @@ https://docs.vultr.com/products/compute/instances/cloud-compute/features/cloud-i
 
 Use: cloud-init/user-data behavior for Vultr instances.
 
+### Provider metadata user-data
+
+```text
+https://docs.digitalocean.com/reference/api/metadata/droplet-properties/
+https://www.vultr.com/docs/manage-instance-user-data-with-the-vultr-metadata-api
+https://github.com/coreos/ignition/commit/ef142f33
+```
+
+Use: the metadata user-data path each compute adapter declares for the doctor
+`metadata user-data` check: DigitalOcean `/metadata/v1/user-data`, Vultr
+`/latest/user-data`, Hetzner `/hetzner/v1/userdata`, all on
+`http://169.254.169.254`. Vultr serves the previous user-data until the
+instance reboots after an update. Reviewed 2026-10-30; the DigitalOcean and
+Vultr paths were also read live on managed hosts. No Hetzner host was
+available, so its path rests on the Ignition provider source.
+
 ### Vultr firewall groups
 
 ```text

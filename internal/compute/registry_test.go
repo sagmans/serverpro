@@ -69,3 +69,21 @@ func TestFailureDiagnosticPreservesCauseWithoutSerializingIt(t *testing.T) {
 		t.Fatalf("diagnostics=%+v err=%v payload=%s", diagnostics, diagnostics.Err(), payload)
 	}
 }
+
+type fakeMetadataProvider struct {
+	fakeProvider
+	path string
+}
+
+func (p fakeMetadataProvider) MetadataUserDataPath() string { return p.path }
+
+// TestMetadataUserDataPathIsOptional keeps the capability opt-in: a provider
+// without it yields "", which doctor reports as unchecked rather than clean.
+func TestMetadataUserDataPathIsOptional(t *testing.T) {
+	if got := MetadataUserDataPath(fakeProvider{name: "plain"}); got != "" {
+		t.Fatalf("provider without metadata path = %q", got)
+	}
+	if got := MetadataUserDataPath(fakeMetadataProvider{fakeProvider: fakeProvider{name: "cloud"}, path: "/user-data"}); got != "/user-data" {
+		t.Fatalf("metadata path = %q", got)
+	}
+}

@@ -22,6 +22,24 @@ type Provider interface {
 	Delete(context.Context, DeleteServerRequest) Diagnostics
 }
 
+// InstanceMetadataProvider is implemented by providers whose servers can read
+// their own launch user-data, without credentials, from the link-local
+// metadata service. Doctor probes that path because any local process can,
+// and launch user-data may still carry secrets set at provisioning.
+type InstanceMetadataProvider interface {
+	MetadataUserDataPath() string
+}
+
+// MetadataUserDataPath returns the provider's metadata user-data path, or ""
+// when the provider declares none, so callers need no type assertion.
+func MetadataUserDataPath(provider Provider) string {
+	source, ok := provider.(InstanceMetadataProvider)
+	if !ok {
+		return ""
+	}
+	return source.MetadataUserDataPath()
+}
+
 type Account struct {
 	Name     string
 	Provider ProviderName

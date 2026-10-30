@@ -61,6 +61,9 @@ access paths for app-owned deployment flows.
 - Compute facade: `internal/compute`
   - Generic provider interface, registry, catalog, server, typed managed-resource
     references, and in-memory token carrier types.
+  - Optional `InstanceMetadataProvider`: an adapter declares the metadata
+    user-data path its provider serves. The CLI passes it to doctor, because
+    doctor and other generic packages must not name providers.
 - Import recovery: `internal/importsync`
   - Discover labeled provider inventory and rebuild local config/state/registry.
 - Credentials: `internal/credentials`

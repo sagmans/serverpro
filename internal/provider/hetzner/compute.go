@@ -12,6 +12,9 @@ import (
 	"github.com/sagmans/serverpro/internal/provider/providerutil"
 )
 
+// metadataUserDataPath is the path cloud-init's Hetzner datasource reads.
+const metadataUserDataPath = "/hetzner/v1/userdata"
+
 type ClientFactory func(token string) Client
 
 type ComputeProvider struct {
@@ -26,6 +29,10 @@ func NewComputeProvider(factory ClientFactory) ComputeProvider {
 }
 
 func (p ComputeProvider) Name() compute.ProviderName { return compute.ProviderName("hetzner") }
+
+// MetadataUserDataPath lets doctor check what this provider's metadata
+// service still serves to every local process on the server.
+func (p ComputeProvider) MetadataUserDataPath() string { return metadataUserDataPath }
 
 func (p ComputeProvider) Capabilities(context.Context) compute.Capabilities {
 	return compute.Capabilities{CreateServer: true, DeleteServer: true, PowerServer: true, Catalog: true, ListServers: true}

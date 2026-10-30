@@ -23,6 +23,9 @@ func TestComputeProviderNameAndCapabilities(t *testing.T) {
 	if !caps.CreateServer || !caps.DeleteServer || !caps.PowerServer || !caps.Catalog {
 		t.Fatalf("capabilities = %+v", caps)
 	}
+	if got := compute.MetadataUserDataPath(p); got != metadataUserDataPath || got == "" {
+		t.Fatalf("metadata user-data path = %q", got)
+	}
 }
 
 func TestComputeProviderDoctorRedactsAndPreservesProviderError(t *testing.T) {

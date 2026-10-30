@@ -8,6 +8,10 @@ import (
 	"github.com/sagmans/serverpro/internal/ownership"
 )
 
+// metadataUserDataPath is Vultr's documented user-data path; it keeps serving the launch
+// user-data until the instance reboots after an update.
+const metadataUserDataPath = "/latest/user-data"
+
 type ClientFactory func(token string) Client
 
 type ComputeProvider struct {
@@ -22,6 +26,10 @@ func NewComputeProvider(factory ClientFactory) ComputeProvider {
 }
 
 func (p ComputeProvider) Name() compute.ProviderName { return compute.ProviderName("vultr") }
+
+// MetadataUserDataPath lets doctor check what this provider's metadata
+// service still serves to every local process on the server.
+func (p ComputeProvider) MetadataUserDataPath() string { return metadataUserDataPath }
 
 func (p ComputeProvider) Capabilities(context.Context) compute.Capabilities {
 	return compute.Capabilities{CreateServer: true, DeleteServer: true, PowerServer: true, Catalog: true, ListServers: true}

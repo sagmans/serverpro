@@ -3,6 +3,8 @@ package hetzner
 import (
 	"context"
 	"testing"
+
+	"github.com/sagmans/serverpro/internal/compute"
 )
 
 // WHY: the CLI advertises provider capabilities in `provider status`. Pin the
@@ -17,5 +19,8 @@ func TestComputeProviderNameAndCapabilities(t *testing.T) {
 	caps := p.Capabilities(context.Background())
 	if !caps.CreateServer || !caps.DeleteServer || !caps.PowerServer || !caps.Catalog || !caps.ListServers {
 		t.Fatalf("capabilities = %+v", caps)
+	}
+	if got := compute.MetadataUserDataPath(p); got != metadataUserDataPath || got == "" {
+		t.Fatalf("metadata user-data path = %q", got)
 	}
 }
