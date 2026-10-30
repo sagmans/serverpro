@@ -54,6 +54,14 @@ const (
 	// tunnel.CloudflaredUnit for another tunnel. systemctl matches a pattern
 	// only against loaded units, so the managed unit is also named outright.
 	cloudflaredUnitPattern = "cloudflared*.service"
+	// cloudflaredLocalConfigDir is the last directory cloudflared searches for
+	// a config when no --config names one; tunnel.CloudflaredConfigDir comes
+	// before it.
+	cloudflaredLocalConfigDir = "/usr/local/etc/cloudflared"
+	// cloudflaredProcessName is the process name of every cloudflared, in a
+	// unit, a container, or a shell, since all of them share the host's
+	// process table.
+	cloudflaredProcessName = "cloudflared"
 	// tunnelSSHScheme and tunnelURLSeparator form the ssh:// origin the host
 	// scan looks for in a locally managed cloudflared's settings, which it
 	// can only grep, not parse.
@@ -101,6 +109,15 @@ const (
 // tunnelWebPorts are the http and https origin schemes with the port each
 // one uses when the URL names none.
 var tunnelWebPorts = map[string]string{"http": "80", "https": "443"}
+
+// cloudflaredHomeConfigDirs and cloudflaredConfigFiles are where cloudflared
+// looks for a config when no --config names one (upstream
+// config.DefaultConfigSearchDirectories and DefaultConfigFiles): these
+// directories under the running user's home, then the system ones.
+var (
+	cloudflaredHomeConfigDirs = []string{".cloudflared", ".cloudflare-warp", "cloudflare-warp"}
+	cloudflaredConfigFiles    = []string{"config.yml", "config.yaml"}
+)
 
 var (
 	// ErrTunnelIngressUnread means the tunnel's remote ingress could not be
@@ -213,9 +230,14 @@ func tunnelRouteToSSH(rule ingress.TunnelIngressRule) (string, bool) {
 // one holds: tailscaled down, Tailscale SSH off, an established OpenSSH
 // session, an OpenSSH login in the recent window (only the method and the
 // user are printed, never a source address), or a cloudflared ingress that
-// routes to SSH: an ingress file under /etc/cloudflared, or a --url or
-// TUNNEL_URL origin in a cloudflared unit or its defaults file. Ingress kept
-// at Cloudflare is CheckTunnelSSHIngress's part, run before this script.
+// routes to SSH or cannot be read. The scan covers a --url or TUNNEL_URL
+// origin in a cloudflared unit, its environment files, or the defaults file;
+// each config a unit names with --config; and every directory cloudflared
+// searches for a config without one, under every home and on the system. A
+// cloudflared process outside the cloudflared units (a container, or one run
+// by hand) also stops the script, because its settings are not on the host
+// to read. Ingress kept at Cloudflare is CheckTunnelSSHIngress's part, run
+// before this script.
 // An admin user without a password and an active provider console
 // agent (consoleAgents, declared by the compute adapter) are only warnings:
 // they change how to recover the host, not whether the change is safe.
@@ -240,8 +262,14 @@ units="` + hostplatform.OpenSSHSocketUnit + ` ` + hostplatform.OpenSSHServiceUni
 state_file=` + shell.Quote(OpenSSHStatePath) + `
 state_dir=` + shell.Quote(path.Dir(OpenSSHStatePath)) + `
 condition=` + shell.Quote(OpenSSHConditionPath) + `
-cloudflared_dir=` + shell.Quote(tunnel.CloudflaredConfigDir) + `
 cloudflared_defaults=` + shell.Quote(cloudflaredDefaultsPath) + `
+# The lists hold one entry per line, so the loops split them on newlines
+# alone and a home path with a space stays one entry.
+system_config_dirs=` + shell.Quote(tunnel.CloudflaredConfigDir+"\n"+cloudflaredLocalConfigDir) + `
+home_config_dirs=` + shell.Quote(strings.Join(cloudflaredHomeConfigDirs, "\n")) + `
+config_files=` + shell.Quote(strings.Join(cloudflaredConfigFiles, "\n")) + `
+newline='
+'
 stop() {
   printf '` + openSSHStoppedPrefix + `%s\n' "$1" >&2
   exit 1
@@ -266,31 +294,109 @@ logins=$({
   printf '%s\n' "$authlog" | awk -v cutoff="$cutoff" '/ sshd(-session)?\[[0-9]+\]: Accepted / { if ($1 ~ /^[0-9][0-9][0-9][0-9]-/ && substr($1, 1, 19) < cutoff) next; print }'
 } | awk '{ for (i = 1; i < NF; i++) if ($i == "Accepted" && $(i + 2) == "for") { print $(i + 1) " for " $(i + 3); break } }' | sort -u | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')
 [ -z "$logins" ] || stop "OpenSSH logins in the last ` + strconv.Itoa(openSSHLoginWindowDays) + ` days: $logins"
-if [ -d "$cloudflared_dir" ]; then
+# scan_config stops when the cloudflared config at $1, a file or a
+# directory, routes to SSH or cannot be read. A path that does not exist is
+# skipped: cloudflared skips it too.
+scan_config() {
+  [ -e "$1" ] || return 0
   rc=0
-  grep -rEqs 'ssh://|:` + port + `([^0-9]|$)' "$cloudflared_dir" || rc=$?
+  grep -rEqs 'ssh://|:` + port + `([^0-9]|$)' "$1" || rc=$?
   case $rc in
-    0) stop "a cloudflared ingress under $cloudflared_dir routes to SSH" ;;
+    0) stop "a cloudflared ingress in $1 routes to SSH" ;;
     1) ;;
-    *) stop "$cloudflared_dir could not be read" ;;
+    *) stop "$1 could not be read" ;;
   esac
-fi
-# A legacy or quick tunnel takes its origin from --url or TUNNEL_URL. These
-# settings also carry the tunnel token, so grep only answers yes or no and
-# nothing is printed. The port match is tied to the flag, because the unit's
-# ExecStart also shows start times such as 12:22:05.
+}
+# A legacy or quick tunnel takes its origin from --url or TUNNEL_URL, in the
+# unit or in an environment file it reads. These settings also carry the
+# tunnel token, so grep only answers yes or no and nothing but paths is
+# printed. The port match is tied to the flag, because the unit's ExecStart
+# also shows start times such as 12:22:05.
 unit_settings=$(systemctl show -p ExecStart -p Environment --value ` + shell.Quote(tunnel.CloudflaredUnit) + ` ` + shell.Quote(cloudflaredUnitPattern) + `) || stop "systemctl could not read the cloudflared units"
-defaults=
-if [ -e "$cloudflared_defaults" ]; then
-  defaults=$(cat "$cloudflared_defaults") || stop "$cloudflared_defaults could not be read"
-fi
+env_files=$(systemctl show -p EnvironmentFiles --value ` + shell.Quote(tunnel.CloudflaredUnit) + ` ` + shell.Quote(cloudflaredUnitPattern) + `) || stop "systemctl could not read the cloudflared environment files"
+env_files=$(printf '%s\n%s\n' "$cloudflared_defaults" "$env_files" | sed 's/ (ignore_errors=[a-z]*)$//') || stop "the cloudflared environment files could not be listed"
+settings=$unit_settings
+set -f
+old_ifs=$IFS
+IFS=$newline
+for env_file in $env_files; do
+  [ -e "$env_file" ] || continue
+  content=$(cat "$env_file") || stop "$env_file could not be read"
+  settings=$settings$newline$content
+done
+IFS=$old_ifs
+set +f
 rc=0
-printf '%s\n%s\n' "$unit_settings" "$defaults" | grep -Eq '` + tunnelSSHScheme + tunnelURLSeparator + `|(--url[= ]+|TUNNEL_URL=)["'"'"']?[^ ;"'"'"']*:` + port + `([^0-9]|$)' || rc=$?
+printf '%s\n' "$settings" | grep -Eq '` + tunnelSSHScheme + tunnelURLSeparator + `|(--url[= ]+|TUNNEL_URL=)["'"'"']?[^ ;"'"'"']*:` + port + `([^0-9]|$)' || rc=$?
 case $rc in
-  0) stop "a cloudflared unit or $cloudflared_defaults routes to SSH" ;;
+  0) stop "a cloudflared unit or one of its environment files routes to SSH" ;;
   1) ;;
   *) stop "the cloudflared unit settings could not be searched" ;;
 esac
+# A --config path, in the unit or in an environment variable it expands,
+# replaces the default search. Only an absolute path can be read the way
+# cloudflared reads it, and a named config that is missing cannot be proven
+# safe, so both stop the script.
+rc=0
+config_args=$(printf '%s\n' "$settings" | grep -oE -- '(^|[^A-Za-z0-9_-])--?config[= ]+["'"'"']?[^ ;"'"'"']+') || rc=$?
+case $rc in
+  0|1) ;;
+  *) stop "the cloudflared unit settings could not be searched for --config" ;;
+esac
+configs=$(printf '%s\n' "$config_args" | sed -E 's/^[^-]*--?config[= ]+["'"'"']?//') || stop "the cloudflared --config paths could not be read"
+settings=
+passwd_db=$(getent passwd) || stop "the account database could not be read"
+homes=$(printf '%s\n' "$passwd_db" | cut -d: -f6 | sort -u) || stop "the home directories could not be listed"
+set -f
+old_ifs=$IFS
+IFS=$newline
+for config in $configs; do
+  case $config in
+    (/*) ;;
+    (*) stop "a cloudflared unit names config $config, which is not an absolute path" ;;
+  esac
+  [ -e "$config" ] || stop "cloudflared config $config, named by a cloudflared unit, does not exist"
+  scan_config "$config"
+done
+search_dirs=
+for home in $homes; do
+  [ -n "$home" ] || continue
+  for dir in $home_config_dirs; do
+    search_dirs=$search_dirs$newline$home/$dir
+  done
+done
+for dir in $system_config_dirs; do
+  search_dirs=$search_dirs$newline$dir
+done
+# grep -r does not follow a symlink inside a directory, while cloudflared
+# reads a symlinked config file, so the config file names are scanned
+# outright as well.
+for dir in $search_dirs; do
+  [ -n "$dir" ] || continue
+  scan_config "$dir"
+  for file in $config_files; do
+    scan_config "$dir/$file"
+  done
+done
+IFS=$old_ifs
+set +f
+rc=0
+pids=$(pgrep -x ` + cloudflaredProcessName + `) || rc=$?
+case $rc in
+  0|1) ;;
+  *) stop "pgrep could not list the cloudflared processes" ;;
+esac
+for pid in $pids; do
+  if ! cgroup=$(cat "/proc/$pid/cgroup" 2>/dev/null); then
+    [ -d "/proc/$pid" ] || continue
+    stop "the cgroup of cloudflared process $pid could not be read"
+  fi
+  unit=$(printf '%s\n' "$cgroup" | awk -F: '$1 == "0" || $2 == "name=systemd" { n = split($3, part, "/"); print part[n]; exit }') || stop "the cgroup of cloudflared process $pid could not be parsed"
+  case $unit in
+    (` + cloudflaredUnitPattern + `) ;;
+    (*) stop "cloudflared process $pid runs outside the cloudflared units (in ${unit:-an unknown cgroup}), for example in a container; its ingress cannot be read here: make sure it does not route to SSH, stop it, and rerun" ;;
+  esac
+done
 
 admin=` + shell.Quote(admin) + `
 password_status=$(passwd -S "$admin" 2>/dev/null | awk '{ print $2 }') || true

@@ -675,6 +675,22 @@ all, a running managed-shape unit with only a token (its `ExecStart` read
 shows start times such as `17:08:46`), and `--url tcp://localhost:2222`. No
 run printed the token.
 
+A later run compared the host scan before and after it followed cloudflared's
+own config search, with `sh` (dash) as root in a disposable `ubuntu:24.04`
+container with fake `systemctl`, `tailscale`, `ss`, and `journalctl`. Both
+scripts turned OpenSSH off with no cloudflared config, and with a web-only
+ingress in `/etc/cloudflared` and a login certificate in `/root/.cloudflared`.
+Both stopped for an SSH route in `/etc/cloudflared`. The old script turned
+OpenSSH off, and the new one stopped, for an SSH route in
+`/usr/local/etc/cloudflared`, in `/root/.cloudflared`, in another user's
+`~/.cloudflare-warp`, or in a config symlinked into `/etc/cloudflared`; for a
+unit `--config` (or a `--config` in an environment file variable) that names
+a config with an SSH route; for a `--config` that is missing or relative;
+for `TUNNEL_URL` on port 22 in a unit's `EnvironmentFile`; for a default
+config path that grep could not read; and for a `cloudflared` process outside
+the units. A read-only check on a managed server placed its running
+`cloudflared` in `cloudflared.service`, which the scan accepts.
+
 ### OpenSSH off dogfood
 
 On 2026-10-30 the rendered OpenSSH-off step and the `openssh disabled` probe

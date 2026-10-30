@@ -738,12 +738,23 @@ changes nothing:
   OpenSSH login in the last 30 days. The message gives only the method and
   the user, never the source address. An `auth.log` line in the classic
   syslog format has no year, so it counts even when it is older.
-- A file under `/etc/cloudflared` routes to `ssh://` or to port 22.
+- A cloudflared config on the server routes to `ssh://` or to port 22, or
+  cannot be read. The step reads each config that a `cloudflared` unit
+  names with `--config`, and every directory cloudflared searches when no
+  `--config` is given: `~/.cloudflared`, `~/.cloudflare-warp`, and
+  `~/cloudflare-warp` under every home directory, then `/etc/cloudflared`
+  and `/usr/local/etc/cloudflared`. A `--config` path that is not absolute,
+  or that does not exist, also stops the step.
 - A `cloudflared` unit (`cloudflared.service`, or any running
   `cloudflared*.service`) has `--url` or `TUNNEL_URL` set to `ssh://` or to
-  port 22 in its `ExecStart` or `Environment`, or
-  `/etc/default/cloudflared` does. These settings also hold the tunnel
-  token, so the step only reports that a match exists and prints no value.
+  port 22 in its `ExecStart` or `Environment`, in an `EnvironmentFile` it
+  reads, or in `/etc/default/cloudflared`. These settings also hold the
+  tunnel token, so the step only reports that a match exists and prints no
+  value.
+- A `cloudflared` process runs outside the `cloudflared*.service` units,
+  for example in a container or from a shell. Its settings are not on the
+  server to read, so the message gives its process ID and cgroup. Make sure
+  it does not route to SSH, stop it, and rerun.
 - The server has a Cloudflare tunnel in state, and its ingress at Cloudflare
   has a rule that may reach SSH. The check is an allowlist. A rule passes
   only as `hello_world`, `http_status:NNN`, a `unix:` or `unix+tls:` socket,

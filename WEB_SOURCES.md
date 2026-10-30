@@ -464,6 +464,19 @@ client pick the destination, and every other scheme read as a raw TCP origin
 (`newTCPOverWSService`, which adds port 22 to an `ssh` origin). The
 OpenSSH-off preflight allowlist follows this order.
 
+```text
+https://github.com/cloudflare/cloudflared/blob/2026.10.2/config/configuration.go
+https://github.com/cloudflare/cloudflared/blob/2026.10.2/cmd/cloudflared/tunnel/cmd.go
+```
+
+Use: where cloudflared finds a config without `--config`
+(`DefaultConfigSearchDirectories`: `~/.cloudflared`, `~/.cloudflare-warp`,
+`~/cloudflare-warp`, then `/etc/cloudflared` and
+`/usr/local/etc/cloudflared`; `DefaultConfigFiles`: `config.yml` and
+`config.yaml`), and that `--config` reads no environment variable while
+`--url` reads `TUNNEL_URL`. The OpenSSH-off host scan searches the same
+places.
+
 ### Cloudflare Tunnel configuration file
 
 ```text
