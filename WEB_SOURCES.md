@@ -6,7 +6,7 @@ Scope: provider-agnostic serverpro references
 Prefer official provider/API docs. If guides conflict with API references, trust
 API references.
 
-## Managed-tool review: 2026-10-03, refreshed 2026-10-22
+## Managed-tool review: 2026-10-03, refreshed 2026-10-22 and 2026-10-30
 
 The normal cutoff is 2026-09-26 09:13:29 UTC: stable releases must be at least
 seven days old. Preserve Ubuntu 24.04 packages and Node.js 24 LTS. Keep npm
@@ -40,7 +40,7 @@ days and fix no disclosed vulnerability. ripgrep, fd, and inspect have no newer 
 
 | Updated tool | Selected release | Published (UTC) | Selection |
 | --- | --- | --- | --- |
-| Tailscale | 1.102.4 | 2026-09-10 | Normal age gate |
+| Tailscale | 1.104.4 | 2026-10-28 01:05 | Approved security exception; Tailscale SSH and Serve fixes (TS-2026-014 to TS-2026-017) |
 | Docker Engine / CLI | 29.9.2 | 2026-10-20 20:51:17 | Approved security exception; Go `CVE-2026-111943` rebuild |
 | containerd | 2.4.2 | 2026-10-13 22:35:06 | Normal age gate; Docker's Noble package line is now 2.4 |
 | Buildx | 0.38.1 | 2026-10-20 22:09:11 | Approved security exception; Go `CVE-2026-111943` rebuild; reviewed official binary fallback |
@@ -296,16 +296,24 @@ https://tailscale.com/docs/reference/linux-dns
 https://tailscale.com/docs/reference/faq/dns-resolv-conf
 https://tailscale.com/kb/1337/acl-syntax
 https://pkgs.tailscale.com/stable/
-https://github.com/tailscale/tailscale/releases/tag/v1.102.4
+https://github.com/tailscale/tailscale/releases/tag/v1.104.4
+https://tailscale.com/security-bulletins
+https://pkgs.tailscale.com/stable/tailscale_1.104.4_amd64.tgz.sha256
+https://pkgs.tailscale.com/stable/tailscale_1.104.4_arm64.tgz.sha256
 https://github.com/tailscale/tailscale/issues/20067
 ```
 
 Use: devices, keys, policy read, policy validate, policy update, and pinned
-first-boot/live-repair binaries. Reviewed 2026-10-01: stable release `1.102.4`;
+first-boot/live-repair binaries. Reviewed 2026-10-30: stable release `1.104.4`,
+published 2026-10-28 01:05 UTC, is an approved security exception. It fixes
+Tailscale SSH unix-socket forwarding to root-only sockets (TS-2026-014), an SSH
+memory denial of service (TS-2026-015), and Serve flaws (TS-2026-016,
+TS-2026-017). It keeps the TS-2026-013 eMudhra distrust that needs `1.104.2` or
+later. Hosts already run `1.104.2`, so the older exact pin would downgrade them.
 amd64 tarball SHA-256
-`50748df1045e60b5b695f19f4c56b0da36c019948b440fb456b6584a50f0d8b9`;
+`624ea093d47d62cf56f17b8332d74b8decda4a1faa610ebc60a1de334b2b3dc9`;
 arm64 tarball SHA-256
-`9dd1e6a592a014bbaea0103167ffe299adeda4ba14e078ce9c2895364f6c4c3f`.
+`a1c249ce6bdebef62e1ae3b997595555bce2ae4709bf95a718e9ca7a129dad7e`.
 Serverpro supplies `GODEBUG=tlsmlkem=1` to the systemd service independently
 from the artifact build default. Recheck the stable release, checksums,
 advisory state, and binary build setting together when rotating this pin.

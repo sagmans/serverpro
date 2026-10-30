@@ -11,9 +11,13 @@ import (
 )
 
 const (
-	Version      = "1.102.4"
-	AMD64SHA256  = "50748df1045e60b5b695f19f4c56b0da36c019948b440fb456b6584a50f0d8b9"
-	ARM64SHA256  = "9dd1e6a592a014bbaea0103167ffe299adeda4ba14e078ce9c2895364f6c4c3f"
+	// Older releases let Tailscale SSH forward to root-only unix sockets
+	// (TS-2026-014), allow an SSH memory DoS (TS-2026-015), carry the Serve
+	// flaws TS-2026-016/017, and lack the TS-2026-013 eMudhra distrust. Hosts
+	// already on 1.104.x must also never be pinned back to an older release.
+	Version      = "1.104.4"
+	AMD64SHA256  = "624ea093d47d62cf56f17b8332d74b8decda4a1faa610ebc60a1de334b2b3dc9"
+	ARM64SHA256  = "a1c249ce6bdebef62e1ae3b997595555bce2ae4709bf95a718e9ca7a129dad7e"
 	CheckName    = "tailscale " + Version
 	RestartGrace = 5 * time.Second
 	restartDelay = "2s"

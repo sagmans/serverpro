@@ -26,8 +26,8 @@ counterpart on DigitalOcean. Confirm current catalog availability before create.
 
 ### Managed tool baseline
 
-Reviewed 2026-10-22. Stable releases normally require seven days of age.
-Docker Engine, Buildx, Compose, mise, Node.js, uv, and gh use explicitly
+Reviewed 2026-10-30. Stable releases normally require seven days of age.
+Tailscale, Docker Engine, Buildx, Compose, mise, Node.js, uv, and gh use explicitly
 approved security exceptions; `WEB_SOURCES.md` records the release dates and advisories. Node.js
 stays on the supported 24 LTS line with its bundled npm.
 
@@ -47,7 +47,7 @@ reviewed pins, integrity checks, and replacement lifecycle.
 
 | Tool | Supported version | Enforcement |
 | --- | --- | --- |
-| Tailscale | 1.102.4 | Exact client/daemon release and architecture-specific archive digest. |
+| Tailscale | 1.104.4 | Exact client/daemon release and architecture-specific archive digest. |
 | Git | 1:2.43.0-1ubuntu7.4 | Minimum Ubuntu package version. |
 | OpenSSH client | 1:9.6p1-3ubuntu13.20 | Minimum Ubuntu package version. |
 | Docker Engine / CLI | 29.9.2 | Minimum vendor package version `5:29.9.2-1~ubuntu.24.04~noble`. |

@@ -250,9 +250,9 @@ func TestRenderPinsAndVerifiesTailscaleArtifacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"TAILSCALE_VERSION=1.102.4",
-		"50748df1045e60b5b695f19f4c56b0da36c019948b440fb456b6584a50f0d8b9",
-		"9dd1e6a592a014bbaea0103167ffe299adeda4ba14e078ce9c2895364f6c4c3f",
+		"TAILSCALE_VERSION=1.104.4",
+		"624ea093d47d62cf56f17b8332d74b8decda4a1faa610ebc60a1de334b2b3dc9",
+		"a1c249ce6bdebef62e1ae3b997595555bce2ae4709bf95a718e9ca7a129dad7e",
 		"tailscale_${TAILSCALE_VERSION}_${arch}.tgz",
 		"sha256sum -c",
 		"--no-same-owner",

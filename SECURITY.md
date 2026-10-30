@@ -196,9 +196,9 @@ without one get this secure default.
 
 ## Supply-chain verification
 
-The 2026-10-03 managed-tool review, refreshed 2026-10-22, selects stable releases at least seven days
-old, except explicitly approved fixes for disclosed vulnerabilities. Docker
-Engine `29.9.2`, Buildx `0.38.1`, Compose `5.6.1`, mise `2026.10.17`,
+The 2026-10-03 managed-tool review, refreshed 2026-10-22 and 2026-10-30, selects stable releases at least seven days
+old, except explicitly approved fixes for disclosed vulnerabilities. Tailscale
+`1.104.4`, Docker Engine `29.9.2`, Buildx `0.38.1`, Compose `5.6.1`, mise `2026.10.17`,
 Node.js `24.22.1`, uv `0.13.5`, and gh `2.102.1` use those exceptions; `WEB_SOURCES.md` records the evidence. The age
 threshold governs release selection. Signed apt candidates can be newer.
 Pi installation and local dependency repair also enforce seven days through
@@ -217,6 +217,9 @@ emSign root), and gh `2.102.1` for its Go `1.27.3` standard-library fixes,
 all younger than seven days. ast-grep `0.51.0` passes the age gate and fixes
 critical `GHSA-xx6h-xcfw-vf5j` and high `GHSA-cmvf-x8f7-rvp6`: a project
 configuration could load native code as a custom language library.
+The 2026-10-30 Tailscale exception fixes Tailscale SSH forwarding to root-only
+unix sockets (TS-2026-014), an SSH memory denial of service (TS-2026-015), and
+Serve flaws (TS-2026-016, TS-2026-017); it keeps the TS-2026-013 eMudhra fix.
 `MISE_SAFE=1` skips mise’s trust check; never use it to inspect untrusted projects.
 
 Buildx `0.38.1` is in Docker’s Noble apt repository for both supported
@@ -281,7 +284,7 @@ Managed host tools install through integrity-checked sources, not
   without running the binary, so an older pinned install reports as
   `expected herdr X, got herdr Y`. Any other mismatch reports as a SHA-256
   mismatch.
-- Tailscale `1.102.4` first-boot and repair binaries are fetched only for
+- Tailscale `1.104.4` first-boot and repair binaries are fetched only for
   reviewed amd64 or arm64 architectures, checked against pinned SHA-256 digests,
   and extracted by exact member name. Unsupported architectures and mismatches
   stop before install. Serverpro explicitly sets `GODEBUG=tlsmlkem=1` for
