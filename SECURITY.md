@@ -72,7 +72,9 @@ default.
   `phase_lockdown_after_bootstrap` value behaves as `true`; only explicit
   `false` disables it. Restricted egress still permits outbound SSH (22/tcp)
   for git-over-SSH workflows. Create, `server bootstrap`, and
-  `serverpro server doctor NAME --fix` all apply the same lockdown, and it
+  `serverpro server doctor NAME --fix` all apply the same lockdown under the
+  same rule (restricted mode and the phase not `false`), so doctor never
+  checks or re-applies a lockdown the operator turned off, and it
   exits non-zero unless UFW denies outgoing, a non-allowlisted connect is
   blocked, and the Tailscale coordination server is still reachable. A create
   that cannot reach the host fails instead of completing open.

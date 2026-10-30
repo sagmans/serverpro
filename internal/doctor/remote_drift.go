@@ -28,7 +28,7 @@ const (
 func remoteDriftSpecifications(cfg config.Config, opt Options) []remoteCheckSpecification {
 	user := cfg.Admin.Username
 	var specifications []remoteCheckSpecification
-	if cfg.Network.Egress.Mode == config.EgressModeRestricted {
+	if cfg.Network.Egress.LockdownDue() {
 		specifications = append(specifications, remoteFixableDriftSpecification(egressRestrictedCheckName, egressRestrictedCommand(), egressRestrictedRemediation, network.LockdownScript(cfg)))
 	}
 	return append(specifications,

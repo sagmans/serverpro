@@ -84,7 +84,7 @@ func remoteCheckSpecifications(cfg config.Config, opt Options) []remoteCheckSpec
 		remoteDNSResolutionSpecification(),
 		remoteEgressPositiveSpecification(),
 	)
-	if cfg.Network.Egress.Mode == config.EgressModeRestricted {
+	if cfg.Network.Egress.LockdownDue() {
 		specifications = append(specifications,
 			// The repair is the whole lockdown, not just the 22/tcp rule: adding
 			// one rule to a host whose default still allows everything hid

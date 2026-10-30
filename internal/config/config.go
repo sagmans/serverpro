@@ -53,6 +53,14 @@ type Egress struct {
 	PhaseLockdownAfterBootstrap bool   `yaml:"phase_lockdown_after_bootstrap" json:"phase_lockdown_after_bootstrap"`
 }
 
+// LockdownDue is the one rule for whether serverpro owns a restricted egress
+// lockdown on the host. Create, bootstrap, and doctor all ask it, so an
+// explicit phase_lockdown_after_bootstrap: false is never undone by a doctor
+// check or --fix that create itself would have skipped.
+func (e Egress) LockdownDue() bool {
+	return e.Mode == EgressModeRestricted && e.PhaseLockdownAfterBootstrap
+}
+
 // OpenSSH modes. Disabled is the default: Tailscale SSH is the only admin
 // path, so a listening sshd is attack surface with no user. Enabled is the
 // explicit opt-back-in for a host that needs OpenSSH, for example a provider

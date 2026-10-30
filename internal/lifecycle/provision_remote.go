@@ -48,7 +48,7 @@ func bootstrapRemoteNetwork(ctx context.Context, r remote.Runner, c CloudflareCl
 // here would complete a create whose config promises a lockdown that never
 // ran.
 func lockdownUnreachable(cfg config.Config) error {
-	if cfg.Network.Egress.PhaseLockdownAfterBootstrap && cfg.Network.Egress.Mode == config.EgressModeRestricted {
+	if cfg.Network.Egress.LockdownDue() {
 		return fmt.Errorf("egress lockdown: no remote host to apply restricted egress on")
 	}
 	return nil
