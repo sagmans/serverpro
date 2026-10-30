@@ -745,15 +745,21 @@ changes nothing:
   `/etc/default/cloudflared` does. These settings also hold the tunnel
   token, so the step only reports that a match exists and prints no value.
 - The server has a Cloudflare tunnel in state, and its ingress at Cloudflare
-  has a rule that reaches SSH: an `ssh://` service, any service on port 22,
-  the `bastion` or `socks5` service, bastion mode, or a SOCKS proxy type.
+  has a rule that may reach SSH. The check is an allowlist. A rule passes
+  only as `hello_world`, `http_status:NNN`, a `unix:` or `unix+tls:` socket,
+  or an `http`, `https`, or `tcp` origin on a port other than 22 (a `tcp`
+  origin must name its port), and only without bastion mode or a proxy type.
+  Every other rule counts: `ssh://` or `rdp://` origins, the `bastion` and
+  `socks-proxy` services, a rule without a service, and any service
+  serverpro cannot classify.
   Serverpro creates remotely managed tunnels, so a route added in the
   Cloudflare dashboard never reaches the server's disk. Serverpro reads the
   ingress with the Cloudflare API before it runs anything on the server.
   Origin settings set for the whole configuration count for every rule, and
   WARP routing turned on counts as a route, because it can carry private
   network traffic to port 22. The message names each rule's service with any
-  URL password masked, never its hostname. If the read fails, or the answer
+  URL password masked, or a fixed label for a service it cannot classify,
+  never its hostname. If the read fails, or the answer
   does not name the tunnel, the step stops too: serverpro cannot tell that no
   route needs sshd. A tunnel that has never had a remote configuration, as
   serverpro creates it, has no routes.

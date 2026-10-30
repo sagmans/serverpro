@@ -596,7 +596,8 @@ this change) and new code against a fake Cloudflare API (`httptest`):
 - `doctor --fix` (`RunWithOptions` with a fake host whose `openssh disabled`
   check fails). Old: the repair ran for every ingress, and doctor never
   requested `/configurations`. New: the repair did not run for an `ssh://`
-  service, `tcp://127.0.0.1:22`, `localhost:22`, bastion mode, `socks5`, or
+  service, `tcp://127.0.0.1:22`, `localhost:22`, bastion mode, `socks5` (a
+  name cloudflared does not have; see the allowlist run below), or
   an `ssh://` URL with a password, nor on an API `500`; the finding said
   `fix not run` and named the service with the password masked, never the
   hostname. An `http://localhost:8080` route and a tunnel without remote
@@ -604,6 +605,16 @@ this change) and new code against a fake Cloudflare API (`httptest`):
 - Create's OpenSSH-off step. Old: the host script ran with an `ssh://` route
   and on an API `500`. New: it did not run in either case, and it ran for a
   fresh tunnel (`config: null`).
+
+A later throwaway harness ran the old denylist and the new allowlist
+classifier on the same ingress services. The old one passed `socks-proxy`
+(cloudflared's real SOCKS service), `rdp://` and `smb://` origins, a `tcp`
+origin without a port, a rule without a service, and any proxy type other
+than `socks`. The new one fails all of them, and every service it cannot
+classify (`localhost:8080`, `warp-routing`, an unparsable URL) under a fixed
+label that prints no value. Both pass `http://localhost:8080`,
+`https://localhost`, `tcp://127.0.0.1:5432`, `unix:` sockets, `hello_world`,
+and `http_status:404`.
 
 The rendered old and new host scripts then ran with `sh` (dash) as root in a
 disposable `ubuntu:24.04` container that boots systemd, with

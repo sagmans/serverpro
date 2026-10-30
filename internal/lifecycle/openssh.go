@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/url"
 	"path"
 	"strconv"
@@ -55,22 +54,53 @@ const (
 	// tunnel.CloudflaredUnit for another tunnel. systemctl matches a pattern
 	// only against loaded units, so the managed unit is also named outright.
 	cloudflaredUnitPattern = "cloudflared*.service"
-	// tunnelSSHScheme is the origin scheme of a tunnel route to an SSH server.
-	tunnelSSHScheme = "ssh"
-	// tunnelURLSeparator splits a service's scheme from its address. A
-	// service without it is a host:port, a built-in, or a unix socket.
+	// tunnelSSHScheme and tunnelURLSeparator form the ssh:// origin the host
+	// scan looks for in a locally managed cloudflared's settings, which it
+	// can only grep, not parse.
+	tunnelSSHScheme    = "ssh"
 	tunnelURLSeparator = "://"
-	// tunnelBastionService and tunnelSOCKS5Service are built-in services
-	// that let a client choose the destination, so they reach sshd too.
-	tunnelBastionService = "bastion"
-	tunnelSOCKS5Service  = "socks5"
-	// tunnelSOCKSProxyType is the originRequest proxy type that turns a rule
-	// into a SOCKS proxy, with the same reach as tunnelSOCKS5Service.
-	tunnelSOCKSProxyType = "socks"
+	// tunnelBastionService and tunnelSOCKSProxyService are cloudflared's
+	// built-in services that let a client choose the destination (upstream
+	// ingress.ServiceBastion and ingress.ServiceSocksProxy). They are named
+	// as they are in a finding.
+	tunnelBastionService    = "bastion"
+	tunnelSOCKSProxyService = "socks-proxy"
+	// tunnelHelloWorldService, tunnelHelloWorldFlag, and
+	// tunnelStatusServicePrefix are built-in services that answer from
+	// cloudflared itself and reach nothing on the host, so they are the only
+	// services without a target that pass (upstream ingress.HelloWorldService,
+	// ingress.HelloWorldFlag, and the http_status: prefix).
+	tunnelHelloWorldService   = "hello_world"
+	tunnelHelloWorldFlag      = "hello-world"
+	tunnelStatusServicePrefix = "http_status:"
+	// tunnelUnixPrefix and tunnelUnixTLSPrefix mark a unix socket origin.
+	// cloudflared matches them as prefixes before it parses any URL, so the
+	// preflight does too; sshd does not listen on a unix socket.
+	tunnelUnixPrefix    = "unix:"
+	tunnelUnixTLSPrefix = "unix+tls:"
+	// tunnelTCPScheme is the raw TCP origin scheme. It needs an explicit
+	// port, because cloudflared adds none for it and the preflight cannot
+	// tell which one it reaches.
+	tunnelTCPScheme = "tcp"
 	// tunnelWARPRoutingRoute names WARP routing in a finding: it carries
 	// private network traffic to any port a route covers, sshd's included.
 	tunnelWARPRoutingRoute = "WARP routing"
+	// tunnelBastionModeRoute and tunnelProxyTypeRoute name the origin
+	// settings that let a client pick its destination. Any proxy type counts,
+	// not only socks, because the preflight cannot tell what another reaches;
+	// its value is not printed, because Cloudflare does not limit it.
+	tunnelBastionModeRoute = "bastion mode"
+	tunnelProxyTypeRoute   = "an origin proxy type"
+	// tunnelEmptyServiceRoute and tunnelUnclassifiedRoute name rules the
+	// allowlist cannot place. An unclassified service is not printed, because
+	// a form url.Redacted does not understand may hold a credential.
+	tunnelEmptyServiceRoute = "a rule without a service"
+	tunnelUnclassifiedRoute = "a service serverpro cannot classify"
 )
+
+// tunnelWebPorts are the http and https origin schemes with the port each
+// one uses when the URL names none.
+var tunnelWebPorts = map[string]string{"http": "80", "https": "443"}
 
 var (
 	// ErrTunnelIngressUnread means the tunnel's remote ingress could not be
@@ -112,48 +142,69 @@ func CheckTunnelSSHIngress(ctx context.Context, reader TunnelIngressReader, tunn
 	return nil
 }
 
-// TunnelSSHRoutes names the rules that can reach sshd: an ssh:// origin, any
-// origin on the OpenSSH port, and the rules that let a client pick its own
-// destination (bastion mode, a SOCKS proxy), plus WARP routing when it is on.
-// Each name is the origin service with any URL password masked, so a finding
-// carries no credential and never the route's public hostname.
+// TunnelSSHRoutes names the rules that may reach sshd, plus WARP routing when
+// it is on. Each name is the origin service with any URL password masked, or
+// a fixed label, so a finding carries no credential and never the route's
+// public hostname.
 func TunnelSSHRoutes(remote ingress.TunnelRemoteConfig) []string {
 	var routes []string
 	if remote.WARPRouting {
 		routes = append(routes, tunnelWARPRoutingRoute)
 	}
 	for _, rule := range remote.Rules {
-		switch {
-		case rule.BastionMode:
-			routes = append(routes, "bastion mode")
-		case strings.EqualFold(rule.ProxyType, tunnelSOCKSProxyType):
-			routes = append(routes, "SOCKS proxy")
-		case rule.Service == tunnelBastionService, rule.Service == tunnelSOCKS5Service:
-			routes = append(routes, rule.Service)
-		default:
-			if name, ok := tunnelServiceToSSH(rule.Service); ok {
-				routes = append(routes, name)
-			}
+		if name, ok := tunnelRouteToSSH(rule); ok {
+			routes = append(routes, name)
 		}
 	}
 	return routes
 }
 
-// tunnelServiceToSSH reports whether a service URL or host:port reaches sshd,
-// and the name to report it by. A URL that does not parse counts: Cloudflare
-// accepted it, so cloudflared reads it somehow, and the preflight cannot rule
-// out that it reaches sshd.
-func tunnelServiceToSSH(service string) (string, bool) {
-	port := strconv.Itoa(OpenSSHPort)
-	if !strings.Contains(service, tunnelURLSeparator) {
-		_, servicePort, err := net.SplitHostPort(service)
-		return service, err == nil && servicePort == port
+// tunnelRouteToSSH reports whether one ingress rule may reach sshd, and the
+// name to report it by. It is an allowlist, because a denylist of SSH forms
+// misses the ones nobody listed (cloudflared reads ssh, rdp, smb, and any
+// other scheme as a raw TCP origin, and adds port 22 to an ssh one). A rule
+// passes only as a built-in that answers from cloudflared itself, a unix
+// socket, or an http, https, or tcp origin on a port other than OpenSSHPort,
+// and only without an origin setting that lets a client choose the
+// destination; the service cases follow cloudflared's own order (upstream
+// ingress.validateIngress). Everything else counts, including a service the
+// preflight cannot classify: Cloudflare accepted it, so cloudflared reads it
+// somehow.
+func tunnelRouteToSSH(rule ingress.TunnelIngressRule) (string, bool) {
+	switch {
+	case rule.BastionMode:
+		return tunnelBastionModeRoute, true
+	case rule.ProxyType != "":
+		return tunnelProxyTypeRoute, true
+	case strings.HasPrefix(rule.Service, tunnelUnixPrefix), strings.HasPrefix(rule.Service, tunnelUnixTLSPrefix):
+		return "", false
+	case strings.HasPrefix(rule.Service, tunnelStatusServicePrefix):
+		return "", false
+	case rule.Service == tunnelHelloWorldService, rule.Service == tunnelHelloWorldFlag:
+		return "", false
+	case rule.Service == tunnelBastionService, rule.Service == tunnelSOCKSProxyService:
+		return rule.Service, true
+	case rule.Service == "":
+		return tunnelEmptyServiceRoute, true
 	}
-	parsed, err := url.Parse(service)
-	if err != nil {
-		return "a service URL that does not parse", true
+	parsed, err := url.Parse(rule.Service)
+	if err != nil || parsed.Scheme == "" || parsed.Opaque != "" {
+		return tunnelUnclassifiedRoute, true
 	}
-	return parsed.Redacted(), strings.EqualFold(parsed.Scheme, tunnelSSHScheme) || parsed.Port() == port
+	name := parsed.Redacted()
+	sshPort := strconv.Itoa(OpenSSHPort)
+	if parsed.Scheme == tunnelTCPScheme {
+		return name, parsed.Hostname() == "" || parsed.Port() == "" || parsed.Port() == sshPort
+	}
+	defaultPort, web := tunnelWebPorts[parsed.Scheme]
+	if !web || parsed.Hostname() == "" {
+		return name, true
+	}
+	port := parsed.Port()
+	if port == "" {
+		port = defaultPort
+	}
+	return name, port == sshPort
 }
 
 // OpenSSHDisableScript turns OpenSSH off on a host that Tailscale SSH already

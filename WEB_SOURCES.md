@@ -452,6 +452,18 @@ Use: the remotely managed configuration the OpenSSH-off preflight reads
 configuration-wide `originRequest` to every rule as defaults (upstream
 `ingress/config.go`, `setConfig`).
 
+```text
+https://github.com/cloudflare/cloudflared/blob/2026.10.2/ingress/ingress.go
+https://github.com/cloudflare/cloudflared/blob/2026.10.2/ingress/origin_service.go
+```
+
+Use: how cloudflared reads an ingress service (`validateIngress`): the
+`unix:`, `unix+tls:`, and `http_status:` prefixes, the `hello_world` and
+`hello-world` built-ins, the `socks-proxy` and `bastion` services that let a
+client pick the destination, and every other scheme read as a raw TCP origin
+(`newTCPOverWSService`, which adds port 22 to an `ssh` origin). The
+OpenSSH-off preflight allowlist follows this order.
+
 ### Cloudflare Tunnel configuration file
 
 ```text
