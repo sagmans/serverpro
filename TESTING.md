@@ -803,6 +803,43 @@ config path that grep could not read; and for a `cloudflared` process outside
 the units. A read-only check on a managed server placed its running
 `cloudflared` in `cloudflared.service`, which the scan accepts.
 
+On 2026-10-30 the host scan moved from a denylist to the remote ingress
+allowlist. The rendered old and new scripts ran with `sh` (dash) and `mawk`
+as root, once per case in a fresh `ubuntu:24.04` arm64 container with fake
+`systemctl`, `tailscale`, `ss`, and `journalctl`, and real `pgrep`,
+`getent`, `find`, and `readlink`. A fake token stood in for the tunnel token
+in every unit and environment file; no run printed it.
+
+- The old script turned OpenSSH off, and the new one stopped, for a config
+  service `tcp://localhost:0022`, `http://localhost:022`, or
+  `https://127.0.0.1:00022`; `rdp://localhost:3389`; the `bastion` and
+  `socks-proxy` services; `bastionMode: true` in the configuration-wide
+  `originRequest`; a flow-style `proxyType: socks`; top-level
+  `bastion: true` or `socks5: true`; `url: localhost:8080` with no scheme; a
+  service on the next line; and a folded block scalar. It stopped too for a
+  unit `--bastion`, `--url tcp://localhost:0022`, `TUNNEL_SOCKS=true` or a
+  quoted `TUNNEL_URL` to `rdp://` in an `EnvironmentFile`, an SSH-capable
+  config under a `HOME` the unit sets outside the account database, a
+  relative unit `HOME`, and a `cloudflared` binary run through a symlink with
+  another name, which `pgrep -x` misses.
+- Both turned OpenSSH off with no config, a web-only config, a JSON-style
+  and a YAML flow-style ingress on allowed ports, a commented-out `rdp://`
+  service, a quoted `#` fragment, a unit `--url=http://localhost:8080`, and
+  `TUNNEL_BASTION=false`.
+- The awk program alone, without the grep in front of it, failed each port
+  22 spelling (`0022`, `022`, `00022` in brackets, an uppercase scheme, a
+  URL with a password), a `tcp` origin without a host or port, `ssh://`, an
+  escaped quote, an uppercase `Service:` key, `proxyType:` with no value,
+  `bastionMode: no`, a port above 65535, a bare `--socks5`, and
+  `--url ${ORIGIN}`. It passed `http://localhost`, `https://localhost:8443`,
+  `unix:`, `hello_world`, `http_status:404`, `proxyType: ""`,
+  `bastionMode: false`, `TUNNEL_BASTION=`, `--socks5=false`, and a longer
+  name such as `--url-other` or `X_TUNNEL_URL`.
+- The remote check now reads ports the same way: `tcp://localhost:0022`,
+  `http://localhost:022`, `https://127.0.0.1:00022`, a 20-digit port, and
+  port 70000 count as SSH routes; `tcp://localhost:2222`,
+  `http://localhost:8080`, and `https://localhost` do not.
+
 ### OpenSSH off dogfood
 
 On 2026-10-30 the rendered OpenSSH-off step and the `openssh disabled` probe

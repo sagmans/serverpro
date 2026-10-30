@@ -40,6 +40,9 @@ const (
 	openSSHLoginWindowDays = 30
 	// OpenSSHPort is the port a stray sshd or socket listener would hold.
 	OpenSSHPort = 22
+	// tunnelMaxPort is the largest TCP port. A tunnel origin port above it
+	// names no port the preflight can place, so it counts as SSH.
+	tunnelMaxPort = 65535
 	// tailscaledUnit is the daemon that serves Tailscale SSH, the only admin
 	// path left once OpenSSH is off.
 	tailscaledUnit = "tailscaled"
@@ -62,9 +65,10 @@ const (
 	// unit, a container, or a shell, since all of them share the host's
 	// process table.
 	cloudflaredProcessName = "cloudflared"
-	// tunnelSSHScheme and tunnelURLSeparator form the ssh:// origin the host
-	// scan looks for in a locally managed cloudflared's settings, which it
-	// can only grep, not parse.
+	// tunnelSSHScheme and tunnelURLSeparator form the ssh:// origin that the
+	// host scan's grep looks for in a locally managed cloudflared's settings,
+	// next to hostScanProgram's allowlist, in case a form the program does not
+	// read hides one.
 	tunnelSSHScheme    = "ssh"
 	tunnelURLSeparator = "://"
 	// tunnelBastionService and tunnelSOCKSProxyService are cloudflared's
@@ -209,9 +213,16 @@ func tunnelRouteToSSH(rule ingress.TunnelIngressRule) (string, bool) {
 		return tunnelUnclassifiedRoute, true
 	}
 	name := parsed.Redacted()
-	sshPort := strconv.Itoa(OpenSSHPort)
+	// A port counts as a number, because url.Port keeps it as written and
+	// cloudflared dials 0022 as port 22. One that does not parse, or that no
+	// TCP port can be, counts as SSH, since the preflight cannot tell where
+	// it leads.
+	reachesSSH := func(port string) bool {
+		n, err := strconv.Atoi(port)
+		return err != nil || n > tunnelMaxPort || n == OpenSSHPort
+	}
 	if parsed.Scheme == tunnelTCPScheme {
-		return name, parsed.Hostname() == "" || parsed.Port() == "" || parsed.Port() == sshPort
+		return name, parsed.Hostname() == "" || parsed.Port() == "" || reachesSSH(parsed.Port())
 	}
 	defaultPort, web := tunnelWebPorts[parsed.Scheme]
 	if !web || parsed.Hostname() == "" {
@@ -221,7 +232,7 @@ func tunnelRouteToSSH(rule ingress.TunnelIngressRule) (string, bool) {
 	if port == "" {
 		port = defaultPort
 	}
-	return name, port == sshPort
+	return name, reachesSSH(port)
 }
 
 // OpenSSHDisableScript turns OpenSSH off on a host that Tailscale SSH already
@@ -230,14 +241,18 @@ func tunnelRouteToSSH(rule ingress.TunnelIngressRule) (string, bool) {
 // one holds: tailscaled down, Tailscale SSH off, an established OpenSSH
 // session, an OpenSSH login in the recent window (only the method and the
 // user are printed, never a source address), or a cloudflared ingress that
-// routes to SSH or cannot be read. The scan covers a --url or TUNNEL_URL
-// origin in a cloudflared unit, its environment files, or the defaults file;
-// each config a unit names with --config; and every directory cloudflared
-// searches for a config without one, under every home and on the system. A
-// cloudflared process outside the cloudflared units (a container, or one run
-// by hand) also stops the script, because its settings are not on the host
-// to read. Ingress kept at Cloudflare is CheckTunnelSSHIngress's part, run
-// before this script.
+// may reach SSH or cannot be read. The scan judges every origin it finds
+// with the remote allowlist (hostScanProgram) and also greps for ssh:// and
+// port 22 with any leading zeros. It covers a --url or TUNNEL_URL origin and
+// the --bastion and --socks5 modes in a cloudflared unit, its environment
+// files, or the defaults file; each config a unit names with --config; and
+// every directory cloudflared searches for a config without one, under every
+// home in the account database and every HOME a unit sets, and on the
+// system. A cloudflared process outside the cloudflared units (a container,
+// or one run by hand), found by name or by the executable it runs, also
+// stops the script, because its settings are not on the host to read.
+// Ingress kept at Cloudflare is CheckTunnelSSHIngress's part, run before
+// this script.
 // An admin user without a password and an active provider console
 // agent (consoleAgents, declared by the compute adapter) are only warnings:
 // they change how to recover the host, not whether the change is safe.
@@ -251,6 +266,9 @@ func OpenSSHDisableScript(admin string, consoleAgents []string) string {
 	socket := shell.Quote(hostplatform.OpenSSHSocketUnit)
 	service := shell.Quote(hostplatform.OpenSSHServiceUnit)
 	port := strconv.Itoa(OpenSSHPort)
+	// The grep backs up the allowlist: cloudflared reads a port as a number,
+	// so 22 counts with any leading zeros.
+	sshPort := ":0*" + port + "([^0-9]|$)"
 	agents := make([]string, len(consoleAgents))
 	for i, agent := range consoleAgents {
 		agents[i] = shell.Quote(agent)
@@ -270,6 +288,7 @@ home_config_dirs=` + shell.Quote(strings.Join(cloudflaredHomeConfigDirs, "\n")) 
 config_files=` + shell.Quote(strings.Join(cloudflaredConfigFiles, "\n")) + `
 newline='
 '
+host_scan=` + shell.Quote(hostScanProgram()) + `
 stop() {
   printf '` + openSSHStoppedPrefix + `%s\n' "$1" >&2
   exit 1
@@ -295,23 +314,26 @@ logins=$({
 } | awk '{ for (i = 1; i < NF; i++) if ($i == "Accepted" && $(i + 2) == "for") { print $(i + 1) " for " $(i + 3); break } }' | sort -u | awk 'NR > 1 { printf ", " } { printf "%s", $0 }')
 [ -z "$logins" ] || stop "OpenSSH logins in the last ` + strconv.Itoa(openSSHLoginWindowDays) + ` days: $logins"
 # scan_config stops when the cloudflared config at $1, a file or a
-# directory, routes to SSH or cannot be read. A path that does not exist is
-# skipped: cloudflared skips it too.
+# directory, may reach SSH or cannot be read. A path that does not exist is
+# skipped: cloudflared skips it too. find, like grep -r, follows a symlink
+# only when it is $1 itself; the config file names are scanned outright.
 scan_config() {
   [ -e "$1" ] || return 0
   rc=0
-  grep -rEqs 'ssh://|:` + port + `([^0-9]|$)' "$1" || rc=$?
+  grep -rEiqs '` + tunnelSSHScheme + tunnelURLSeparator + `|` + sshPort + `' "$1" || rc=$?
   case $rc in
     0) stop "a cloudflared ingress in $1 routes to SSH" ;;
     1) ;;
     *) stop "$1 could not be read" ;;
   esac
+  reason=$(find -H "$1" -type f -exec awk -v mode=` + hostScanConfigMode + ` "$host_scan" {} +) || stop "$1 could not be read"
+  [ -z "$reason" ] || stop "a cloudflared config in $1 may reach SSH (${reason%%"$newline"*}); remove or retarget it, then rerun"
 }
-# A legacy or quick tunnel takes its origin from --url or TUNNEL_URL, in the
-# unit or in an environment file it reads. These settings also carry the
-# tunnel token, so grep only answers yes or no and nothing but paths is
-# printed. The port match is tied to the flag, because the unit's ExecStart
-# also shows start times such as 12:22:05.
+# A legacy or quick tunnel takes its origin, or bastion or SOCKS5 mode, from
+# a flag or its variable, in the unit or in an environment file it reads.
+# These settings also carry the tunnel token, so the checks only print a
+# label or a path, never a value. The grep's port match is tied to the flag,
+# because the unit's ExecStart also shows start times such as 12:22:05.
 unit_settings=$(systemctl show -p ExecStart -p Environment --value ` + shell.Quote(tunnel.CloudflaredUnit) + ` ` + shell.Quote(cloudflaredUnitPattern) + `) || stop "systemctl could not read the cloudflared units"
 env_files=$(systemctl show -p EnvironmentFiles --value ` + shell.Quote(tunnel.CloudflaredUnit) + ` ` + shell.Quote(cloudflaredUnitPattern) + `) || stop "systemctl could not read the cloudflared environment files"
 env_files=$(printf '%s\n%s\n' "$cloudflared_defaults" "$env_files" | sed 's/ (ignore_errors=[a-z]*)$//') || stop "the cloudflared environment files could not be listed"
@@ -327,12 +349,14 @@ done
 IFS=$old_ifs
 set +f
 rc=0
-printf '%s\n' "$settings" | grep -Eq '` + tunnelSSHScheme + tunnelURLSeparator + `|(--url[= ]+|TUNNEL_URL=)["'"'"']?[^ ;"'"'"']*:` + port + `([^0-9]|$)' || rc=$?
+printf '%s\n' "$settings" | grep -Eiq '` + tunnelSSHScheme + tunnelURLSeparator + `|(--` + cloudflaredURLFlag + `[= ]+|` + cloudflaredURLEnv + `=)["'"'"']?[^ ;"'"'"']*` + sshPort + `' || rc=$?
 case $rc in
   0) stop "a cloudflared unit or one of its environment files routes to SSH" ;;
   1) ;;
   *) stop "the cloudflared unit settings could not be searched" ;;
 esac
+reason=$(printf '%s\n' "$settings" | awk -v mode=` + hostScanSettingsMode + ` "$host_scan") || stop "the cloudflared unit settings could not be searched"
+[ -z "$reason" ] || stop "a cloudflared unit or one of its environment files may reach SSH ($reason); remove or retarget it, then rerun"
 # A --config path, in the unit or in an environment variable it expands,
 # replaces the default search. Only an absolute path can be read the way
 # cloudflared reads it, and a named config that is missing cannot be proven
@@ -344,12 +368,22 @@ case $rc in
   *) stop "the cloudflared unit settings could not be searched for --config" ;;
 esac
 configs=$(printf '%s\n' "$config_args" | sed -E 's/^[^-]*--?config[= ]+["'"'"']?//') || stop "the cloudflared --config paths could not be read"
+# cloudflared expands ~ with HOME, which a unit can set apart from the
+# account database, so those homes are searched too.
+unit_homes=$(printf '%s\n' "$settings" | awk -v mode=` + hostScanHomeMode + ` "$host_scan") || stop "the cloudflared unit settings could not be searched for HOME"
 settings=
 passwd_db=$(getent passwd) || stop "the account database could not be read"
-homes=$(printf '%s\n' "$passwd_db" | cut -d: -f6 | sort -u) || stop "the home directories could not be listed"
+passwd_homes=$(printf '%s\n' "$passwd_db" | cut -d: -f6) || stop "the home directories could not be listed"
+homes=$(printf '%s\n%s\n' "$passwd_homes" "$unit_homes" | sort -u) || stop "the home directories could not be listed"
 set -f
 old_ifs=$IFS
 IFS=$newline
+for home in $unit_homes; do
+  case $home in
+    (/*) ;;
+    (*) stop "a cloudflared unit sets HOME to a path that is not absolute, so its config search cannot be read here" ;;
+  esac
+done
 for config in $configs; do
   case $config in
     (/*) ;;
@@ -386,6 +420,16 @@ case $rc in
   0|1) ;;
   *) stop "pgrep could not list the cloudflared processes" ;;
 esac
+# pgrep matches the process name, which a launcher run through a symlink or
+# under another name changes, so the executable each process runs counts
+# too. A process without one (a kernel thread) or gone by now is skipped.
+for proc in /proc/[0-9]*; do
+  exe=$(readlink "$proc/exe" 2>/dev/null) || continue
+  case ${exe##*/} in
+    (` + cloudflaredProcessName + `*) pids="$pids ${proc##*/}" ;;
+  esac
+done
+pids=$(printf '%s\n' $pids | sort -nu)
 for pid in $pids; do
   if ! cgroup=$(cat "/proc/$pid/cgroup" 2>/dev/null); then
     [ -d "/proc/$pid" ] || continue

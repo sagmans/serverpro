@@ -738,28 +738,42 @@ changes nothing:
   OpenSSH login in the last 30 days. The message gives only the method and
   the user, never the source address. An `auth.log` line in the classic
   syslog format has no year, so it counts even when it is older.
-- A cloudflared config on the server routes to `ssh://` or to port 22, or
-  cannot be read. The step reads each config that a `cloudflared` unit
-  names with `--config`, and every directory cloudflared searches when no
-  `--config` is given: `~/.cloudflared`, `~/.cloudflare-warp`, and
-  `~/cloudflare-warp` under every home directory, then `/etc/cloudflared`
-  and `/usr/local/etc/cloudflared`. A `--config` path that is not absolute,
-  or that does not exist, also stops the step.
+- A cloudflared config on the server may reach SSH, or cannot be read.
+  Each `service:` and `url:` value must pass the same allowlist as the
+  tunnel's remote ingress (see below), and a `bastionMode`, a `proxyType`,
+  or a `bastion` or `socks5` key that is not false stops the step. So does
+  `ssh://`, or port 22 with any leading zeros (`:022`), anywhere in the
+  file. A value the step cannot read whole on its line (a block scalar, an
+  anchor or alias, an escaped or unterminated quote) counts as a route. The
+  step reads each config that a `cloudflared` unit names with `--config`,
+  and every directory cloudflared searches when no `--config` is given:
+  `~/.cloudflared`, `~/.cloudflare-warp`, and `~/cloudflare-warp` under
+  every home directory in the account database and every `HOME` a
+  `cloudflared` unit sets, then `/etc/cloudflared` and
+  `/usr/local/etc/cloudflared`. A `--config` path that is not absolute, or
+  that does not exist, also stops the step, and so does a unit `HOME` that
+  is not absolute.
 - A `cloudflared` unit (`cloudflared.service`, or any running
-  `cloudflared*.service`) has `--url` or `TUNNEL_URL` set to `ssh://` or to
-  port 22 in its `ExecStart` or `Environment`, in an `EnvironmentFile` it
-  reads, or in `/etc/default/cloudflared`. These settings also hold the
-  tunnel token, so the step only reports that a match exists and prints no
-  value.
+  `cloudflared*.service`) sets `--url` or `TUNNEL_URL` to an origin the
+  allowlist does not pass, or turns on `--bastion`, `TUNNEL_BASTION`,
+  `--socks5`, or `TUNNEL_SOCKS`, in its `ExecStart` or `Environment`, in an
+  `EnvironmentFile` it reads, or in `/etc/default/cloudflared`. Only `0`,
+  `f`, `F`, `false`, `False`, and `FALSE` turn those modes off. These
+  settings also hold the tunnel token, so the message names only the kind
+  of setting, such as `bastion mode`, and prints no value.
 - A `cloudflared` process runs outside the `cloudflared*.service` units,
-  for example in a container or from a shell. Its settings are not on the
-  server to read, so the message gives its process ID and cgroup. Make sure
-  it does not route to SSH, stop it, and rerun.
+  for example in a container or from a shell. The step finds it by its
+  process name and by the executable it runs (`/proc/PID/exe` named
+  `cloudflared*`), so a symlink or a renamed launcher does not hide it. Its
+  settings are not on the server to read, so the message gives its process
+  ID and cgroup. Make sure it does not route to SSH, stop it, and rerun.
 - The server has a Cloudflare tunnel in state, and its ingress at Cloudflare
   has a rule that may reach SSH. The check is an allowlist. A rule passes
   only as `hello_world`, `http_status:NNN`, a `unix:` or `unix+tls:` socket,
   or an `http`, `https`, or `tcp` origin on a port other than 22 (a `tcp`
   origin must name its port), and only without bastion mode or a proxy type.
+  The port counts as a number, as cloudflared dials it, so `0022` is port
+  22, and a port above 65535 counts as a route.
   Every other rule counts: `ssh://` or `rdp://` origins, the `bastion` and
   `socks-proxy` services, a rule without a service, and any service
   serverpro cannot classify.

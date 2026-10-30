@@ -480,8 +480,14 @@ Use: where cloudflared finds a config without `--config`
 `~/cloudflare-warp`, then `/etc/cloudflared` and
 `/usr/local/etc/cloudflared`; `DefaultConfigFiles`: `config.yml` and
 `config.yaml`), and that `--config` reads no environment variable while
-`--url` reads `TUNNEL_URL`. The OpenSSH-off host scan searches the same
-places.
+`--url` reads `TUNNEL_URL`, `--bastion` reads `TUNNEL_BASTION`, and
+`--socks5` reads `TUNNEL_SOCKS`. These flags are `altsrc` flags, so a config
+file key of the same name sets them too, and `config.BastionFlag` comes
+before `--url` when cloudflared picks a single origin
+(`parseSingleOriginService` in `ingress/ingress.go`). cloudflared expands
+`~` in the search with `github.com/mitchellh/go-homedir`, which reads
+`HOME` first. The OpenSSH-off host scan searches the same places, judges
+the same flags and keys, and adds every `HOME` a unit sets.
 
 ### Cloudflare Tunnel configuration file
 

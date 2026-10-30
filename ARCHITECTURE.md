@@ -442,7 +442,9 @@ flowchart LR
    failed read, because a remotely managed tunnel's routes never reach the
    host. Then `lifecycle.OpenSSHDisableScript` stops before any change when
    Tailscale SSH is not proven, OpenSSH is in use, or a cloudflared file or
-   unit on the host routes to SSH, records the original unit states
+   unit on the host may reach SSH under the same allowlist as the remote
+   ingress (an awk program on the host, backed by a grep for `ssh://` and
+   port 22), records the original unit states
    in `/var/lib/serverpro/openssh-disabled.state`, masks `ssh.socket` and
    `ssh.service`, and creates `/etc/ssh/sshd_not_to_be_run`. The compute
    adapter can declare an sshd console agent (`compute.SSHConsoleAgents`)
