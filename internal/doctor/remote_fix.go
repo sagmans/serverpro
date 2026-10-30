@@ -15,6 +15,10 @@ import (
 const (
 	repairAlreadyRanEvidence    = "; its repair already ran earlier in this doctor run and did not settle it"
 	repairAlreadyRanRemediation = "see the first failing check that shares this repair for its output"
+	// repairPartialEvidence starts a result whose repair settled what it
+	// covers while report-only findings remain, so the operator sees that the
+	// repair worked and that the rest needs their decision.
+	repairPartialEvidence = "repair ran; findings it does not cover remain: "
 )
 
 func remoteSudoPasswordRequiredCheck(ctx context.Context, r remote.Runner, user, host string, opt Options) Result {

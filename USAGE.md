@@ -686,7 +686,7 @@ drop-in, `privileged accounts` removes the provider's own image accounts, and
 | `openssh disabled` | fail or warn | `ssh.socket` or `ssh.service` is enabled or active, or a process listens on TCP port 22, or `sshd` listens on any port (fail). A unit is disabled but not masked, or `/etc/ssh/sshd_not_to_be_run` is missing (warn). Skipped with `access.openssh: enabled`; `--fix` runs the create step, safety checks included. See OpenSSH off. |
 | `reboot pending` | warn | `/var/run/reboot-required` exists, or an installed kernel is newer than the running one. Doctor never reboots, also with `--fix`; see Reboots and kernel cleanup. |
 | `unattended upgrades config` | fail or warn | An option of `/etc/apt/apt.conf.d/52serverpro-unattended-upgrades` has another effective value in `apt-config` (fail), or is not set at all (warn: a host created before the drop-in). `--fix` rewrites the drop-in; a later apt.conf.d file that overrides it stays a finding. |
-| `privileged accounts` | fail | An account other than the admin user is in `sudo`, `admin`, `lxd`, or `docker` (also as primary group), a rule in `/etc/sudoers` or `/etc/sudoers.d` grants sudo to another account or group, a non-root account has uid 0, or a provider image account (Vultr: `linuxuser`) exists. `--fix` removes only the provider image accounts; see Provider image accounts. |
+| `privileged accounts` | fail or warn | Fail: an account other than the admin user is in `sudo`, `admin`, `lxd`, or `docker` (also as primary group), a rule in `/etc/sudoers` or `/etc/sudoers.d` grants sudo to another account or group without a command limit (`ALL`, a wildcard path, or an alias the probe cannot resolve to paths), a non-root account has uid 0, or a provider image account (Vultr: `linuxuser`) exists. Warn: such a rule lists only absolute command paths, directly or through a `Cmnd_Alias`; the finding names them. `--fix` removes only the provider image accounts; see Provider image accounts. |
 | `metadata user-data` | fail or warn | The provider metadata user-data holds the admin's current password hash (fail), or another password hash or `passwd` key (warn). |
 | `tailscale operator` | fail | tailscaled has an `OperatorUser`. |
 | `tailscale serve` | fail or warn | Funnel publishes a port (fail), or a Serve entry forwards to a local port with no TCP listener (warn). |
@@ -788,9 +788,13 @@ from older hosts. For each account, the removal:
    back and stops. A file with rules for other accounts stays.
 5. Runs `userdel -r`.
 
-Any other account that `privileged accounts` lists (for example a `deploy`
-user with its own sudoers.d file) is report-only, also with `--fix`. Confirm
-what runs as it, then remove it yourself.
+Any other account that `privileged accounts` lists is report-only, also
+with `--fix`, and doctor never suggests removing it. A CI deploy user that
+logs in through Tailscale SSH is the usual case: its sudoers.d rule should
+list the commands it needs, and then the finding is only a warning that names
+them. Check that the list is still what CI needs. A command such as
+`/usr/bin/docker` or a shell is still root in practice. If the rule grants
+`ALL`, limit it to those commands and run `visudo -c`.
 
 ### Reboots and kernel cleanup
 

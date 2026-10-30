@@ -137,6 +137,13 @@ func remoteFixableDriftSpecificationWhen(name, command, remediation, fixCommand 
 			if after.Status == Pass {
 				return []Result{fixedResult(name, after.Evidence, fixOut, remediation)}
 			}
+			if err == nil && fixable != nil && !fixable(after) {
+				// The repair settled every finding it covers. What is left is
+				// report-only, so it keeps its own severity instead of reading
+				// as a repair that failed.
+				after.Evidence = repairPartialEvidence + after.Evidence
+				return []Result{after}
+			}
 			return []Result{fail("remote", name, "fix applied but drift remains: "+after.Evidence, remediation)}
 		},
 	}

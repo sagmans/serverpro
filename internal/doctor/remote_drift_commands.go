@@ -41,7 +41,7 @@ const (
 	unattendedUpgradesConfigRemediation = "serverpro server doctor --fix restores " + cloudinit.UnattendedUpgradesConfigPath + " (serverpro owns that file; put local options in a later-sorting file); if a value stays wrong, a later apt.conf.d file overrides it: find it with apt-config dump and remove that line"
 
 	privilegedAccountsCheckName   = "privileged accounts"
-	privilegedAccountsRemediation = "serverpro server doctor --fix removes only the compute provider's own image accounts; for any other listed account, confirm what runs as it, then remove it from the group (gpasswd -d USER GROUP) or move its sudoers.d file out and run visudo -c"
+	privilegedAccountsRemediation = "serverpro server doctor --fix removes only the compute provider's own image accounts and never changes any other account; keep any other listed account (it may be a CI deploy user) and confirm what runs as it: limit a rule that grants sudo without a command limit to the absolute command paths it needs, take the account out of a privileged group it does not need (gpasswd -d USER GROUP), and run visudo -c after each sudoers change"
 	// sudoersPath and sudoersDropInDir are where sudo reads rules; doctor
 	// reads the same files so a grant outside the sudo group is reported.
 	sudoersPath      = "/etc/sudoers"
@@ -185,7 +185,36 @@ func rebootPendingCommand() string {
 // members the group scan reports). It joins continued lines first, so a
 // wrapped command list cannot look like a rule, and skips Defaults, alias
 // definitions, and include directives, which grant nothing by themselves.
-const sudoersGrantsProgram = `FNR == 1 { line = "" }
+//
+// A rule's severity follows its command scope. A rule limited to absolute
+// command paths, directly or through a Cmnd_Alias, is how a CI deploy user
+// gets the few commands it needs, so it only warns and names the commands.
+// ALL, a wildcard path, a nested alias, or anything the program cannot read
+// as a command list fails, because it may grant every command.
+const sudoersGrantsProgram = `function commandScope(list, depth,    n, i, j, entry, part, word, cmd, nested, inner, seen, out) {
+  gsub(/\([^)]*\)/, "", list)
+  n = split(list, part, ",")
+  out = ""
+  for (i = 1; i <= n; i++) {
+    entry = part[i]
+    sub(/^[ \t]+/, "", entry)
+    while (match(entry, /^[A-Z_]+:[ \t]*/)) entry = substr(entry, RLENGTH + 1)
+    if (entry == "" || entry ~ /^!/) continue
+    split(entry, word, /[ \t]+/)
+    cmd = word[1]
+    if (depth == 0 && (cmd in alias)) {
+      nested = commandScope(alias[cmd], 1)
+      if (nested == "") return ""
+      split(nested, inner, " ")
+      for (j in inner) if (!(inner[j] in seen)) { seen[inner[j]] = 1; out = out (out == "" ? "" : " ") inner[j] }
+      continue
+    }
+    if (cmd !~ /^\// || index(cmd, "*") || index(cmd, "?") || index(cmd, "[")) return ""
+    if (!(cmd in seen)) { seen[cmd] = 1; out = out (out == "" ? "" : " ") cmd }
+  }
+  return out
+}
+FNR == 1 { line = "" }
 { line = line $0 }
 /\\$/ { sub(/\\$/, "", line); next }
 {
@@ -194,9 +223,25 @@ const sudoersGrantsProgram = `FNR == 1 { line = "" }
   if (rule == "" || (rule ~ /^#/ && rule !~ /^#include/)) next
   split(rule, field, /[ \t]+/)
   who = field[1]
-  if (who ~ /^(Defaults|#include|@include|Cmnd_Alias|Host_Alias|Runas_Alias|User_Alias)/) next
+  if (who == "Cmnd_Alias") {
+    defs = rule
+    sub(/^Cmnd_Alias[ \t]+/, "", defs)
+    count = split(defs, def, ":")
+    for (k = 1; k <= count; k++) {
+      name = def[k]; body = def[k]
+      if (!sub(/[ \t]*=.*/, "", name)) continue
+      sub(/^[ \t]+/, "", name)
+      sub(/^[^=]*=/, "", body)
+      alias[name] = body
+    }
+    next
+  }
+  if (who ~ /^(Defaults|#include|@include|Host_Alias|Runas_Alias|User_Alias)/) next
   if (who == admin || who == "root" || who == "%sudo" || who == "%admin") next
-  printf "` + driftFailPrefix + `%s grants sudo to %s\n", FILENAME, who
+  commands = rule
+  scope = sub(/^[^=]*=/, "", commands) ? commandScope(commands, 0) : ""
+  if (scope == "") printf "` + driftFailPrefix + `%s grants sudo to %s without a command limit\n", FILENAME, who
+  else printf "` + driftWarnPrefix + `%s grants sudo to %s for listed commands: %s\n", FILENAME, who, scope
 }`
 
 // privilegedAccountsCommand lists every account other than the admin user

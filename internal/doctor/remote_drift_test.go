@@ -283,6 +283,8 @@ func TestPrivilegedAccountsCommandListsEveryRootPath(t *testing.T) {
 		"README":              "# Files in this directory are read by sudo.\n#\n",
 		"ci":                  "Cmnd_Alias DEPLOY = /usr/bin/systemctl restart app, \\\n    /usr/bin/systemctl status app\nci ALL=(root) NOPASSWD: DEPLOY\n",
 		"old.dpkg-dist":       "ghost ALL=(ALL) ALL\n",
+		"ops":                 "ops ALL=(ALL) NOPASSWD: ALL\n",
+		"wild":                "wild ALL=(root) /usr/bin/*\n",
 	})
 	out, err := driftProbe{
 		command:      privilegedAccountsCommand("deploy", []string{"linuxuser", "absent"}),
@@ -299,9 +301,21 @@ func TestPrivilegedAccountsCommandListsEveryRootPath(t *testing.T) {
 			t.Fatalf("evidence %q lacks %q", result.Evidence, want)
 		}
 	}
-	// The admin, root, the sudo group, a continued command list, a drop-in
-	// sudo itself skips, and an image account that is gone are not drift.
-	for _, unwanted := range []string{"deploy is", "root has", "to deploy", "to %sudo", "/usr/bin", "ghost", "absent"} {
+	// A rule limited to listed commands warns and names them; ALL or a
+	// wildcard path fails.
+	for _, want := range []string{
+		driftWarnPrefix + sudoers + ".d/ci grants sudo to ci for listed commands: /usr/bin/systemctl\n",
+		driftFailPrefix + sudoers + ".d/ops grants sudo to ops without a command limit\n",
+		driftFailPrefix + sudoers + ".d/wild grants sudo to wild without a command limit\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output %q lacks %q", out, want)
+		}
+	}
+	// The admin, root, the sudo group, a continued command list, command
+	// arguments, a drop-in sudo itself skips, and an image account that is
+	// gone are not drift.
+	for _, unwanted := range []string{"deploy is", "root has", "to deploy", "to %sudo", "to /usr/bin", "status app", "ghost", "absent"} {
 		if strings.Contains(result.Evidence, unwanted) {
 			t.Fatalf("evidence %q reports %q", result.Evidence, unwanted)
 		}
@@ -327,6 +341,10 @@ func fakeSudoers(t *testing.T, main string, dropIns map[string]string) string {
 	return path
 }
 
+// ciListedRule is a CI deploy user's sudoers finding: report-only, so the
+// image account repair must leave it as a warning.
+const ciListedRule = "warn: /etc/sudoers.d/ci grants sudo to ci for listed commands: /usr/bin/systemctl"
+
 func TestPrivilegedAccountsSpecificationRepairsOnlyImageAccounts(t *testing.T) {
 	if specification := remotePrivilegedAccountsSpecification("deploy", nil); len(specification.liveCommands) != 0 {
 		t.Fatal("a provider without image accounts got a repair")
@@ -340,21 +358,26 @@ func TestPrivilegedAccountsSpecificationRepairsOnlyImageAccounts(t *testing.T) {
 	}
 	command, removal := specification.readCommands[0], specification.liveCommands[0]
 	for _, tc := range []struct {
-		name, finding string
-		wantFix       bool
+		name, finding, after string
+		wantFix              bool
+		want                 Status
 	}{
-		{name: "unknown account stays report-only", finding: "fail: /etc/sudoers.d/ci grants sudo to ci\nfail: linuxuser2 is in privileged group sudo"},
-		{name: "image account is removed", finding: "fail: provider image account linuxuser exists", wantFix: true},
+		{name: "unknown account stays report-only", finding: "fail: /etc/sudoers.d/ci grants sudo to ci without a command limit\nfail: linuxuser2 is in privileged group sudo", want: Fail},
+		{name: "image account is removed", finding: "fail: provider image account linuxuser exists", after: "checked groups: sudo", wantFix: true, want: Pass},
+		{name: "listed-command rule left after the removal keeps its warning", finding: "fail: provider image account linuxuser exists\n" + ciListedRule, after: ciListedRule, wantFix: true, want: Warn},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			runner := &scriptedRemote{responses: map[string][]remoteCall{command: {{out: tc.finding}, {out: "checked groups: sudo"}}}}
+			runner := &scriptedRemote{responses: map[string][]remoteCall{command: {{out: tc.finding}, {out: tc.after}}}}
 			results := specification.run(context.Background(), runner, "deploy", "prod-01", Options{Fix: true})
 			ran := false
 			for _, script := range runner.commands {
 				ran = ran || script == removal
 			}
-			if ran != tc.wantFix || (tc.wantFix && results[0].Status != Pass) || (!tc.wantFix && results[0].Status != Fail) {
+			if ran != tc.wantFix || results[0].Status != tc.want {
 				t.Fatalf("removal ran = %v, results = %+v", ran, results)
+			}
+			if tc.want == Warn && !strings.HasPrefix(results[0].Evidence, repairPartialEvidence) {
+				t.Fatalf("evidence = %q, want the partial repair prefix", results[0].Evidence)
 			}
 		})
 	}
