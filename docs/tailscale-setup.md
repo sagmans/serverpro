@@ -73,21 +73,44 @@ Example for the default tag `tag:serverpro-server` (use your namespace tag,
     "tag:serverpro-server": ["autogroup:admin"],
   },
   "grants": [
-    // Tailscale SSH to managed servers, TCP 22 only.
-    {"src": ["autogroup:admin"], "dst": ["tag:serverpro-server"], "ip": ["tcp:22"]},
-    // Add one grant per real need, for example:
-    // {"src": ["group:web-testers"], "dst": ["tag:serverpro-server"], "ip": ["tcp:443"]},
+    // Each member reaches their own untagged devices.
+    {"src": ["autogroup:member"], "dst": ["autogroup:self"], "ip": ["*"]},
+    // Members may use exit nodes; drop this grant if you run none.
+    {"src": ["autogroup:member"], "dst": ["autogroup:internet"], "ip": ["*"]},
+    // Tailscale SSH and the ports Tailscale Serve publishes on managed servers.
+    {"src": ["autogroup:member"], "dst": ["tag:serverpro-server"], "ip": ["tcp:22", "tcp:443"]},
   ],
   "ssh": [
     // serverpro writes and reconciles this rule; keep it.
     {"action": "check", "src": ["autogroup:admin"], "dst": ["tag:serverpro-server"], "users": ["<admin user>"]},
   ],
+  "tests": [
+    // Use a real member login. Tailscale rejects a change that breaks this.
+    {
+      "src": "<member login>",
+      "accept": ["tag:serverpro-server:22", "tag:serverpro-server:443"],
+      "deny": ["tag:serverpro-server:5432"],
+    },
+  ],
 }
 ```
 
 - Tailscale SSH needs both a network grant to `tcp:22` and an `ssh` rule. The
-  `ssh` rule alone does not open the port.
+  `ssh` rule alone does not open the port, and the network grant alone does
+  not let anyone log in: the `ssh` rule still limits that to its sources.
+- List only the ports that Tailscale Serve publishes on the server
+  (`tailscale serve status`). `443` is the Serve HTTPS default; add each other
+  Serve port, for example `tcp:8443`.
 - Write `tcp:22`, not `22`. A port without a protocol also opens UDP and ICMP.
+- Never use a serverpro tag as a grant `src`. A managed server does not need
+  to start connections to other tailnet devices, so a compromised server then
+  reaches none of them.
+- Keep an existing CI or operator grant to `tcp:22` when that source runs
+  serverpro or deploys over SSH.
+- With the `tests` block, Tailscale rejects any policy file change that
+  closes an `accept` port or opens a `deny` port. List in `deny` the server
+  ports that must stay closed to the tailnet, so a later edit cannot open
+  them silently.
 - Add grants for the traffic between your other devices before you remove the
   default rule. Otherwise those devices lose access to each other.
 - Remove the default `{"src": ["*"], "dst": ["*"], "ip": ["*"]}` grant and the

@@ -382,7 +382,10 @@ example in `docs/tailscale-setup.md`. Reviewed 2026-10-30: a file with no
 a grant `ip` of `tcp:22` limits it to TCP 22, while a bare port also opens UDP
 and ICMP; Tailscale SSH needs a network rule to port 22 and an `ssh` rule.
 The pages do not say whether the default allow-all still applies to a file
-with `grants` and no `acls`.
+with `grants` and no `acls`. `tests` cover grants and ACLs, take a user,
+group, or tag as `src` and `tag:name:port` destinations, and a failing test
+makes Tailscale reject the policy change; `autogroup:self` applies to a
+member's own untagged devices only.
 
 ### Tailscale auth keys
 
