@@ -257,6 +257,12 @@ captured output, but generic transport errors remain free of batch output.
 The CLI redacts known configured and runtime credentials before failure
 evidence truncation. JSON reports limit each failure excerpt to 4 KiB and
 preserve UTF-8 boundaries. Raw failure output is not written to a separate log.
+A failed provider API call names its endpoint with Cloudflare-style opaque
+IDs (32-hex account and zone IDs, UUID tunnel IDs) shown as `{id}` and no
+query string, in both the status and the transport error, and repeats at
+most the first 256 bytes of the response, with IDs masked, so evidence does
+not carry the account or tunnel a call targeted or the provider's whole
+answer.
 
 Server doctor and create save the complete redacted report in the system
 temporary directory, including when `--full` is selected. Check evidence

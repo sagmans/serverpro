@@ -73,7 +73,9 @@ access paths for app-owned deployment flows.
   - Private server-scoped credential files and validation.
 - HTTP JSON helper: `internal/provider/httpjson`
   - Shared API client for auth, JSON, bounded response bodies, and typed status
-    and body-limit errors.
+    and body-limit errors. Status and transport error text masks opaque IDs,
+    drops the query, and shortens the response, while the status error's
+    fields keep the full path and body for callers that classify a failure.
 - Hetzner adapter: `internal/provider/hetzner`
   - Hetzner Cloud API mapping into generic compute operations.
 - Vultr adapter: `internal/provider/vultr`

@@ -8,11 +8,34 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const maxResponseBodyBytes int64 = 1 << 20
+
+// Error text from a failed call ends up in doctor evidence, create output,
+// and logs, so it names the call without the account, zone, or tunnel it
+// targeted and keeps only the start of the provider's answer: enough to read
+// the reason, not a dump of whatever the API sent back.
+const (
+	// maxErrorBodyBytes bounds the response text an error repeats; provider
+	// error objects put their code and message first.
+	maxErrorBodyBytes = 256
+	// redactedID replaces an opaque identifier in error text.
+	redactedID = "{id}"
+	// querySeparator starts a query string, whose values can carry names.
+	querySeparator = "?"
+)
+
+// opaqueIDPattern matches the account-wide identifiers that API paths and
+// messages carry: Cloudflare account and zone IDs are 32 hex digits, tunnel
+// IDs are UUIDs. A short numeric server ID names only one resource and stays,
+// so the error still says which server failed.
+var opaqueIDPattern = regexp.MustCompile(`\b(?:[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}|[0-9A-Fa-f]{32})\b`)
 
 // Redirect chains are the one channel where an origin can launder a request toward a
 // second destination while we still hold bearer tokens and create payloads, so every
@@ -63,6 +86,8 @@ func (e *BodyTooLargeError) Error() string {
 	return fmt.Sprintf("response body exceeds %d bytes", e.Limit)
 }
 
+// StatusError keeps the full path and body for callers that classify a
+// failure, such as an active-connections refusal; only its text is cut down.
 type StatusError struct {
 	Method     string
 	Path       string
@@ -72,7 +97,29 @@ type StatusError struct {
 }
 
 func (e *StatusError) Error() string {
-	return fmt.Sprintf("%s %s failed: %s: %s", e.Method, e.Path, e.Status, e.Body)
+	return fmt.Sprintf("%s %s failed: %s: %s", e.Method, redactPath(e.Path), e.Status, shortenBody(e.Body))
+}
+
+// redactPath drops the query and masks opaque IDs, so the text still names
+// the endpoint that failed.
+func redactPath(path string) string {
+	path, _, _ = strings.Cut(path, querySeparator)
+	return opaqueIDPattern.ReplaceAllString(path, redactedID)
+}
+
+// shortenBody masks opaque IDs, folds whitespace so an HTML error page stays
+// on one line, and keeps at most maxErrorBodyBytes on a UTF-8 boundary,
+// saying how long the whole answer was.
+func shortenBody(body string) string {
+	text := strings.Join(strings.Fields(opaqueIDPattern.ReplaceAllString(body, redactedID)), " ")
+	if len(text) <= maxErrorBodyBytes {
+		return text
+	}
+	cut := maxErrorBodyBytes
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return fmt.Sprintf("%s... (%d bytes)", text[:cut], len(body))
 }
 
 func IsStatus(err error, code int) bool {
@@ -139,6 +186,12 @@ func (c Client) DoRaw(ctx context.Context, method, path string, body []byte, hea
 	}
 	res, err := h.Do(req)
 	if err != nil {
+		// A transport failure prints the request URL; mask it the same way,
+		// keeping the cause chain for timeout and cancellation checks.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			urlErr.URL = redactPath(urlErr.URL)
+		}
 		return nil, nil, err
 	}
 	defer func() { _ = res.Body.Close() }()

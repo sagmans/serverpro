@@ -669,6 +669,18 @@ test unit was graded, since the container's own gettys are always gaps.
 Not covered: a real VM reboot, a real kernel update, and a real host
 (doctor `--fix` was not run against production).
 
+### Provider error evidence dogfood
+
+On 2026-10-30 a throwaway harness, never committed, ran the OpenSSH
+preflight's tunnel read (`CheckTunnelSSHIngress`) through the real Cloudflare
+client against a fake API (`httptest`), with the old (before this change)
+and new code. With an API `500` and a 2 KiB body, the old error text was
+2330 bytes and held the account ID, the tunnel ID, and the whole body; the
+new text was 431 bytes, named `/accounts/{id}/cfd_tunnel/{id}/configurations`,
+kept the error code and message, and ended with the body's full length. With
+the API unreachable, the old transport error repeated both IDs in the URL;
+the new one masked them and kept the connection error.
+
 ### Tailnet policy allow-all dogfood
 
 On 2026-10-30 a throwaway harness, never committed, ran the provider
@@ -860,7 +872,7 @@ against production, and no dogfood server exists), and the provider consoles.
 | `internal/provider/digitalocean` | DigitalOcean compute adapter. | Catalog mapping, one namespace/server-derived firewall selector, droplet ownership/custom tags, no direct firewall droplet-ID attachments, IPv4-only create, status/power/delete, all-resource delete preflight, guarded legacy broad-selector import/cleanup with zero-unrelated-match inventory, paginated droplet/firewall inventory, malformed pagination fail-closed behavior, exact owned-policy recovery and checkpoint retry validation, missing/ambiguous/foreign/broadened fail-closed behavior, error identity and redaction. |
 | `internal/provider/tailscale` | Tailscale API adapter. | Auth key create/list/tracked-ID delete, devices, device waits that skip devices enrolled before the key and return ambiguity without polling, ACL policy read/validate/update, conservative global reconcile planning, retained tag-owner dependency protection, approved-plan refetch equality, no-change behavior, custom-shape retention, mixed-rule destination rewrite, exact `If-Match` propagation, missing-ETag mutation rejection, and a read-only HuJSON packet-policy read with API errors propagated. |
 | `internal/provider/cloudflare` | Cloudflare API adapter. | Account validation, tunnel list/create/token/get/delete, remote ingress read (with and without a remote configuration, configuration-wide origin defaults merged into every rule, WARP routing, and an empty or foreign answer rejected), connector health polling, pagination. |
-| `internal/provider/httpjson` | Shared HTTP JSON client. | Auth headers, JSON encode/decode, bounded body, status errors, redaction by caller. |
+| `internal/provider/httpjson` | Shared HTTP JSON client. | Auth headers, JSON encode/decode, bounded body, status errors (text with account and tunnel IDs and the query masked and a long body cut on a UTF-8 boundary, fields kept whole), redaction by caller. |
 | `internal/provider/providerutil` | Shared provider mutation validation and secret-safe diagnostics. | Provider mismatch, token/bootstrap redaction, encoded bootstrap forms. |
 | `internal/redact` | Secret redaction. | Token/password/hash/auth-key removal from strings/errors; redacted errors preserve sentinel, cancellation, and typed identity through `errors.Is`/`errors.As`. |
 | `internal/releasecontract` | Test-only release workflow contract. | Parsed YAML dependency graph, exact complete validate/build/package/release step order and uniqueness, exact target/runner/GOOS/GOARCH build matrix and build environment, exact native build output argument, target-paired binary handoff and archive input, target-paired SBOM attestations, and unique prerelease classification before publication. |
