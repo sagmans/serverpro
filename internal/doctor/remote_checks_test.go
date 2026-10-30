@@ -210,15 +210,21 @@ func TestRemoteChecksIncludesRestrictedEgressWarning(t *testing.T) {
 	}
 }
 
-func TestRemoteChecksSkipsCloudflaredWhenNoIngress(t *testing.T) {
+// TestRemoteChecksAuditsUnmanagedCloudflaredWhenNoIngress pins that ingress
+// "none" no longer hides a connector another tool installed: doctor runs the
+// unmanaged audit under the same check name, never the managed check.
+func TestRemoteChecksAuditsUnmanagedCloudflaredWhenNoIngress(t *testing.T) {
 	cfg := config.Example("prod")
 	cfg.Network.Ingress = "none"
-	r := &scriptedRemote{responses: map[string][]remoteCall{}}
+	r := &scriptedRemote{responses: map[string][]remoteCall{
+		tunnel.UnmanagedCheckCommand(): {{out: "cloudflared not installed\n"}},
+	}}
 	results := remoteChecksWithOptions(context.Background(), cfg, r, "prod-01", Options{})
-	for _, res := range results {
-		if res.Name == "cloudflared" {
-			t.Fatalf("cloudflared check should be skipped when ingress=none: %+v", results)
-		}
+	if !hasResult(Report{Results: results}, tunnel.CheckName, Pass, "cloudflared not installed") {
+		t.Fatalf("expected unmanaged cloudflared audit pass: %+v", results)
+	}
+	if countCommand(r.commands, tunnel.CheckCommand()) != 0 {
+		t.Fatal("managed cloudflared check ran with ingress=none")
 	}
 }
 

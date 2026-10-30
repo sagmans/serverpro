@@ -308,6 +308,14 @@ Managed host tools install through integrity-checked sources, not
   newer; ingress-enabled doctor runs verify both that floor and service state.
   Older connectors still trust eight eMudhra intermediate CAs whose private
   keys were compromised, so doctor fails them and `--fix` upgrades them.
+  With ingress `none`, doctor still audits a connector that another tool
+  installed, because the config setting does not prove the host has none. An
+  enabled or running connector gets the full check and repair. A dormant
+  package gets the floor and receipt check, and `--fix` reinstalls it from the
+  trusted origin without the token and without starting it, so the repair
+  never opens ingress. Any host state the audit cannot classify, such as a
+  half-installed package, a `cloudflared` elsewhere on `PATH`, or a connector
+  process outside the service, fails closed with no change.
   Install and repair pin the `cloudflared` package to origin
   `pkg.cloudflare.com` (apt preferences, priority 990) so apt prefers it. The
   pin only ranks sources. The control is the origin gate: install and repair

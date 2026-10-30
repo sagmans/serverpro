@@ -13,13 +13,22 @@ import (
 	"github.com/sagmans/serverpro/internal/hostplatform"
 )
 
+// TestCheckCommandVerifiesPackageFloorAndService covers the managed check and
+// the ingress-"none" audit, which must render the same floor, the production
+// binary and receipt paths, and the service gate.
 func TestCheckCommandVerifiesPackageFloorAndService(t *testing.T) {
-	command := CheckCommand()
 	baseline := hostplatform.CloudflaredPackageBaseline()
-	for _, want := range []string{baseline.Name, baseline.MinimumVersion, "db:Status-Status", "dpkg --compare-versions", "systemctl is-active"} {
-		if !strings.Contains(command, want) {
-			t.Fatalf("check command missing %q: %s", want, command)
-		}
+	for name, command := range map[string]string{"managed": CheckCommand(), "unmanaged": UnmanagedCheckCommand()} {
+		t.Run(name, func(t *testing.T) {
+			for _, want := range []string{baseline.Name, baseline.MinimumVersion, "db:Status-Status", "dpkg --compare-versions", "systemctl is-active", cloudflaredBinaryPath, cloudflaredReceiptPath} {
+				if !strings.Contains(command, want) {
+					t.Fatalf("check command missing %q: %s", want, command)
+				}
+			}
+			if out, err := exec.Command("sh", "-n", "-c", command).CombinedOutput(); err != nil {
+				t.Fatalf("check command syntax: %v\n%s", err, out)
+			}
+		})
 	}
 }
 
@@ -522,5 +531,374 @@ fi
 	}
 	if calls, err := os.ReadFile(callsPath); err != nil || string(calls) != "2" {
 		t.Fatalf("apt-get calls = %q, %v; want one retry after the lock error", calls, err)
+	}
+}
+
+const (
+	// testReinstalledDigest is the digest the fake apt-get gives the binary it
+	// installs, so a repaired receipt is told apart from the original build.
+	testReinstalledDigest = "fedcba9876543210"
+	// testForeignDigest names a receipt recorded for some other build.
+	testForeignDigest = "feedface00000000"
+	// testPgrepNoMatch is pgrep's exit status when no process matches.
+	testPgrepNoMatch = "1"
+	// testDpkgQueryUnknownPackage is dpkg-query's status for a package dpkg
+	// has no record of; any other failure status is a query error.
+	testDpkgQueryUnknownPackage = "1"
+)
+
+// Receipt shapes an unmanaged-host case can start from.
+const (
+	receiptNone = iota
+	receiptMatching
+	receiptForeign
+)
+
+// unmanagedHost is the live state an unmanaged-host case starts from. The
+// fakes read and write it through files, so a repair's apt and systemctl
+// calls are visible to the recheck that follows it.
+type unmanagedHost struct {
+	dpkgState, version         string
+	packagedBinary, stray      bool
+	receipt                    int
+	load, unitFile, active     string
+	pgrepStatus, queryStatus   string
+	unit, token, changedSource bool
+	enableOnInstall            bool
+}
+
+// unmanagedHarness is a scratch host for the unmanaged check and repair:
+// fake dpkg, apt, systemd, and process tools on a PATH that holds only the
+// system directories, so a developer's own cloudflared cannot leak in.
+type unmanagedHarness struct {
+	dir, stateDir, binDir, usrBin, binaryPath, receiptPath string
+	env                                                    []string
+}
+
+// dormantHost is a present package whose service was never enabled or
+// started, the shape a leftover connector install leaves behind.
+func dormantHost(version string, receipt int) unmanagedHost {
+	return unmanagedHost{dpkgState: "installed", version: version, packagedBinary: true, receipt: receipt, load: "loaded", unitFile: "disabled", active: "inactive"}
+}
+
+// activeHost is a present package whose service runs and has the unit and
+// token the managed repair requires.
+func activeHost(version string, receipt int) unmanagedHost {
+	return unmanagedHost{dpkgState: "installed", version: version, packagedBinary: true, receipt: receipt, load: "loaded", unitFile: "enabled", active: "active", unit: true, token: true}
+}
+
+func newUnmanagedHarness(t *testing.T, host unmanagedHost) unmanagedHarness {
+	t.Helper()
+	for _, systemPath := range []string{"/usr/bin/cloudflared", "/bin/cloudflared"} {
+		if _, err := os.Stat(systemPath); err == nil {
+			t.Skipf("%s exists on this machine and would shadow the scratch host", systemPath)
+		}
+	}
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := unmanagedHarness{
+		dir:         dir,
+		stateDir:    filepath.Join(dir, "state"),
+		binDir:      filepath.Join(dir, "bin"),
+		usrBin:      filepath.Join(dir, "usr-bin"),
+		receiptPath: filepath.Join(dir, "cloudflared.receipt"),
+	}
+	h.binaryPath = filepath.Join(h.usrBin, "cloudflared")
+	strayBin := filepath.Join(dir, "stray-bin")
+	for _, d := range []string{h.stateDir, h.binDir, h.usrBin, strayBin} {
+		if err := os.Mkdir(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	files := map[string]string{
+		"state": host.dpkgState, "version": host.version, "digest": testBinaryDigest,
+		"load": host.load, "unit_file": host.unitFile, "active": host.active,
+	}
+	for name, content := range files {
+		writeTestFile(t, filepath.Join(h.stateDir, name), content)
+	}
+	switch host.receipt {
+	case receiptMatching:
+		writeTestFile(t, h.receiptPath, host.version+" "+testBinaryDigest+"\n")
+	case receiptForeign:
+		writeTestFile(t, h.receiptPath, host.version+" "+testForeignDigest+"\n")
+	}
+	if host.packagedBinary {
+		writeFakeCommand(t, h.usrBin, "cloudflared", "exit 0\n")
+	}
+	if host.stray {
+		writeFakeCommand(t, strayBin, "cloudflared", "exit 0\n")
+	}
+	if host.unit {
+		writeTestFile(t, filepath.Join(dir, "cloudflared.service"), "[Unit]\n")
+	}
+	if host.token {
+		writeTestFile(t, filepath.Join(dir, "token"), "scratch-token")
+	}
+	source := cloudflaredAPTSource()
+	if host.changedSource {
+		source = "deb " + testMirrorURL + " noble main"
+	}
+	writeTestFile(t, filepath.Join(dir, "cloudflared.list"), source+"\n")
+	writeTestFile(t, filepath.Join(dir, "cloudflare-main.gpg"), "scratch keyring")
+
+	writeFakeCommand(t, h.binDir, "dpkg-query", `state=$(cat "$STATE_DIR/state")
+[ -n "$state" ] || exit "$DPKG_QUERY_MISSING_STATUS"
+case "$*" in
+  *'|${Version}'*) printf '%s|%s' "$state" "$(cat "$STATE_DIR/version")" ;;
+  *) printf '%s' "$state" ;;
+esac
+`)
+	writeFakeCommand(t, h.binDir, "dpkg", fakeDpkgCompareVersions)
+	writeFakeCommand(t, h.binDir, "apt-cache", fakeAptCachePolicy)
+	writeFakeCommand(t, h.binDir, "sha256sum", `printf '%s  %s\n' "$(cat "$STATE_DIR/digest")" "$1"`+"\n")
+	writeFakeCommand(t, h.binDir, "pgrep", `exit "$PGREP_STATUS"`+"\n")
+	writeFakeCommand(t, h.binDir, "gpg", "printf 'pub:::::::::\\nfpr:::::::::"+cloudflareAPTKeyFingerprint+":\\n'\n")
+	writeFakeCommand(t, h.binDir, "systemctl", `case "$1" in
+  show)
+    case "$2" in
+      --property=LoadState) cat "$STATE_DIR/load" ;;
+      --property=UnitFileState) cat "$STATE_DIR/unit_file" ;;
+      --property=ActiveState) cat "$STATE_DIR/active" ;;
+      *) echo "unsupported fake systemctl call: $*" >&2; exit 2 ;;
+    esac
+    ;;
+  is-active)
+    state=$(cat "$STATE_DIR/active")
+    printf '%s\n' "$state"
+    [ "$state" = active ]
+    ;;
+  enable|restart)
+    printf '%s\n' "$*" >> "$STATE_DIR/systemctl.log"
+    if [ "$1" = enable ]; then printf enabled > "$STATE_DIR/unit_file"; else printf active > "$STATE_DIR/active"; fi
+    ;;
+  *) echo "unsupported fake systemctl call: $*" >&2; exit 2 ;;
+esac
+`)
+	writeFakeCommand(t, h.binDir, "apt-get", `printf '%s\n' "$*" >> "$STATE_DIR/apt.log"
+for arg; do last=$arg; done
+case "$last" in
+  update) ;;
+  cloudflared=*)
+    printf installed > "$STATE_DIR/state"
+    printf '%s' "${last#cloudflared=}" > "$STATE_DIR/version"
+    printf '%s' "$REINSTALLED_DIGEST" > "$STATE_DIR/digest"
+    if [ -n "$ENABLE_ON_INSTALL" ]; then printf enabled > "$STATE_DIR/unit_file"; fi
+    ;;
+  *) echo "unsupported fake apt-get call: $*" >&2; exit 2 ;;
+esac
+`)
+
+	pgrepStatus := host.pgrepStatus
+	if pgrepStatus == "" {
+		pgrepStatus = testPgrepNoMatch
+	}
+	queryStatus := host.queryStatus
+	if queryStatus == "" {
+		queryStatus = testDpkgQueryUnknownPackage
+	}
+	path := h.binDir
+	if host.stray {
+		path += ":" + strayBin
+	}
+	baseline := hostplatform.CloudflaredPackageBaseline()
+	h.env = append(os.Environ(),
+		"PATH="+path+":"+h.usrBin+":/usr/bin:/bin",
+		"STATE_DIR="+h.stateDir,
+		"PGREP_STATUS="+pgrepStatus,
+		"DPKG_QUERY_MISSING_STATUS="+queryStatus,
+		"REINSTALLED_DIGEST="+testReinstalledDigest,
+		"ENABLE_ON_INSTALL="+flagEnv(host.enableOnInstall),
+		"INSTALLED_STATE="+host.dpkgState,
+		"INSTALLED_VERSION="+host.version,
+		"CANDIDATE_VERSION="+baseline.MinimumVersion,
+		"ORIGINS="+cloudflareAPTRepositoryURL,
+		"CANDIDATE_MARKED=",
+		"CANDIDATE_STATUS=",
+	)
+	return h
+}
+
+func writeTestFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// posixShell prefers dash because the sudo transport runs scripts with the
+// managed host's /bin/sh, which is dash on Ubuntu.
+func posixShell() string {
+	if _, err := exec.LookPath("dash"); err == nil {
+		return "dash"
+	}
+	return "sh"
+}
+
+func (h unmanagedHarness) check(t *testing.T) (string, error) {
+	t.Helper()
+	cmd := exec.Command(posixShell(), "-c", unmanagedCheckCommand(h.binaryPath, h.receiptPath))
+	cmd.Env = h.env
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+// repair runs the rendered repair with its host paths pointed at the scratch
+// tree and the supported-host gate stubbed, since the test machine is not a
+// managed Ubuntu host.
+func (h unmanagedHarness) repair(t *testing.T) (string, error) {
+	t.Helper()
+	scriptPath := filepath.Join(h.dir, "repair.sh")
+	writeTestFile(t, scriptPath, UnmanagedRepairScript())
+	cmd := exec.Command(posixShell(), "-c", `. "$1"
+CLOUDFLARED_BINARY=$2
+CLOUDFLARED_RECEIPT=$3
+CLOUDFLARED_UNIT=$4/cloudflared.service
+CLOUDFLARED_TOKEN=$4/token
+CLOUDFLARE_KEYRING=$4/cloudflare-main.gpg
+CLOUDFLARED_APT_SOURCE_PATH=$4/cloudflared.list
+CLOUDFLARED_APT_PREFERENCES_PATH=$4/preferences.d/serverpro-cloudflared
+require_supported_host() { :; }
+main`, "test", scriptPath, h.binaryPath, h.receiptPath, h.dir)
+	cmd.Env = append(h.env, "SERVERPRO_TUNNEL_SOURCE_ONLY=1")
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+// stateLog returns a fake's call log, empty when the fake was never called.
+func (h unmanagedHarness) stateLog(t *testing.T, name string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(h.stateDir, name))
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+// TestUnmanagedCheckCommandExecutableMatrix runs the rendered ingress-"none"
+// audit against absent, active, and dormant hosts and the states it must
+// refuse to classify, so an unexpected host never reads as absent.
+func TestUnmanagedCheckCommandExecutableMatrix(t *testing.T) {
+	baseline := hostplatform.CloudflaredPackageBaseline()
+	belowFloor := versionOneStepBelow(t, baseline.MinimumVersion)
+	activeStopped := activeHost(baseline.MinimumVersion, receiptMatching)
+	activeStopped.active = "failed"
+	dormantNoUnit := dormantHost(baseline.MinimumVersion, receiptMatching)
+	dormantNoUnit.load, dormantNoUnit.unitFile = "not-found", ""
+	runningOutside := dormantHost(baseline.MinimumVersion, receiptMatching)
+	runningOutside.pgrepStatus = "0"
+	staticUnit := dormantHost(baseline.MinimumVersion, receiptMatching)
+	staticUnit.unitFile = "static"
+	halfInstalled := dormantHost(baseline.MinimumVersion, receiptMatching)
+	halfInstalled.dpkgState = "half-installed"
+	strayBinary := dormantHost(baseline.MinimumVersion, receiptMatching)
+	strayBinary.stray = true
+	for _, tc := range []struct {
+		name    string
+		host    unmanagedHost
+		wantOK  bool
+		wantOut string
+	}{
+		{name: "absent", host: unmanagedHost{}, wantOK: true, wantOut: "cloudflared not installed"},
+		{name: "absent-config-files", host: unmanagedHost{dpkgState: "config-files", version: belowFloor}, wantOK: true, wantOut: "cloudflared not installed"},
+		{name: "binary-without-package", host: unmanagedHost{packagedBinary: true, load: "not-found", active: "inactive"}, wantOut: "cloudflared package is not installed"},
+		{name: "stray-binary-on-path", host: strayBinary, wantOut: "cloudflared on PATH is"},
+		{name: "active-at-floor", host: activeHost(baseline.MinimumVersion, receiptMatching), wantOK: true, wantOut: "cloudflared " + baseline.MinimumVersion + " active"},
+		{name: "active-below-floor", host: activeHost(belowFloor, receiptMatching), wantOut: "is below minimum"},
+		{name: "active-without-receipt", host: activeHost(baseline.MinimumVersion, receiptNone), wantOut: "install receipt is missing"},
+		{name: "enabled-but-stopped", host: activeStopped, wantOut: "cloudflared service is not active: failed"},
+		{name: "dormant-at-floor", host: dormantHost(baseline.MinimumVersion, receiptMatching), wantOK: true, wantOut: "cloudflared " + baseline.MinimumVersion + " dormant"},
+		{name: "dormant-without-unit", host: dormantNoUnit, wantOK: true, wantOut: "dormant"},
+		{name: "dormant-below-floor", host: dormantHost(belowFloor, receiptNone), wantOut: "is below minimum"},
+		{name: "dormant-foreign-receipt", host: dormantHost(baseline.MinimumVersion, receiptForeign), wantOut: "is not the build serverpro installed"},
+		{name: "half-installed", host: halfInstalled, wantOut: "package status is half-installed"},
+		{name: "half-installed-without-binary", host: unmanagedHost{dpkgState: "half-installed", version: belowFloor}, wantOut: "package status is half-installed"},
+		{name: "process-outside-service", host: runningOutside, wantOut: "running outside cloudflared.service"},
+		{name: "unclassified-unit-state", host: staticUnit, wantOut: "unit state is loaded/static"},
+		{name: "dpkg-query-error", host: unmanagedHost{queryStatus: "2"}, wantOut: "dpkg-query cloudflared failed with status 2"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := newUnmanagedHarness(t, tc.host).check(t)
+			if tc.wantOK != (err == nil) {
+				t.Fatalf("check err = %v, wantOK %v\n%s", err, tc.wantOK, out)
+			}
+			if !strings.Contains(out, tc.wantOut) {
+				t.Fatalf("check output = %q, want %q", out, tc.wantOut)
+			}
+		})
+	}
+}
+
+// TestUnmanagedRepairScriptExecutableMatrix runs the rendered ingress-"none"
+// repair and then the audit again. An active connector gets the managed
+// repair and restart; a dormant one is reinstalled from the trusted origin
+// without a token and is never enabled or started; anything the repair
+// cannot trust stops before apt.
+func TestUnmanagedRepairScriptExecutableMatrix(t *testing.T) {
+	baseline := hostplatform.CloudflaredPackageBaseline()
+	belowFloor := versionOneStepBelow(t, baseline.MinimumVersion)
+	activeNoToken := activeHost(belowFloor, receiptNone)
+	activeNoToken.token = false
+	enabledByInstall := dormantHost(belowFloor, receiptNone)
+	enabledByInstall.enableOnInstall = true
+	changedSource := dormantHost(belowFloor, receiptNone)
+	changedSource.changedSource = true
+	halfInstalled := dormantHost(belowFloor, receiptNone)
+	halfInstalled.dpkgState = "half-installed"
+	runningOutside := dormantHost(belowFloor, receiptNone)
+	runningOutside.pgrepStatus = "0"
+	dormantNoUnit := dormantHost(belowFloor, receiptNone)
+	dormantNoUnit.load, dormantNoUnit.unitFile = "not-found", ""
+	for _, tc := range []struct {
+		name                   string
+		host                   unmanagedHost
+		wantOK                 bool
+		wantOut, wantRecheck   string
+		wantInstall, wantStart bool
+	}{
+		{name: "absent", host: unmanagedHost{}, wantOK: true, wantOut: "cloudflared not installed", wantRecheck: "not installed"},
+		{name: "active-below-floor", host: activeHost(belowFloor, receiptNone), wantOK: true, wantInstall: true, wantStart: true, wantRecheck: baseline.MinimumVersion + " active"},
+		{name: "active-without-token", host: activeNoToken, wantOut: "reprovision the server"},
+		{name: "dormant-below-floor", host: dormantHost(belowFloor, receiptNone), wantOK: true, wantInstall: true, wantOut: baseline.MinimumVersion + " dormant", wantRecheck: baseline.MinimumVersion + " dormant"},
+		{name: "dormant-without-unit-or-token", host: dormantNoUnit, wantOK: true, wantInstall: true, wantRecheck: "dormant"},
+		{name: "dormant-foreign-receipt", host: dormantHost(baseline.MinimumVersion, receiptForeign), wantOK: true, wantInstall: true, wantRecheck: "dormant"},
+		{name: "dormant-enabled-by-install", host: enabledByInstall, wantInstall: true, wantOut: "no longer dormant"},
+		{name: "dormant-changed-source", host: changedSource, wantOut: "apt source is missing or changed"},
+		{name: "half-installed", host: halfInstalled, wantOut: "package status is half-installed"},
+		{name: "process-outside-service", host: runningOutside, wantOut: "running outside cloudflared.service"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newUnmanagedHarness(t, tc.host)
+			out, err := h.repair(t)
+			if tc.wantOK != (err == nil) {
+				t.Fatalf("repair err = %v, wantOK %v\n%s", err, tc.wantOK, out)
+			}
+			if !strings.Contains(out, tc.wantOut) {
+				t.Fatalf("repair output = %q, want %q", out, tc.wantOut)
+			}
+			installed := strings.Contains(h.stateLog(t, "apt.log"), "install -y")
+			if installed != tc.wantInstall {
+				t.Fatalf("apt install ran = %v, want %v\n%s", installed, tc.wantInstall, h.stateLog(t, "apt.log"))
+			}
+			started := h.stateLog(t, "systemctl.log") != ""
+			if started != tc.wantStart {
+				t.Fatalf("service enable/restart ran = %v, want %v\n%s", started, tc.wantStart, h.stateLog(t, "systemctl.log"))
+			}
+			if tc.wantInstall && tc.wantOK {
+				receipt, err := os.ReadFile(h.receiptPath)
+				if want := baseline.MinimumVersion + " " + testReinstalledDigest + "\n"; err != nil || string(receipt) != want {
+					t.Fatalf("receipt = %q, %v; want %q", receipt, err, want)
+				}
+			}
+			if !tc.wantOK {
+				return
+			}
+			recheck, err := h.check(t)
+			if err != nil || !strings.Contains(recheck, tc.wantRecheck) {
+				t.Fatalf("recheck after repair = %v\n%s\nwant %q", err, recheck, tc.wantRecheck)
+			}
+		})
 	}
 }

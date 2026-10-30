@@ -583,6 +583,25 @@ newer. When no version is offered only by Cloudflare, the repair stops with
 remove the other source that offers it. It does not change the tunnel token. It fails
 with a "reprovision the server" message when the service unit, token file,
 pinned keyring, or exact apt source line is missing or changed.
+
+When ingress is `none`, doctor still audits any cloudflared on the host under
+the same `cloudflared` check. Ingress `none` only means serverpro set up no
+tunnel; another tool can still install or run a connector. The check and
+`--fix` read the host state on each run:
+
+| Host state | Check | `--fix` |
+| --- | --- | --- |
+| No installed package and no `cloudflared` on `PATH` | Pass: `cloudflared not installed` | Nothing |
+| `cloudflared.service` enabled or active | Same as with ingress enabled | Same repair as with ingress enabled; needs the unit and token |
+| Package present, service neither enabled nor active (dormant) | Floor and install receipt only; prints `cloudflared <version> dormant` | Reinstalls from the trusted Cloudflare repository and writes the receipt; needs no token and never enables, starts, or restarts the service |
+
+The check and `--fix` stop without changes for a package in any other dpkg
+state (for example `half-installed`), a `cloudflared` on `PATH` that is not
+`/usr/bin/cloudflared`, a unit state other than enabled, disabled, masked, or
+not found, and a dormant package while a `cloudflared` process runs outside
+the service. The repair trusts only the keyring and apt source line that
+provisioning writes, so a connector installed from another key or source
+fails with the "reprovision the server" message.
 Provisioning, bootstrap, and `--fix` apt work waits up to 5 minutes for each
 apt lock that a concurrent apt run holds, such as apt-daily refreshing package
 lists or unattended upgrades installing packages, and prints a

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -81,18 +82,25 @@ func TestRemoteCheckSpecificationsOwnSequentialAndBatchReadOrder(t *testing.T) {
 	}
 }
 
+// TestRemoteCheckSpecificationsVerifyCloudflaredPackageFloor covers both
+// ingress modes: managed ingress reads the managed check, and ingress "none"
+// still audits any connector on the host through the unmanaged check.
 func TestRemoteCheckSpecificationsVerifyCloudflaredPackageFloor(t *testing.T) {
-	cfg := config.Example("prod")
-	cfg.Network.Ingress = "cloudflare-tunnel"
-	want := tunnel.CheckCommand()
-	for _, specification := range remoteCheckSpecifications(cfg) {
-		for _, command := range specification.readCommands {
-			if command == want {
-				return
+	for ingress, want := range map[string]string{
+		"cloudflare-tunnel": tunnel.CheckCommand(),
+		"none":              tunnel.UnmanagedCheckCommand(),
+	} {
+		t.Run(ingress, func(t *testing.T) {
+			cfg := config.Example("prod")
+			cfg.Network.Ingress = ingress
+			for _, specification := range remoteCheckSpecifications(cfg) {
+				if slices.Contains(specification.readCommands, want) {
+					return
+				}
 			}
-		}
+			t.Fatalf("remote checks missing cloudflared package-floor command %q", want)
+		})
 	}
-	t.Fatalf("remote checks missing cloudflared package-floor command %q", want)
 }
 
 func TestRemoteCheckSpecificationsDeclareEveryLiveFix(t *testing.T) {

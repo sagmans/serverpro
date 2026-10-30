@@ -163,13 +163,20 @@ access paths for app-owned deployment flows.
     rotation is recommended once the stored PAT is proven stale too.
     Managed-package diagnostics verify package floors and use cached apt
     candidates without mutating; ingress-enabled diagnostics also verify the
-    cloudflared floor, its install receipt, and service. A first, blocking platform check disables
-    every requested fix when the actual OS, codename, or architecture is outside
-    support. `--fix` refreshes repositories, upgrades the
+    cloudflared floor, its install receipt, and service. With ingress `none`,
+    the same `cloudflared` check audits any connector another tool left on the
+    host: the read and repair scripts each classify the host as absent,
+    active, or dormant themselves, so the repair never acts on a stale read.
+    A first, blocking platform check disables every requested fix when the
+    actual OS, codename, or architecture is outside support. `--fix`
+    refreshes repositories, upgrades the
     general managed package set, repairs exact tool pins, and stages Tailscale
     before restarting its daemon after the SSH update command returns. With
     ingress enabled, `--fix` also runs the cloudflared repair from
-    `internal/tunnel` under a longer per-command deadline.
+    `internal/tunnel` under a longer per-command deadline. With ingress
+    `none`, it runs the unmanaged repair under the same deadline: an active
+    connector gets the managed repair, and a dormant one is only reinstalled
+    from the trusted origin and stays stopped.
     Every sshd hardening check shares one fix. That fix builds the candidate
     main config and serverpro drop-in in a private temp directory, validates
     them with `sshd -t -f` against a copy of the drop-in directory, and only

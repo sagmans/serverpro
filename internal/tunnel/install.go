@@ -104,23 +104,58 @@ func cloudflaredAPTPreferences() string {
 // the install receipt, so a dpkg -i or other-repository connector fails even
 // above the package floor; it reads only world-readable files.
 func CheckCommand() string {
+	return checkVariables(cloudflaredBinaryPath, cloudflaredReceiptPath) + checkProvenance + checkServiceActive + checkSummary
+}
+
+// UnmanagedCheckCommand audits a connector on a host whose configured ingress
+// is "none". That setting only says serverpro set up no tunnel; another tool
+// can still install or run cloudflared, and such a connector carries the same
+// trust-store risk as a managed one. The host decides its own state at read
+// time: no package and no binary passes, an enabled or active service gets
+// the full managed check, and a dormant package gets the floor and receipt
+// check without a running service. Like CheckCommand it reads no 0600 file.
+func UnmanagedCheckCommand() string {
+	return unmanagedCheckCommand(cloudflaredBinaryPath, cloudflaredReceiptPath)
+}
+
+// unmanagedCheckCommand takes the on-disk paths so tests can execute the
+// rendered check against a scratch binary and receipt.
+func unmanagedCheckCommand(binaryPath, receiptPath string) string {
+	return checkVariables(binaryPath, receiptPath) + hostStateHelper + unmanagedCheckDispatch + checkProvenance + unmanagedCheckService + checkSummary
+}
+
+// checkVariables pins every value the read checks use. The paths are
+// parameters only so tests can point them at scratch files.
+func checkVariables(binaryPath, receiptPath string) string {
 	cloudflared := hostplatform.CloudflaredPackageBaseline()
 	return fmt.Sprintf(`export LC_ALL=C
-package_name=%[1]s
-minimum_version=%[2]s
-service_name=%[3]s
-receipt_path=%[4]s
-binary_path=%[5]s
-repository_url=%[6]s
-package_record=$(dpkg-query -W -f='${db:Status-Status}|${Version}' "${package_name}" 2>/dev/null) || package_record=
-package_status=${package_record%%%%|*}
+package_name=%s
+minimum_version=%s
+service_name=%s
+receipt_path=%s
+binary_path=%s
+repository_url=%s
+`,
+		shell.Quote(cloudflared.Name),
+		shell.Quote(cloudflared.MinimumVersion),
+		shell.Quote(cloudflaredServiceName),
+		shell.Quote(receiptPath),
+		shell.Quote(binaryPath),
+		shell.Quote(cloudflareAPTRepositoryURL),
+	)
+}
+
+// checkProvenance is the floor and receipt gate both read checks share, so a
+// managed and an unmanaged connector are held to one provenance standard.
+const checkProvenance = `package_record=$(dpkg-query -W -f='${db:Status-Status}|${Version}' "${package_name}" 2>/dev/null) || package_record=
+package_status=${package_record%%|*}
 case "${package_record}" in
   installed'|'*) installed_version=${package_record#installed|} ;;
-  ''|not-installed'|'*) printf '%%s package is not installed\n' "${package_name}"; exit 1 ;;
-  *) printf '%%s package status is %%s, want installed\n' "${package_name}" "${package_status}"; exit 1 ;;
+  ''|not-installed'|'*) printf '%s package is not installed\n' "${package_name}"; exit 1 ;;
+  *) printf '%s package status is %s, want installed\n' "${package_name}" "${package_status}"; exit 1 ;;
 esac
 if ! dpkg --compare-versions "${installed_version}" ge "${minimum_version}"; then
-  printf '%%s %%s is below minimum %%s\n' "${package_name}" "${installed_version}" "${minimum_version}"
+  printf '%s %s is below minimum %s\n' "${package_name}" "${installed_version}" "${minimum_version}"
   exit 1
 fi
 receipt_version=
@@ -129,27 +164,160 @@ if [ -r "${receipt_path}" ]; then
   read -r receipt_version receipt_digest < "${receipt_path}"
 fi
 if [ -z "${receipt_version}" ]; then
-  printf '%%s install receipt is missing: %%s\n' "${package_name}" "${receipt_path}"
+  printf '%s install receipt is missing: %s\n' "${package_name}" "${receipt_path}"
   exit 1
 fi
 binary_digest=$(sha256sum "${binary_path}" 2>/dev/null | awk '{ print $1 }')
 if [ -z "${binary_digest}" ] || [ "${receipt_version}" != "${installed_version}" ] || [ "${receipt_digest}" != "${binary_digest}" ]; then
-  printf '%%s %%s is not the build serverpro installed from %%s\n' "${package_name}" "${installed_version}" "${repository_url}"
+  printf '%s %s is not the build serverpro installed from %s\n' "${package_name}" "${installed_version}" "${repository_url}"
   exit 1
 fi
-if ! service_state=$(systemctl is-active "${service_name}" 2>&1); then
-  printf '%%s service is not active: %%s\n' "${service_name}" "${service_state:-unknown}"
+`
+
+// checkServiceActive is the managed check's service gate: a tunnel that
+// serverpro provisioned must always be serving.
+const checkServiceActive = `if ! service_state=$(systemctl is-active "${service_name}" 2>&1); then
+  printf '%s service is not active: %s\n' "${service_name}" "${service_state:-unknown}"
   exit 1
 fi
-printf '%%s %%s %%s\n' "${package_name}" "${installed_version}" "${service_state}"`,
-		shell.Quote(cloudflared.Name),
-		shell.Quote(cloudflared.MinimumVersion),
-		shell.Quote(cloudflaredServiceName),
-		shell.Quote(cloudflaredReceiptPath),
-		shell.Quote(cloudflaredBinaryPath),
-		shell.Quote(cloudflareAPTRepositoryURL),
-	)
+`
+
+// checkSummary is the one line a passing check prints; doctor shows it as
+// evidence, so a repair visibly lands on the version and service state.
+const checkSummary = `printf '%s %s %s\n' "${package_name}" "${installed_version}" "${service_state}"`
+
+// unmanagedCheckDispatch classifies the host before any gate runs. An absent
+// connector passes here; every other outcome falls through to the shared
+// provenance gate, and an unclassifiable host fails with its reason.
+const unmanagedCheckDispatch = `if ! host_state=$(cloudflared_host_state "${package_name}" "${service_name}" "${binary_path}"); then
+  printf '%s\n' "${host_state}"
+  exit 1
+fi
+case "${host_state}" in
+  ` + hostStateAbsent + `) printf '%s not installed\n' "${package_name}"; exit 0 ;;
+  ` + hostStateActive + `|` + hostStateDormant + `) ;;
+  *) printf '%s host state is %s\n' "${package_name}" "${host_state}"; exit 1 ;;
+esac
+`
+
+// unmanagedCheckService requires a running service only when someone enabled
+// or started the connector. A dormant package must stay stopped, so its
+// summary names the state instead of a systemd result.
+const unmanagedCheckService = `service_state=` + hostStateDormant + `
+if [ "${host_state}" = ` + hostStateActive + ` ]; then
+  if ! service_state=$(systemctl is-active "${service_name}" 2>&1); then
+    printf '%s service is not active: %s\n' "${service_name}" "${service_state:-unknown}"
+    exit 1
+  fi
+fi
+`
+
+const (
+	// hostStateAbsent, hostStateActive, and hostStateDormant are the only
+	// states cloudflared_host_state prints; the read check and the repair
+	// dispatch on them, so they must agree on the spelling.
+	hostStateAbsent  = "absent"
+	hostStateActive  = "active"
+	hostStateDormant = "dormant"
+)
+
+// hostStateHelper is shared by the unmanaged read check and repair, so both
+// decide from the live host and the repair never trusts a stale read. It
+// fails closed: any dpkg, PATH, systemd, or process state outside the known
+// absent/active/dormant shapes prints one reason and returns 1.
+const hostStateHelper = `
+# cloudflared_host_state prints absent, active, or dormant for the connector.
+# Arguments: package name, systemd service name, packaged binary path.
+# Absent means dpkg holds no installed package and no binary of that name is
+# on PATH. Active means the service is enabled or running. Dormant means the
+# package is present but the service is neither, and no connector process
+# runs outside it, so a binary swap without a restart leaves nothing stale.
+cloudflared_host_state() {
+  host_package=$1
+  host_service=$2
+  host_binary=$3
+  host_command=${host_binary##*/}
+  host_present=
+  if host_package_status=$(dpkg-query -W -f='${db:Status-Status}' "${host_package}" 2>/dev/null); then
+    :
+  else
+    # dpkg-query exits 1 only when dpkg has no record of the package; any
+    # other status is a query failure that must not read as absent.
+    host_query_status=$?
+    if [ "${host_query_status}" -ne 1 ]; then
+      printf 'dpkg-query %s failed with status %s\n' "${host_package}" "${host_query_status}"
+      return 1
+    fi
+    host_package_status=
+  fi
+  case "${host_package_status}" in
+    installed) host_present=1 ;;
+    # dpkg removed the files in both states, so only a binary on PATH can
+    # still make the connector present.
+    ''|not-installed|config-files) ;;
+    *)
+      printf '%s package status is %s, want installed or not-installed\n' "${host_package}" "${host_package_status}"
+      return 1
+      ;;
+  esac
+  # A binary elsewhere on PATH is not what the package floor, receipt, or
+  # repair cover, so it is reported instead of counted as the package.
+  if host_path=$(command -v "${host_command}" 2>/dev/null) && [ -n "${host_path}" ]; then
+    host_path_resolved=$(readlink -f "${host_path}" 2>/dev/null) || host_path_resolved=${host_path}
+    host_binary_resolved=$(readlink -f "${host_binary}" 2>/dev/null) || host_binary_resolved=${host_binary}
+    if [ "${host_path_resolved}" != "${host_binary_resolved}" ]; then
+      printf '%s on PATH is %s, not the packaged %s\n' "${host_command}" "${host_path}" "${host_binary}"
+      return 1
+    fi
+    host_present=1
+  fi
+  if [ -z "${host_present}" ]; then
+    printf '` + hostStateAbsent + `'
+    return 0
+  fi
+  # systemctl show succeeds for a unit that does not exist (LoadState
+  # not-found), so a failure here is a systemd problem, not an answer.
+  if ! host_load=$(systemctl show --property=LoadState --value "${host_service}" 2>/dev/null) ||
+    ! host_unit_file=$(systemctl show --property=UnitFileState --value "${host_service}" 2>/dev/null) ||
+    ! host_active=$(systemctl show --property=ActiveState --value "${host_service}" 2>/dev/null); then
+    printf 'systemctl show %s failed\n' "${host_service}"
+    return 1
+  fi
+  case "${host_active}" in
+    active|activating|reloading|refreshing|deactivating) host_running=1 ;;
+    inactive|failed) host_running= ;;
+    *)
+      printf '%s service active state is %s, want a known systemd state\n' "${host_service}" "${host_active:-empty}"
+      return 1
+      ;;
+  esac
+  case "${host_load}:${host_unit_file}" in
+    *:enabled|*:enabled-runtime) host_enabled=1 ;;
+    *:disabled|*:masked|*:masked-runtime|not-found:) host_enabled= ;;
+    *)
+      printf '%s unit state is %s/%s, want enabled, disabled, masked, or not-found\n' "${host_service}" "${host_load:-empty}" "${host_unit_file:-empty}"
+      return 1
+      ;;
+  esac
+  if [ -n "${host_running}" ] || [ -n "${host_enabled}" ]; then
+    printf '` + hostStateActive + `'
+    return 0
+  fi
+  # pgrep exits 1 only when nothing matches; any other failure must not read
+  # as "no connector running".
+  if pgrep -x "${host_command}" >/dev/null 2>&1; then
+    printf '%s is running outside %s.service\n' "${host_command}" "${host_service}"
+    return 1
+  else
+    host_pgrep_status=$?
+    if [ "${host_pgrep_status}" -ne 1 ]; then
+      printf 'pgrep %s failed with status %s\n' "${host_command}" "${host_pgrep_status}"
+      return 1
+    fi
+  fi
+  printf '` + hostStateDormant + `'
 }
+`
 
 // scriptHeader pins every value the shared helpers read, so install and
 // repair agree on host, package floor, key fingerprint, and repository.
@@ -534,6 +702,32 @@ UNIT
 	) + scriptFooter
 }
 
+// trustedReinstallSteps reinstalls the connector from the trusted Cloudflare
+// repository when it is below the floor or does not match its receipt. It
+// reuses only the keyring and source provisioning pinned, so it can never
+// widen trust, and it touches neither the token nor the service. Both repairs
+// share it so a dormant connector is held to the managed trust gates.
+const trustedReinstallSteps = `  if ! verify_cloudflared_minimum || ! cloudflared_receipt_matches; then
+    verify_trusted_cloudflare_apt_key
+    verify_cloudflared_apt_source
+    write_cloudflared_apt_pin
+    apt_update
+    verify_cloudflared_candidate
+    install_cloudflared_candidate
+    verify_cloudflared_minimum
+  fi
+`
+
+// serviceRepairSteps is the repair for a connector that is meant to run: it
+// needs the provisioned unit and token, reinstalls when needed, and restarts
+// so the running process loads the new binary.
+const serviceRepairSteps = `  require_cloudflared_service_setup
+` + trustedReinstallSteps + `  # Restart even when enabled so the running connector loads the new binary.
+  systemctl enable "${CLOUDFLARED_SERVICE}"
+  systemctl restart "${CLOUDFLARED_SERVICE}"
+  systemctl is-active "${CLOUDFLARED_SERVICE}"
+`
+
 // UpgradeScript is the doctor repair for an outdated, untrusted, or stopped
 // connector. A connector that does not match the install receipt is
 // reinstalled from Cloudflare, so a dpkg -i or other-repository build is
@@ -546,20 +740,46 @@ func UpgradeScript() string {
 	return scriptPreamble() + `
 main() {
   require_supported_host
-  require_cloudflared_service_setup
-  if ! verify_cloudflared_minimum || ! cloudflared_receipt_matches; then
-    verify_trusted_cloudflare_apt_key
-    verify_cloudflared_apt_source
-    write_cloudflared_apt_pin
-    apt_update
-    verify_cloudflared_candidate
-    install_cloudflared_candidate
-    verify_cloudflared_minimum
+` + serviceRepairSteps + `}
+` + scriptFooter
+}
+
+// UnmanagedRepairScript is the doctor repair paired with
+// UnmanagedCheckCommand. It reclassifies the host itself instead of trusting
+// the earlier read: an active connector gets the managed repair, so it still
+// needs the provisioned unit and token; a dormant one is only reinstalled
+// from the trusted repository and verified to still be dormant, because
+// starting a connector nobody runs would open ingress serverpro was told not
+// to have. An absent connector is left alone.
+func UnmanagedRepairScript() string {
+	return scriptPreamble() + hostStateHelper + `
+repair_active_cloudflared() {
+` + serviceRepairSteps + `}
+
+repair_dormant_cloudflared() {
+` + trustedReinstallSteps + `  # The package scripts must not have enabled or started the connector.
+  if ! host_state=$(cloudflared_host_state "${CLOUDFLARED_PACKAGE}" "${CLOUDFLARED_SERVICE}" "${CLOUDFLARED_BINARY}") || [ "${host_state}" != ` + hostStateDormant + ` ]; then
+    printf '%s is no longer dormant after the reinstall: %s\n' "${CLOUDFLARED_PACKAGE}" "${host_state}" >&2
+    return 1
   fi
-  # Restart even when enabled so the running connector loads the new binary.
-  systemctl enable "${CLOUDFLARED_SERVICE}"
-  systemctl restart "${CLOUDFLARED_SERVICE}"
-  systemctl is-active "${CLOUDFLARED_SERVICE}"
+  printf '%s %s %s\n' "${CLOUDFLARED_PACKAGE}" "$(installed_cloudflared_version)" "${host_state}"
+}
+
+main() {
+  require_supported_host
+  if ! host_state=$(cloudflared_host_state "${CLOUDFLARED_PACKAGE}" "${CLOUDFLARED_SERVICE}" "${CLOUDFLARED_BINARY}"); then
+    printf '%s\n' "${host_state}" >&2
+    return 1
+  fi
+  case "${host_state}" in
+    ` + hostStateAbsent + `) printf '%s not installed\n' "${CLOUDFLARED_PACKAGE}" ;;
+    ` + hostStateActive + `) repair_active_cloudflared ;;
+    ` + hostStateDormant + `) repair_dormant_cloudflared ;;
+    *)
+      printf '%s host state is %s\n' "${CLOUDFLARED_PACKAGE}" "${host_state}" >&2
+      return 1
+      ;;
+  esac
 }
 ` + scriptFooter
 }

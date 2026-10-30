@@ -93,7 +93,12 @@ func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
 		specifications = append(specifications, remoteGitIdentitySpecifications(cfg)...)
 	}
 	if cfg.Network.Ingress != "none" {
-		specifications = append(specifications, remoteCloudflaredSpecification())
+		specifications = append(specifications, remoteCloudflaredSpecification(tunnel.CheckCommand(), tunnel.UpgradeScript()))
+	} else {
+		// Ingress "none" only means serverpro set up no tunnel. Another tool
+		// can still leave a connector behind, so the host is audited for one
+		// instead of skipped; an absent connector passes.
+		specifications = append(specifications, remoteCloudflaredSpecification(tunnel.UnmanagedCheckCommand(), tunnel.UnmanagedRepairScript()))
 	}
 	return specifications
 }
@@ -130,9 +135,9 @@ func remoteFixableSpecification(name, readCommand, liveCommand string) remoteChe
 // remoteCloudflaredSpecification gives the connector check a live repair:
 // provisioning installs cloudflared once with --no-autoupdate, so a raised
 // package floor otherwise leaves every existing host failing with no fix.
-func remoteCloudflaredSpecification() remoteCheckSpecification {
-	readCommand := tunnel.CheckCommand()
-	fixCommand := tunnel.UpgradeScript()
+// Managed and unmanaged connectors pass their own read and repair pair but
+// share the check name and the apt-sized deadline, so reports stay uniform.
+func remoteCloudflaredSpecification(readCommand, fixCommand string) remoteCheckSpecification {
 	return remoteCheckSpecification{
 		readCommands: []string{readCommand},
 		liveCommands: []string{fixCommand},

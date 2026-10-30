@@ -54,14 +54,17 @@ func TestRemoteReadPlanDeclaresConditionalAndConfiguredReads(t *testing.T) {
 	if !plan.hasRead(cloudInitWaitCommand) || !plan.hasRead(cloudInitLongCommand) {
 		t.Fatalf("cloud-init reads missing from plan: %+v", plan.commands)
 	}
-	if plan.hasRead(tunnel.CheckCommand()) {
-		t.Fatalf("cloudflared read planned without ingress: %+v", plan.commands)
+	if plan.hasRead(tunnel.CheckCommand()) || !plan.hasRead(tunnel.UnmanagedCheckCommand()) {
+		t.Fatalf("want only the unmanaged cloudflared read without ingress: %+v", plan.commands)
+	}
+	if plan.allowsLive(tunnel.UpgradeScript()) || !plan.allowsLive(tunnel.UnmanagedRepairScript()) {
+		t.Fatal("want only the unmanaged cloudflared repair without ingress")
 	}
 
 	cfg.Network.Ingress = "cloudflare-tunnel"
 	plan = buildRemoteReadPlan(cfg)
-	if !plan.hasRead(tunnel.CheckCommand()) {
-		t.Fatalf("cloudflared read missing with ingress: %+v", plan.commands)
+	if !plan.hasRead(tunnel.CheckCommand()) || plan.hasRead(tunnel.UnmanagedCheckCommand()) {
+		t.Fatalf("want only the managed cloudflared read with ingress: %+v", plan.commands)
 	}
 	if !plan.hasRead(tailscaletools.CheckCommand()) {
 		t.Fatal("Tailscale version read missing from plan")

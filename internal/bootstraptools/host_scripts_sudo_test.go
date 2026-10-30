@@ -113,6 +113,8 @@ func hostScripts(t *testing.T) map[string]string {
 		"tunnel install script":          tunnel.InstallScript(guardTestTunnelToken),
 		"tunnel upgrade script":          tunnel.UpgradeScript(),
 		"tunnel check command":           tunnel.CheckCommand(),
+		"tunnel unmanaged check command": tunnel.UnmanagedCheckCommand(),
+		"tunnel unmanaged repair script": tunnel.UnmanagedRepairScript(),
 		"tailscaletools update script":   tailscaletools.UpdateScript(),
 		"tailscaletools check command":   tailscaletools.CheckCommand(),
 	}

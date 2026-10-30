@@ -697,27 +697,37 @@ func assertNoLeftovers(t *testing.T, tree sshdFixTree) {
 }
 
 // TestRemoteChecksWireCloudflaredRepairWithLongTimeout pins the connector
-// repair into the doctor plan: it runs tunnel.UpgradeScript live, under the
-// longer apt-sized deadline, and only when ingress uses the tunnel.
+// repair into the doctor plan: managed ingress runs tunnel.UpgradeScript and
+// ingress "none" runs tunnel.UnmanagedRepairScript, both live under the
+// longer apt-sized deadline and under the one cloudflared check name.
 func TestRemoteChecksWireCloudflaredRepairWithLongTimeout(t *testing.T) {
-	cfg := config.Example("prod")
-	cfg.Network.Ingress = "cloudflare-tunnel"
-	plan := buildRemoteReadPlan(cfg)
-	if !plan.allowsLive(tunnel.UpgradeScript()) {
-		t.Fatal("cloudflared repair is not an allowed live command")
-	}
-	runner := &staleBatchRemote{
-		baselineFail: map[string]string{tunnel.CheckCommand(): "cloudflared 2024.1.0 is below minimum"},
-	}
-	results := remoteChecksWithOptions(context.Background(), cfg, runner, "prod-01", Options{Fix: true})
-	if res := resultByName(t, results, tunnel.CheckName); res.Status != Pass || !strings.Contains(res.Evidence, "fixed") {
-		t.Fatalf("cloudflared = %+v", res)
-	}
-	deadline, ok := runner.deadlines[tunnel.UpgradeScript()]
-	if !ok {
-		t.Fatalf("cloudflared repair not run: %q", runner.runScripts)
-	}
-	if deadline < cloudflaredFixTimeout-time.Minute || deadline > cloudflaredFixTimeout {
-		t.Fatalf("cloudflared repair deadline = %v, want about %v", deadline, cloudflaredFixTimeout)
+	for _, tc := range []struct {
+		ingress, read, fix string
+	}{
+		{ingress: "cloudflare-tunnel", read: tunnel.CheckCommand(), fix: tunnel.UpgradeScript()},
+		{ingress: "none", read: tunnel.UnmanagedCheckCommand(), fix: tunnel.UnmanagedRepairScript()},
+	} {
+		t.Run(tc.ingress, func(t *testing.T) {
+			cfg := config.Example("prod")
+			cfg.Network.Ingress = tc.ingress
+			plan := buildRemoteReadPlan(cfg)
+			if !plan.allowsLive(tc.fix) {
+				t.Fatal("cloudflared repair is not an allowed live command")
+			}
+			runner := &staleBatchRemote{
+				baselineFail: map[string]string{tc.read: "cloudflared 2024.1.0 is below minimum"},
+			}
+			results := remoteChecksWithOptions(context.Background(), cfg, runner, "prod-01", Options{Fix: true})
+			if res := resultByName(t, results, tunnel.CheckName); res.Status != Pass || !strings.Contains(res.Evidence, "fixed") {
+				t.Fatalf("cloudflared = %+v", res)
+			}
+			deadline, ok := runner.deadlines[tc.fix]
+			if !ok {
+				t.Fatalf("cloudflared repair not run: %q", runner.runScripts)
+			}
+			if deadline < cloudflaredFixTimeout-time.Minute || deadline > cloudflaredFixTimeout {
+				t.Fatalf("cloudflared repair deadline = %v, want about %v", deadline, cloudflaredFixTimeout)
+			}
+		})
 	}
 }
