@@ -612,10 +612,11 @@ container shares the host kernel's boot ID, so a throwaway unit in the
 container bound a fresh ID over `/proc/sys/kernel/random/boot_id` at every
 guest boot.
 
-- Static units: a static unit started by hand was a gap. A static unit with
-  a D-Bus name, a static unit wanted by a running enabled service, and the
-  stock static services (`dbus`, `systemd-journald`, `systemd-logind`) were
-  not.
+- Static units: a static unit started by hand was a gap. A static unit
+  wanted by a running enabled service and the stock static services
+  (`dbus`, `systemd-journald`, `systemd-logind`) were not. This run also
+  passed a static unit for its D-Bus name alone; the gate no longer trusts a
+  bus name without an activation file (see the D-Bus activation run below).
 - With Docker `live-restore` on and `docker.service` stopped, two
   containers kept running in their scopes. The preflight exited 3 with one
   gap that named both and `systemctl enable --now docker.service`, and
@@ -641,6 +642,20 @@ guest boot.
   was reported as failed and not started.
 - Containers with restart policy `no` and `on-failure`, rerun: the same two
   gaps and exit 3.
+
+A D-Bus activation run on 2026-10-30 rendered the installed gate script and
+ran its preflight as root in the same systemd 255 container. Each case wrote
+its own test unit and system bus activation file under
+`/usr/share/dbus-1/system-services`; no `dbus-daemon` ran, because the
+preflight reads the files and never asks the bus. Only the gap line for the
+test unit was graded, since the container's own gettys are always gaps.
+
+- A static unit with a `BusName=` and no activation file, started by hand,
+  was a gap, as was a static unit with no bus name started by hand.
+- A static unit whose activation file named it in `SystemdService=` was not
+  a gap, and neither was one whose file named its `dbus-org.*` alias, the
+  way `systemd-timedated` is named.
+- A unit masked while it ran was a gap with its activation file in place.
 
 Not covered: a real VM reboot, a real kernel update, and a real host
 (doctor `--fix` was not run against production).
