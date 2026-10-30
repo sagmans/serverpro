@@ -169,6 +169,27 @@ func commandNameSed() string {
 	return expressions.String()
 }
 
+// sudoersPathChecks is the shell that prints the host's verdict on every
+// path the Defaults path options name, read out of cvtsudoers' JSON with
+// sed. A value with an escaped character does not match, gets no verdict,
+// and Go fails it. secure_path is split into its directories the way sudo
+// splits it, and each line is checked as the kind its option names.
+func sudoersPathChecks() string {
+	var checks strings.Builder
+	for _, name := range sudoersPathOptions {
+		kind, split := sudoersPathDirectory, ""
+		switch sudoersSafeDefaults[name] {
+		case defaultsFile:
+			kind = sudoersPathFile
+		case defaultsDirectoryList:
+			split = " | tr " + shell.Quote(sudoersSecurePathSeparator) + " '\\n'"
+		}
+		checks.WriteString("printf '%s\\n' \"$sudoers\" | sed -n " + shell.Quote(`s/^.*"`+name+`": "\([^"\\]*\)".*$/\1/p`) + split +
+			" | while IFS= read -r value; do check_path " + kind + " \"$value\" || exit 1; done || exit 1\n")
+	}
+	return checks.String()
+}
+
 // getentNotFoundStatus and grepNoMatchStatus are the exits that mean "no
 // such entry" rather than a failed read: the privileged accounts scan skips
 // only those, so a broken account database cannot read as an empty one.
@@ -297,7 +318,9 @@ func rebootPendingCommand() string {
 //
 // sudo's own parser (cvtsudoers) reads the rules and gradePrivilegedAccounts
 // grades its JSON in Go. The host only answers what Go cannot: for each
-// absolute path the JSON lists, whether only root can change what it runs.
+// absolute path the JSON lists, whether only root can change what it runs,
+// and for each absolute path a Defaults path option names (secure_path,
+// logfile, iolog_dir), whether only root can change it.
 // The walk starts at / and checks every component and every symlink hop,
 // and each link's directory, as the kernel resolves them: a symlink such as
 // /usr/local/bin/deploy pointing at bash, a link in a directory the account
@@ -352,16 +375,16 @@ func privilegedAccountsCommand(admin string, imageUsers []string) string {
 		"  esac\n" +
 		"  [ \"$4\" = 0 ] || printf '%s is not owned by root' \"$1\"\n" +
 		"}\n" +
-		// command_gap prints why listed sudo command path $1 is not safe to
-		// grant, or nothing. dir holds the resolved directory so far, with
-		// \"\" for /.
-		"command_gap() {\n" +
-		"  for twin in \"$1 \"*; do\n" +
-		"    if [ -e \"$twin\" ] || [ -L \"$twin\" ]; then printf 'whose path is ambiguous: %s also exists' \"$twin\"; return 0; fi\n" +
-		"  done\n" +
+		// walk_path resolves path $1 from / the way the kernel does and
+		// sets real to the result, or to nothing when a component does not
+		// exist. It returns 2 after it prints why someone other than root
+		// can change a component or a link on the way, and 1 when it cannot
+		// read one. dir holds the resolved directory so far, with \"\" for /.
+		"walk_path() {\n" +
+		"  real=\n" +
 		"  entry=$(ls -ldn -- /) || return 1\n" +
 		"  gap=$(entry_gap / \"$entry\")\n" +
-		"  [ -z \"$gap\" ] || { printf 'whose path %s' \"$gap\"; return 0; }\n" +
+		"  [ -z \"$gap\" ] || { printf 'whose path %s' \"$gap\"; return 2; }\n" +
 		"  rest=$1 dir= hops=0\n" +
 		"  while :; do\n" +
 		"    while :; do case $rest in (/*) rest=${rest#/} ;; (*) break ;; esac; done\n" +
@@ -373,13 +396,14 @@ func privilegedAccountsCommand(admin string, imageUsers []string) string {
 		"      (..) dir=${dir%/*}; continue ;;\n" +
 		"    esac\n" +
 		"    next=$dir/$name\n" +
-		"    entry=$(ls -ldn -- \"$next\" 2>/dev/null) || { printf 'which does not resolve to a file'; return 0; }\n" +
+		"    [ -e \"$next\" ] || [ -L \"$next\" ] || return 0\n" +
+		"    entry=$(ls -ldn -- \"$next\") || return 1\n" +
 		"    gap=$(entry_gap \"$next\" \"$entry\")\n" +
-		"    [ -z \"$gap\" ] || { printf 'whose path %s' \"$gap\"; return 0; }\n" +
+		"    [ -z \"$gap\" ] || { printf 'whose path %s' \"$gap\"; return 2; }\n" +
 		"    case $entry in\n" +
 		"      (l*)\n" +
 		"        hops=$((hops + 1))\n" +
-		"        [ \"$hops\" -le " + strconv.Itoa(sudoCommandMaxHops) + " ] || { printf 'whose symlinks do not end'; return 0; }\n" +
+		"        [ \"$hops\" -le " + strconv.Itoa(sudoCommandMaxHops) + " ] || { printf 'whose symlinks do not end'; return 2; }\n" +
 		"        target=$(readlink -- \"$next\") || return 1\n" +
 		"        case $target in (/*) dir= ;; esac\n" +
 		"        rest=$target$rest\n" +
@@ -388,6 +412,39 @@ func privilegedAccountsCommand(admin string, imageUsers []string) string {
 		"    esac\n" +
 		"  done\n" +
 		"  real=${dir:-/}\n" +
+		"}\n" +
+		// path_gap prints why Defaults path $2 of kind $1 (directory or
+		// file) is not safe for sudo to search, read, or write as root, or
+		// nothing. A path that does not exist yet passes, because the walk
+		// proved that only root can create it.
+		"path_gap() {\n" +
+		"  status=0; walk_path \"$2\" || status=$?\n" +
+		"  case $status in (0) ;; (2) return 0 ;; (*) return 1 ;; esac\n" +
+		"  [ -n \"$real\" ] || return 0\n" +
+		"  entry=$(ls -ldn -- \"$real\") || return 1\n" +
+		"  case $1:$entry in\n" +
+		"    (" + sudoersPathDirectory + ":d*|" + sudoersPathFile + ":-*) ;;\n" +
+		"    (*) printf 'which does not resolve to a %s' \"$1\" ;;\n" +
+		"  esac\n" +
+		"}\n" +
+		// check_path prints one kind<TAB>path<TAB>verdict line. Only plain
+		// absolute paths are checked; Go fails every other entry without
+		// asking the host.
+		"check_path() {\n" +
+		"  case $2 in (/*) ;; (*) return 0 ;; esac\n" +
+		"  case $2 in (*" + sudoersPathEscape + "*) return 0 ;; esac\n" +
+		"  gap=$(path_gap \"$1\" \"$2\") || return 1\n" +
+		"  printf '%s\\t%s\\t%s\\n' \"$1\" \"$2\" \"${gap:-" + sudoCommandSafe + "}\"\n" +
+		"}\n" +
+		// command_gap prints why listed sudo command path $1 is not safe to
+		// grant, or nothing.
+		"command_gap() {\n" +
+		"  for twin in \"$1 \"*; do\n" +
+		"    if [ -e \"$twin\" ] || [ -L \"$twin\" ]; then printf 'whose path is ambiguous: %s also exists' \"$twin\"; return 0; fi\n" +
+		"  done\n" +
+		"  status=0; walk_path \"$1\" || status=$?\n" +
+		"  case $status in (0) ;; (2) return 0 ;; (*) return 1 ;; esac\n" +
+		"  [ -n \"$real\" ] || { printf 'which does not resolve to a file'; return 0; }\n" +
 		"  entry=$(ls -ldn -- \"$real\") || return 1\n" +
 		"  case $entry in (-*) ;; (*) printf 'which does not resolve to a file'; return 0 ;; esac\n" +
 		"  base=$(printf '%s\\n' \"${real##*/}\" | sed" + commandNameSed() + ") || return 1\n" +
@@ -410,6 +467,7 @@ func privilegedAccountsCommand(admin string, imageUsers []string) string {
 		"  printf '%s\\t%s\\n' \"$path\" \"${gap:-" + sudoCommandSafe + "}\"\n" +
 		"done\n" +
 		") || unreadable 'the listed sudo commands'\n" +
+		"paths=$(\n" + sudoersPathChecks() + ") || unreadable 'the sudoers paths'\n" +
 		"admin_uid=$(printf '%s\\n' \"$accounts\" | awk -F: -v user=\"$admin\" '$1 == user { print $3; exit }') || unreadable 'the admin uid'\n" +
 		imageAccounts +
 		"groups=$(\n" +
@@ -427,7 +485,7 @@ func privilegedAccountsCommand(admin string, imageUsers []string) string {
 		"done\n" +
 		") || unreadable 'the privileged groups'\n" +
 		"uids=$(printf '%s\\n' \"$accounts\" | awk -F: '$3 == 0 && $1 != \"root\" { printf \"" + driftFailPrefix + "%s has uid 0\\n\", $1 }') || unreadable 'the uid 0 accounts'\n" +
-		"printf '%s\\n' " + shell.Quote(sudoersSectionMarker) + " \"$sudoers\" " + shell.Quote(sudoCommandsSectionMarker) + " \"$commands\" " + shell.Quote(adminUIDSectionMarker) + " \"$admin_uid\" " + shell.Quote(accountsSectionMarker) + " \"$images\" \"$groups\" \"$uids\"\n" +
+		"printf '%s\\n' " + shell.Quote(sudoersSectionMarker) + " \"$sudoers\" " + shell.Quote(sudoCommandsSectionMarker) + " \"$commands\" " + shell.Quote(sudoersPathsSectionMarker) + " \"$paths\" " + shell.Quote(adminUIDSectionMarker) + " \"$admin_uid\" " + shell.Quote(accountsSectionMarker) + " \"$images\" \"$groups\" \"$uids\"\n" +
 		"printf 'checked groups: %s\\n' " + shell.Quote(strings.Join(privilegedGroups, " "))
 }
 

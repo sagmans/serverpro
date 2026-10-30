@@ -581,6 +581,33 @@ field, which left the account locked and expired. The current command put
 back the password lock state, the expiry, and the shell exactly in all four
 states, and its quoting kept a value with a single quote as one word.
 
+On 2026-10-31 the `Defaults` grading moved from a list of known-bad entries
+to an allowlist, and the paths `Defaults` options name got the host's path
+walk. The probe from before and after the change ran as root in the same
+kind of container (sudo 1.9.15p5), with the admin's bootstrap and
+cloud-init drop-ins in place, one `Defaults` sample per case, each accepted
+by `visudo -c` first. Doctor's own grader graded every probe output.
+
+- The old probe passed: `env_file` and `mailerpath` (with `mail_always`)
+  under another account's home; `!authenticate`; `runchroot=*`;
+  `env_keep +=` each of `SHELLOPTS`, `PS4`, `BASH_FUNC_*`, `PATH`,
+  `OPENSSL_CONF`, `PERLLIB`, `LOCPATH`, `NLSPATH`, `HOSTALIASES`,
+  `RESOLV_HOST_CONF`, and `TZDIR`; `env_check += GCONV_PATH`; a
+  `secure_path` directory another account owns, directly or through a
+  root-owned symlink; a relative `secure_path` entry, `!secure_path`, and
+  no `secure_path`; and a `logfile` under another account's home. The new
+  probe failed each one and named the option and why.
+- An `iolog_dir` with a `%{user}` escape passed in the old probe and fails
+  in the new one, because the host cannot check the path sudo expands.
+- `setenv` for a user binding, `!env_reset` for a run-as binding, and
+  `env_keep += "L*"` failed in both.
+- Stock Ubuntu `/etc/sudoers` with serverpro's drop-ins passed with no
+  finding in both. So did a hardened sample: `use_pty`, `log_input`,
+  `log_output`, `logfile` and `iolog_dir` under `/var/log`,
+  `passwd_tries`, `timestamp_timeout`, `lecture`, `insults`, `!syslog`,
+  `env_keep += "LANG LC_* TZ"`, `env_check += COLORTERM`, and a
+  `secure_path` bound to one user.
+
 Not covered: a real Vultr host (doctor `--fix` was not run against
 production).
 

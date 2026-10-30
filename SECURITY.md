@@ -193,9 +193,16 @@ default.
   command (a shell, editor, pager, interpreter, file writer, loader, or
   account, package, service, module, capability, or container manager) by
   any path or arguments, a rule with `SETENV` or an option doctor does not
-  grade as safe, and a `Defaults` entry, whatever it binds to, that turns
-  on `setenv`, turns off `env_reset`, or keeps a loader variable such as
-  `LD_PRELOAD` or `PYTHONPATH`. A rule that lists only other absolute
+  grade as safe, and a `Defaults` entry, whatever it binds to, that
+  doctor's allowlist does not pass. The allowlist names each option doctor
+  grades as safe with the values it may hold, so an option it does not list
+  (`env_file`, `mailerpath`, `runchroot`) fails, and so does a value it
+  cannot grade. `env_keep` and `env_check` may add only the names sudo
+  itself keeps or checks after `env_reset`, less `PATH`; a wildcard passes
+  only inside one of them (`LC_*`). Each `secure_path` directory and the
+  `logfile` and `iolog_dir` paths must pass the same root-only path walk as
+  a listed command, and a relative entry, a `%` escape, or no `secure_path`
+  at all fails. A rule that lists only other absolute
   command paths warns and names them. On the server, every hop of each
   listed path, each symlink and the directory it sits in included, must be
   root-owned and not writable by group or others, and the last hop must be

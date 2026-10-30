@@ -664,7 +664,23 @@ https://www.sudo.ws/docs/man/sudoers.man/
 
 Use: `NOPASSWD` and `PASSWD` semantics, and `verifypw=any` for the first-boot
 grant (with the default `verifypw=all`, the admin's `%sudo` entry makes
-`sudo -v` demand the not-yet-set password).
+`sudo -v` demand the not-yet-set password). Also the `Defaults` options and
+their meaning behind doctor's allowlist for `privileged accounts`.
+
+### sudo source: option table and environment tables
+
+```text
+https://github.com/sudo-project/sudo/blob/SUDO_1_9_15p5/plugins/sudoers/def_data.in
+https://github.com/sudo-project/sudo/blob/SUDO_1_9_15p5/plugins/sudoers/env.c
+```
+
+Use: `def_data.in` is sudo's table of every `Defaults` option and its type
+(flag, number, string, path, list, tuple). Doctor's `privileged accounts`
+allowlist (`sudoersSafeDefaults`) uses these names and grades each value by
+its type. `env.c` holds `initial_keepenv_table` and `initial_checkenv_table`,
+the names sudo keeps or checks after `env_reset`; doctor lets `env_keep` and
+`env_check` add only those names, less `PATH`. The tag matches Ubuntu 24.04's
+sudo 1.9.15p5.
 
 ### cvtsudoers
 

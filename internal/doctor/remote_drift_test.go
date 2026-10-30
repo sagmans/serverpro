@@ -291,21 +291,21 @@ func fakeEtc(t *testing.T, files map[string]string) string {
 
 // privilegedProbe builds the read-only probe's output the way a host prints
 // it, so the repair flow below runs through the real grader: the cvtsudoers
-// JSON policy, each listed command's host verdict, the admin uid, then the
-// account findings.
+// JSON policy, each listed command's host verdict, the verdict on the
+// fixtures' secure_path, the admin uid, then the account findings.
 func privilegedProbe(policy, verdicts, accounts string) string {
-	return strings.Join([]string{sudoersSectionMarker, policy, sudoCommandsSectionMarker, verdicts, adminUIDSectionMarker, "1000", accountsSectionMarker, accounts}, "\n")
+	return strings.Join([]string{sudoersSectionMarker, policy, sudoCommandsSectionMarker, verdicts, sudoersPathsSectionMarker, "directory\t/usr/bin\tok", adminUIDSectionMarker, "1000", accountsSectionMarker, accounts}, "\n")
 }
 
 // Sudoers fixtures for the repair test: a CI deploy user limited to a
 // root-owned script is report-only and must stay a warning after the image
-// account removal; an unlimited rule and an env_keep of LD_PRELOAD are
-// unknown drift that the repair must leave alone.
+// account removal; an unlimited rule, an env_keep of LD_PRELOAD, and setenv
+// are unknown drift that the repair must leave alone.
 const (
-	ciListedPolicy  = `{"User_Specs": [{"User_List": [{"username": "ci"}], "Cmnd_Specs": [{"Options": [{"authenticate": false}], "Commands": [{"command": "/usr/local/bin/deploy-app restart"}]}]}]}`
+	ciListedPolicy  = `{"Defaults": [{"Options": [{"secure_path": "/usr/bin"}]}], "User_Specs": [{"User_List": [{"username": "ci"}], "Cmnd_Specs": [{"Options": [{"authenticate": false}], "Commands": [{"command": "/usr/local/bin/deploy-app restart"}]}]}]}`
 	ciListedVerdict = "/usr/local/bin/deploy-app\tok"
-	unknownPolicy   = `{"Defaults": [{"Options": [{"operation": "list_add", "env_keep": ["LD_PRELOAD"]}]}], "User_Specs": [{"User_List": [{"username": "ci"}], "Cmnd_Specs": [{"Commands": [{"command": "ALL"}]}]}]}`
-	emptyPolicy     = `{"User_Specs": []}`
+	unknownPolicy   = `{"Defaults": [{"Options": [{"operation": "list_add", "env_keep": ["LD_PRELOAD"]}, {"setenv": true}]}], "User_Specs": [{"User_List": [{"username": "ci"}], "Cmnd_Specs": [{"Commands": [{"command": "ALL"}]}]}]}`
+	emptyPolicy     = `{"Defaults": [{"Options": [{"secure_path": "/usr/bin"}]}], "User_Specs": []}`
 )
 
 func TestPrivilegedAccountsSpecificationRepairsOnlyImageAccounts(t *testing.T) {
