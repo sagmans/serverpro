@@ -65,10 +65,12 @@ const (
 	dpkgStatusPath         = "/var/lib/dpkg/status"
 	cloudflaredServiceName = "cloudflared"
 	cloudflaredServiceUser = "cloudflared"
-	cloudflaredConfigDir   = "/etc/cloudflared"
-	cloudflaredTokenPath   = cloudflaredConfigDir + "/token"
-	cloudflaredUnitPath    = "/etc/systemd/system/cloudflared.service"
-	cloudflaredBinaryPath  = "/usr/bin/cloudflared"
+	// CloudflaredConfigDir also holds any locally managed ingress file, which
+	// the OpenSSH preflight reads before it turns sshd off.
+	CloudflaredConfigDir  = "/etc/cloudflared"
+	cloudflaredTokenPath  = CloudflaredConfigDir + "/token"
+	cloudflaredUnitPath   = "/etc/systemd/system/cloudflared.service"
+	cloudflaredBinaryPath = "/usr/bin/cloudflared"
 )
 
 // cloudflaredAPTSource is the exact source line provisioning writes. The
@@ -719,7 +721,7 @@ UNIT
 `,
 		path.Dir(cloudflareKeyringPath),
 		path.Dir(cloudflaredAPTSourcePath),
-		cloudflaredConfigDir,
+		CloudflaredConfigDir,
 		cloudflareKeyringPath,
 		cloudflaredAPTSourcePath,
 		cloudflaredServiceUser,

@@ -52,8 +52,18 @@ type Egress struct {
 	PhaseLockdownAfterBootstrap bool   `yaml:"phase_lockdown_after_bootstrap" json:"phase_lockdown_after_bootstrap"`
 }
 
+// OpenSSH modes. Disabled is the default: Tailscale SSH is the only admin
+// path, so a listening sshd is attack surface with no user. Enabled is the
+// explicit opt-back-in for a host that needs OpenSSH, for example a provider
+// console that connects through sshd.
+const (
+	OpenSSHDisabled = "disabled"
+	OpenSSHEnabled  = "enabled"
+)
+
 type Access struct {
 	PublicSSH bool      `yaml:"public_ssh" json:"public_ssh"`
+	OpenSSH   string    `yaml:"openssh" json:"openssh"`
 	Tailscale Tailscale `yaml:"tailscale" json:"tailscale"`
 }
 

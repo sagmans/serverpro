@@ -230,13 +230,15 @@ access paths for app-owned deployment flows.
     the newest 5 reports per server when cleanup succeeds. Storage failure
     falls back to the complete stdout report and a stderr warning.
     Drift checks compare the live host with what config and provisioning
-    promised: restricted egress, pending reboot, unattended-upgrades
+    promised: restricted egress, OpenSSH off, pending reboot, unattended-upgrades
     options, privileged accounts, metadata user-data password hash, Tailscale operator, Serve and Funnel,
     runtime sysctl, and a live cloudflared connector while ingress is `none`.
     Each probe prints `fail: ` or `warn: ` lines and exits 0 when it could read
     the host, so a probe that never ran (non-zero exit) fails instead of
     passing.
-    Three have a repair: restricted egress re-runs the provisioning lockdown,
+    Four have a repair: restricted egress re-runs the provisioning lockdown,
+    OpenSSH off re-runs the create step (`lifecycle.OpenSSHDisableScript`,
+    safety checks included, and a repair's warnings stay in the result),
     the unattended-upgrades drop-in is rewritten from the function that
     renders it for cloud-init, and privileged accounts removes the accounts
     the compute adapter declares as image accounts. Every other finding needs
@@ -393,7 +395,15 @@ flowchart LR
    `/root/serverpro-removed-accounts`, checks `visudo -c`, and then runs
    `userdel -r`. It stops on running processes and never touches root, the
    admin user, or uid 0. Then converge the managed host tools through the
-   embedded bootstrap script.
+   embedded bootstrap script and apply the egress lockdown. Last, unless
+   `access.openssh: enabled`, turn OpenSSH off (`remote_openssh` phase):
+   `lifecycle.OpenSSHDisableScript` stops before any change when Tailscale
+   SSH is not proven or OpenSSH is in use, records the original unit states
+   in `/var/lib/serverpro/openssh-disabled.state`, masks `ssh.socket` and
+   `ssh.service`, and creates `/etc/ssh/sshd_not_to_be_run`. The compute
+   adapter can declare an sshd console agent (`compute.SSHConsoleAgents`)
+   that the step warns about. A create with no reachable host fails rather
+   than skip it.
 10. During interactive GitHub setup, persist the selected non-secret access
     intent before remote mutation. Full development requires a PAT; deploy-key
     intent includes its normalized repository scope. Switching from deploy-key
@@ -552,11 +562,14 @@ never replaced.
 
 - Tailscale SSH is mandatory.
 - Public SSH is disabled.
+- OpenSSH is off by default (`access.openssh: disabled`); `enabled` is the
+  explicit opt-back-in, and a config without the key gets the default.
 - Public app ingress defaults to `none`.
 - Omitted post-bootstrap egress-lockdown configuration defaults to enabled;
   disabling it requires an explicit `false`. Restricted egress permits
   outbound SSH (22/tcp) so git-over-SSH keeps working. Create runs the
-  lockdown last, `server bootstrap` runs it again after the tools, and doctor
+  lockdown after the tools (only the OpenSSH-off step follows), `server
+  bootstrap` runs it again after the tools, and doctor
   `--fix` runs the same script for `egress restricted` and `ufw ssh egress`.
   The script verifies the UFW default, a blocked connect, and an allowed
   connect, and fails closed; a create with no reachable host fails rather than

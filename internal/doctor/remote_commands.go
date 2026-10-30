@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/hostplatform"
 	"github.com/sagmans/serverpro/internal/lifecycle"
 	"github.com/sagmans/serverpro/internal/shell"
 )
@@ -42,8 +43,8 @@ const (
 	// setting checks, and earlier repairs that restarted ssh once per failing
 	// setting left both units failed on start-limit-hit.
 	sshdUnitsCheckName = "sshd units"
-	sshSocketUnit      = "ssh.socket"
-	sshServiceUnit     = "ssh.service"
+	sshSocketUnit      = hostplatform.OpenSSHSocketUnit
+	sshServiceUnit     = hostplatform.OpenSSHServiceUnit
 
 	// sshd file layout on the managed host. The setting reads and the repair
 	// share it so they always judge and write the same files; the repair takes
@@ -154,7 +155,8 @@ func sshdSettingReadCommand(effective, configured string) string {
 // sshdUnitsReadCommand fails while an ssh unit is failed, or enabled but not
 // running, and names each unit so the evidence points at the recovery target.
 // ssh.service stays inactive by design while ssh.socket listens, so that case
-// passes.
+// passes. A masked unit is neither failed nor enabled, so a host with OpenSSH
+// off (the default, see the openssh disabled check) passes too.
 func sshdUnitsReadCommand() string {
 	return "bad=''\n" +
 		"for unit in " + sshSocketUnit + " " + sshServiceUnit + "; do\n" +
@@ -168,9 +170,10 @@ func sshdUnitsReadCommand() string {
 
 // sshdUnitsFixCommand clears the failed state and starts, unless it already
 // runs, whichever unit the host enables, preferring the socket so a socket-activated host does not
-// also gain a standalone daemon. It never enables a disabled unit, so it only
-// returns the host to its own configured listener; the ufw checks earlier in
-// the same plan are what keep public port 22 denied.
+// also gain a standalone daemon. It never enables a disabled unit or starts a
+// masked one, so it only returns the host to its own configured listener and
+// never undoes OpenSSH off; the ufw checks earlier in the same plan are what
+// keep public port 22 denied.
 func sshdUnitsFixCommand() string {
 	return "for unit in " + sshSocketUnit + " " + sshServiceUnit + "; do\n" +
 		"  if systemctl is-failed --quiet \"$unit\"; then systemctl reset-failed \"$unit\"; fi\n" +

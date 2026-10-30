@@ -174,6 +174,7 @@ network:
     phase_lockdown_after_bootstrap: true
 access:
   public_ssh: false
+  openssh: disabled
   tailscale:
     enabled: true
     ssh: true
@@ -204,6 +205,11 @@ git:
 `network.egress.mode: restricted` permits only DNS, NTP, HTTP(S), outbound
 SSH (22/tcp, for git-over-SSH), Cloudflare Tunnel, and Tailscale egress;
 `open` allows all outbound traffic.
+
+`access.openssh: disabled` (the default, also when the key is missing) turns
+OpenSSH off on the server, so Tailscale SSH is the only admin path.
+`enabled` keeps OpenSSH and skips the `openssh disabled` doctor check. See
+OpenSSH off.
 
 The optional `git` section records durable GitHub setup intent chosen during
 interactive create/bootstrap: `access: none` leaves git untouched,
@@ -529,7 +535,9 @@ sshd -t too`, keep the current session open and fix the named files until
 `listening ports` read the host again instead of reusing the start-of-run
 baseline, and a check it did not settle fails without running it again. The `sshd units` check reports an `ssh.socket` or `ssh.service` that
 is failed, or enabled but not running; `--fix` clears the failure and starts
-the unit the host enables.
+the unit the host enables. Masked units pass: with OpenSSH off, both units are
+masked, and `--fix` never starts them. The sshd hardening checks still check
+the sshd config while OpenSSH is off.
 Doctor redacts known credentials before it limits failure evidence to 4 KiB.
 Long failures retain the beginning and end, separated by `... [truncated] ...`,
 so terminal errors remain visible after bootstrap progress. Successful checks
@@ -663,9 +671,10 @@ toolset summary.
 
 These doctor checks compare the live host with what config and provisioning
 set up. Most are read-only: `--fix` does not change what they find, because
-each finding needs an operator decision. Four checks have a repair, because
+each finding needs an operator decision. Five checks have a repair, because
 config, provisioning, or the compute provider already states the wanted
 result: `egress restricted` re-applies the restricted egress lockdown,
+`openssh disabled` turns OpenSSH off after its safety checks,
 `unattended upgrades config` rewrites the serverpro unattended-upgrades
 drop-in, `privileged accounts` removes the provider's own image accounts, and
 `cloudflared apt pin` rewrites the pin (only with ingress
@@ -674,6 +683,7 @@ drop-in, `privileged accounts` removes the provider's own image accounts, and
 | Check | Result | Finding |
 | --- | --- | --- |
 | `egress restricted` | fail | UFW's default outgoing policy is not `deny`/`reject`, a lockdown `ALLOW OUT` rule is missing, or a TCP connect to `1.1.1.1:853` succeeds. Runs only with `network.egress.mode: restricted`; `--fix` re-applies the lockdown. |
+| `openssh disabled` | fail or warn | `ssh.socket` or `ssh.service` is enabled or active, or a process listens on TCP port 22, or `sshd` listens on any port (fail). A unit is disabled but not masked, or `/etc/ssh/sshd_not_to_be_run` is missing (warn). Skipped with `access.openssh: enabled`; `--fix` runs the create step, safety checks included. See OpenSSH off. |
 | `reboot pending` | warn | `/var/run/reboot-required` exists, or an installed kernel is newer than the running one. Doctor never reboots, also with `--fix`; see Reboots and kernel cleanup. |
 | `unattended upgrades config` | fail or warn | An option of `/etc/apt/apt.conf.d/52serverpro-unattended-upgrades` has another effective value in `apt-config` (fail), or is not set at all (warn: a host created before the drop-in). `--fix` rewrites the drop-in; a later apt.conf.d file that overrides it stays a finding. |
 | `privileged accounts` | fail | An account other than the admin user is in `sudo`, `admin`, `lxd`, or `docker` (also as primary group), a rule in `/etc/sudoers` or `/etc/sudoers.d` grants sudo to another account or group, a non-root account has uid 0, or a provider image account (Vultr: `linuxuser`) exists. `--fix` removes only the provider image accounts; see Provider image accounts. |
@@ -695,6 +705,70 @@ the `cloudflared` check above audits and repairs the connector itself;
 and it reads the same host state as that audit. The `tailnet policy` check
 needs an API token that can read the policy file; serverpro never edits
 tailnet packet rules.
+
+### OpenSSH off
+
+With `access.openssh: disabled` (the default), `server create` turns OpenSSH
+off as its last remote step, after the bootstrap reached the server through
+Tailscale SSH. `serverpro server doctor NAME --fix` does the same on an older
+server, and after a create that stopped before this step: `server bootstrap`
+does not run it. Doctor never does this without `--fix`, and it never
+reboots.
+
+The step first checks these conditions. If one of them is true, it stops and
+changes nothing:
+
+- `tailscaled` is not active.
+- `tailscale debug prefs` does not show `"RunSSH": true`.
+- A TCP connection to port 22 is established.
+- The journal (`sshd`, `sshd-session`) or `/var/log/auth.log*` shows an
+  OpenSSH login in the last 30 days. The message gives only the method and
+  the user, never the source address. An `auth.log` line in the classic
+  syslog format has no year, so it counts even when it is older.
+- A file under `/etc/cloudflared` routes to `ssh://` or to port 22.
+
+Then it:
+
+1. Warns when the admin user has no usable password, or when a provider
+   console agent that logs in through sshd is active (DigitalOcean:
+   `droplet-agent`). `doctor --fix` shows these warnings in its result.
+2. Writes the original `is-enabled` state of both units, and whether the flag
+   file existed, to `/var/lib/serverpro/openssh-disabled.state` (`0600`)
+   once. A later run keeps the first record.
+3. Runs `systemctl disable --now ssh.socket ssh.service`, then
+   `systemctl mask ssh.socket ssh.service`.
+4. Creates `/etc/ssh/sshd_not_to_be_run`. Both units do not start while it
+   exists, also after someone unmasks them or a package upgrade tries to
+   start them.
+5. Checks that both units are inactive and that nothing listens on port 22.
+
+The `openssh-server` and `openssh-sftp-server` packages stay installed, so
+security updates still apply and the rollback needs no download. Tailscale
+SSH has its own SFTP support.
+
+To turn OpenSSH on again, set `access.openssh: enabled` in the server config,
+then run on the server:
+
+```sh
+sudo cat /var/lib/serverpro/openssh-disabled.state
+sudo systemctl unmask ssh.socket ssh.service
+sudo rm /etc/ssh/sshd_not_to_be_run
+sudo systemctl enable --now ssh.socket
+```
+
+These commands fit the usual record on Ubuntu 24.04: `ssh.socket=enabled`
+and `condition=absent`. Enable each unit that the record lists as `enabled`,
+and keep the flag file when it says `condition=present`.
+
+Recovery without Tailscale SSH uses a provider console that does not need
+sshd, and you log in there with the admin user's password:
+
+- Vultr: the View Console.
+- Hetzner: the Cloud Console.
+- DigitalOcean: the Recovery Console. The Droplet Console logs in through
+  sshd, so it does not work while OpenSSH is off.
+
+When no sudo user has a password, use the provider's rescue system instead.
 
 ### Provider image accounts
 
@@ -743,7 +817,8 @@ for an update reboot.
 
 With `network.egress.mode: restricted` and
 `phase_lockdown_after_bootstrap: true`, `server create` applies this UFW
-lockdown as root as its last remote step. `server bootstrap` applies it again
+lockdown as root after the server tools; only the OpenSSH-off step follows
+it. `server bootstrap` applies it again
 after the tools, because it is the recovery for a create that stopped before
 the lockdown. A create that cannot reach the host fails instead of completing
 without the lockdown. The lockdown only adds rules, so rules that other tools

@@ -21,7 +21,7 @@ func Default() Config {
 		// an explicit false in server YAML still opts out.
 		Admin:      Admin{Username: "deploy", StoreConsolePassword: true},
 		Network:    Network{Ingress: "none", Egress: Egress{Mode: EgressModeRestricted, PhaseLockdownAfterBootstrap: true}},
-		Access:     Access{Tailscale: Tailscale{Enabled: true, SSH: true, Tailnet: TokenDefaultTailnet, Tags: []string{"tag:serverpro-server"}, RootPolicy: "check-or-disabled"}},
+		Access:     Access{OpenSSH: OpenSSHDisabled, Tailscale: Tailscale{Enabled: true, SSH: true, Tailnet: TokenDefaultTailnet, Tags: []string{"tag:serverpro-server"}, RootPolicy: "check-or-disabled"}},
 		Cloudflare: Cloudflare{},
 		Hardening:  Hardening{Profile: "strict", UnattendedUpgrades: true, AppArmor: true, UFW: true, JournaldPersistent: true},
 	}

@@ -58,6 +58,15 @@ default.
   or a recorded device that is gone or renamed, stop create and doctor instead
   of choosing one. Doctor and reruns check the recorded device ID, not the name.
 - Public SSH is disabled.
+- OpenSSH is off by default (`access.openssh: disabled`). Create turns it off
+  as its last remote step, after Tailscale SSH has carried the bootstrap. The
+  step stops before any change when `tailscaled` is down, Tailscale SSH is
+  off, an OpenSSH session is established, an OpenSSH login is in the last 30
+  days, or a local cloudflared ingress routes to SSH. It masks both ssh units
+  and creates `/etc/ssh/sshd_not_to_be_run`, so neither a dependency nor a
+  package upgrade starts sshd again. Login reports name the method and user,
+  never the source address. The packages stay installed for updates and
+  rollback, and the sshd hardening checks still check the config.
 - Public app ingress defaults to `none`.
 - Post-bootstrap egress lockdown is fail-closed: an omitted
   `phase_lockdown_after_bootstrap` value behaves as `true`; only explicit
@@ -115,7 +124,8 @@ default.
   doctor never takes it from the host.
 - Doctor drift checks report what weakens this model after provisioning:
   restricted egress not in force (UFW policy, every lockdown rule, and a real
-  connect to a port the lockdown never allows), a pending reboot,
+  connect to a port the lockdown never allows), OpenSSH running or able to
+  start while config wants it off, a pending reboot,
   unattended-upgrades options that differ from the serverpro drop-in (which
   turns on unused-kernel removal so `/boot` cannot block a kernel update),
   extra accounts in
@@ -125,7 +135,8 @@ default.
   values that differ from the serverpro drop-in, and a cloudflared service that
   is enabled or running on a host whose config ingress is `none`. Restricted
   egress has a repair (the provisioning lockdown), because config states the
-  wanted policy, and so does the unattended-upgrades drop-in. Doctor never
+  wanted policy, and so do OpenSSH off (the create step, safety checks
+  included) and the unattended-upgrades drop-in. Doctor never
   reboots: a reboot needs a workload window only the operator knows. Privileged accounts has a repair only for the accounts the
   compute adapter declares as its image accounts; every other account,
   sudoers rule, or group member is report-only, because it may run a
@@ -518,6 +529,10 @@ Use provider recovery tools when Tailscale SSH is unavailable:
 - Hetzner: Cloud Console VNC or Rescue System.
 - DigitalOcean: Recovery Console or Recovery ISO.
 - Vultr: web console or rescue ISO.
+
+These consoles log in on the server's console, not through sshd, so they work
+while OpenSSH is off. They need the admin user's password. The DigitalOcean
+Droplet Console logs in through sshd and does not work while OpenSSH is off.
 
 After recovery, run `serverpro server doctor` and verify public SSH is still
 closed.

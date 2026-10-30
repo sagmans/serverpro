@@ -260,6 +260,12 @@ func TestSSHDUnitsReadAndFixAgainstFakeSystemctl(t *testing.T) {
 			wantStart:    "start ssh.service",
 		},
 		{
+			// OpenSSH off: masked units are neither failed nor enabled, so
+			// they pass and the repair never starts them.
+			name:  "openssh-off-masked",
+			units: map[string]unitState{sshServiceUnit: {active: "inactive", enabled: "masked"}, sshSocketUnit: {active: "inactive", enabled: "masked"}},
+		},
+		{
 			name:         "socket-failed-prefers-socket",
 			units:        map[string]unitState{sshServiceUnit: {active: "inactive", enabled: "yes"}, sshSocketUnit: {active: "failed", enabled: "yes"}},
 			readEvidence: "ssh.socket:failed",

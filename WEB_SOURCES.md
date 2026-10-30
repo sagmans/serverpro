@@ -653,6 +653,23 @@ instance reboots after an update. Reviewed 2026-10-30; the DigitalOcean and
 Vultr paths were also read live on managed hosts. No Hetzner host was
 available, so its path rests on the Ignition provider source.
 
+### OpenSSH off and provider consoles
+
+```text
+https://tailscale.com/docs/features/tailscale-ssh
+https://docs.digitalocean.com/products/droplets/how-to/connect-with-console
+https://docs.digitalocean.com/products/droplets/how-to/recovery/recovery-console/
+https://docs.vultr.com/products/compute/cloud-compute/connection/vultr-console
+```
+
+Use: the OpenSSH-off default and its recovery notes. Tailscale SSH serves
+SSH, including SFTP, from `tailscaled` without sshd. The DigitalOcean Droplet
+Console needs the droplet agent and a running sshd; the Recovery Console does
+not. The Vultr View Console logs in on the server console with the user's
+password. The `sshd_not_to_be_run` condition comes from the `ssh.socket` and
+`ssh.service` units in `openssh-server` `1:9.6p1-3ubuntu13.20` (noble),
+checked in a container. Reviewed 2026-10-30.
+
 ### Unattended-upgrades options
 
 ```text

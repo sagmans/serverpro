@@ -33,8 +33,11 @@ func BuildPlan(cfg config.Config) Plan {
 	actions = append(actions,
 		PlanAction{"install", "server tools", bootstraptools.DefaultToolsetDescription() + "; " + bootstraptools.AuthenticationBoundary},
 		PlanAction{"lockdown", "egress", cfg.Network.Egress.Mode + " best-effort policy"},
-		PlanAction{"validate", "doctor", "hardening, ingress, Tailscale SSH, tunnel, secret checks"},
 	)
+	if cfg.Access.OpenSSH != config.OpenSSHEnabled {
+		actions = append(actions, PlanAction{"disable", "openssh", "mask the ssh units once Tailscale SSH works; packages stay installed"})
+	}
+	actions = append(actions, PlanAction{"validate", "doctor", "hardening, ingress, Tailscale SSH, tunnel, secret checks"})
 	return Plan{Actions: actions}
 }
 

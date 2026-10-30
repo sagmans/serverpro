@@ -11,6 +11,7 @@ import (
 
 	"github.com/sagmans/serverpro/internal/cloudinit"
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/lifecycle"
 	"github.com/sagmans/serverpro/internal/network"
 )
 
@@ -88,10 +89,17 @@ func TestRemoteDriftSpecificationsProbeEgressOnlyWhenRestricted(t *testing.T) {
 			}
 		}
 	}
-	assertRepairs(map[string]string{egressRestrictedCommand(): network.LockdownScript(cfg), unattendedUpgradesConfigCommand(): unattendedUpgradesConfigFixCommand()})
+	openSSHRepair := lifecycle.OpenSSHDisableScript(cfg.Admin.Username, nil)
+	assertRepairs(map[string]string{egressRestrictedCommand(): network.LockdownScript(cfg), openSSHDisabledCommand(): openSSHRepair, unattendedUpgradesConfigCommand(): unattendedUpgradesConfigFixCommand()})
 	cfg.Network.Egress.Mode = "open"
 	if specificationsRead(remoteDriftSpecifications(cfg, Options{}), egressRestrictedCommand()) {
 		t.Fatal("open egress is probed as restricted")
+	}
+	assertRepairs(map[string]string{openSSHDisabledCommand(): openSSHRepair, unattendedUpgradesConfigCommand(): unattendedUpgradesConfigFixCommand()})
+	// A config that opts back in to OpenSSH is neither probed nor repaired.
+	cfg.Access.OpenSSH = config.OpenSSHEnabled
+	if specificationsRead(remoteDriftSpecifications(cfg, Options{}), openSSHDisabledCommand()) {
+		t.Fatal("enabled OpenSSH is probed as disabled")
 	}
 	assertRepairs(map[string]string{unattendedUpgradesConfigCommand(): unattendedUpgradesConfigFixCommand()})
 }
@@ -115,6 +123,9 @@ func TestRemoteFixableDriftSpecificationRepairsOnlyReadableDrift(t *testing.T) {
 		{name: "report only", calls: map[string][]remoteCall{probe: {drift}}, want: Fail, wantEvidence: "drifted"},
 		{name: "probe failed", calls: map[string][]remoteCall{probe: {{out: "denied", err: errors.New("exit status 1")}}}, opt: Options{Fix: true}, want: Fail, wantEvidence: "denied"},
 		{name: "fixed", calls: map[string][]remoteCall{probe: {drift, clean}}, opt: Options{Fix: true}, want: Pass, wantEvidence: "fixed: converged", wantFixRuns: 1},
+		// A repair that succeeds can still print a warning the operator must
+		// act on; the OpenSSH-off repair prints them with its own prefix.
+		{name: "fixed with warning", calls: map[string][]remoteCall{probe: {drift, clean}, fix: {{out: "masked\n" + lifecycle.OpenSSHWarningPrefix + "recovery path changed"}}}, opt: Options{Fix: true}, want: Warn, wantEvidence: "fixed: converged; recovery path changed", wantFixRuns: 1},
 		{name: "fix failed", calls: map[string][]remoteCall{probe: {drift}, fix: {{out: "lockdown did not take effect", err: errors.New("exit status 1")}}}, opt: Options{Fix: true}, want: Fail, wantEvidence: "lockdown did not take effect", wantFixRuns: 1},
 		{name: "drift remains", calls: map[string][]remoteCall{probe: {drift, drift}}, opt: Options{Fix: true}, want: Fail, wantEvidence: "fix applied but drift remains: drifted", wantFixRuns: 1},
 		{name: "repair already ran", calls: map[string][]remoteCall{probe: {drift}}, opt: Options{Fix: true, fixRan: func(string) bool { return true }}, want: Fail, wantEvidence: repairAlreadyRanEvidence},

@@ -115,6 +115,9 @@ func Run(ctx context.Context, opt Options) (state.State, error) {
 	if err := bootstrapRemoteNetwork(ctx, opt.Clients.Remote, opt.Clients.Cloudflare, cfg, st); err != nil {
 		return st, newProvisionError(ProvisionPhaseRemoteBootstrap, st, err)
 	}
+	if err := disableOpenSSH(ctx, opt.Clients.Remote, opt.Clients.Compute, cfg, st); err != nil {
+		return st, newProvisionError(ProvisionPhaseRemoteOpenSSH, st, err)
+	}
 	// Auth-key cleanup is best-effort: the server is created and bootstrapped, so
 	// a cleanup failure must not report the whole provision as failed. On success
 	// keyID is cleared so the deferred fallback is a no-op; on failure the key id

@@ -26,10 +26,11 @@ func BootstrapTools(ctx context.Context, r remote.Runner, cfg config.Config, st 
 	return applyEgressLockdown(ctx, r, cfg, st)
 }
 
-// applyEgressLockdown is the last remote step of create and of server
-// bootstrap. Bootstrap is the recovery after a create whose tool phase
-// failed, and that create never reached the lockdown, so bootstrap must
-// converge egress too or the host stays open with only the tools' rules.
+// applyEgressLockdown runs after the tools in create (only the OpenSSH-off
+// step follows) and last in server bootstrap. Bootstrap is the recovery after
+// a create whose tool phase failed, and that create never reached the
+// lockdown, so bootstrap must converge egress too or the host stays open with
+// only the tools' rules.
 func applyEgressLockdown(ctx context.Context, r remote.Runner, cfg config.Config, st state.State) error {
 	if !cfg.Network.Egress.PhaseLockdownAfterBootstrap {
 		return nil

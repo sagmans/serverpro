@@ -259,6 +259,7 @@ func (a *app) withDoctorProviderFacts(st state.State, opt doctor.Options) doctor
 	}
 	opt.MetadataUserDataPath = compute.MetadataUserDataPath(provider)
 	opt.ImageDefaultUsers = compute.ImageDefaultUsers(provider)
+	opt.SSHConsoleAgents = compute.SSHConsoleAgents(provider)
 	return opt
 }
 

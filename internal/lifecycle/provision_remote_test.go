@@ -24,8 +24,11 @@ func TestRunBootstrapsTunnelAndLockdownOverRemote(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(r.scripts) != 5 {
-		t.Fatalf("expected remote probe, admin password, tunnel install, server tool bootstrap, and lockdown scripts, got %d: %q", len(r.scripts), r.scripts)
+	if len(r.scripts) != 6 {
+		t.Fatalf("expected remote probe, admin password, tunnel install, server tool bootstrap, lockdown, and OpenSSH-off scripts, got %d: %q", len(r.scripts), r.scripts)
+	}
+	if r.scripts[5] != OpenSSHDisableScript(cfg.Admin.Username, nil) {
+		t.Fatalf("last remote script is not the OpenSSH-off step: %q", r.scripts[5])
 	}
 	if r.scripts[0] != "true" || r.scripts[1] != AdminPasswordScript(cfg.Admin.Username) || !strings.Contains(r.scripts[2], "cloudflared") || !strings.Contains(r.scripts[3], "serverpro-bootstrap-tools") || !strings.Contains(r.scripts[3], "@earendil-works/pi-coding-agent") || !strings.Contains(r.scripts[3], "bootstrap packages apply --yes") || !strings.Contains(r.scripts[3], "bootstrap packages upgrade --yes") || !strings.Contains(r.scripts[3], "mise --yes install") || !strings.Contains(r.scripts[3], "SERVERPRO_BOOTSTRAP_TMUX_VERSION") || !strings.Contains(r.scripts[4], "ufw default deny outgoing") || !strings.Contains(r.scripts[4], "ufw allow out 7844/tcp") {
 		t.Fatalf("unexpected remote scripts: %q", r.scripts)
@@ -43,8 +46,8 @@ func TestRunSkipsCloudflareBootstrapWhenIngressDisabled(t *testing.T) {
 	if cf.tokenRequests != 0 {
 		t.Fatalf("disabled ingress requested Cloudflare tunnel token %d times", cf.tokenRequests)
 	}
-	if len(r.scripts) != 4 {
-		t.Fatalf("expected remote probe, admin password, server tool bootstrap, and lockdown scripts, got %d: %q", len(r.scripts), r.scripts)
+	if len(r.scripts) != 5 {
+		t.Fatalf("expected remote probe, admin password, server tool bootstrap, lockdown, and OpenSSH-off scripts, got %d: %q", len(r.scripts), r.scripts)
 	}
 	if r.scripts[0] != "true" || r.scripts[1] != AdminPasswordScript(cfg.Admin.Username) || strings.Contains(r.scripts[2], "cloudflared") || !strings.Contains(r.scripts[2], "serverpro-bootstrap-tools") || !strings.Contains(r.scripts[2], "bootstrap packages apply --yes") || !strings.Contains(r.scripts[2], "bootstrap packages upgrade --yes") || !strings.Contains(r.scripts[2], "mise --yes install") || !strings.Contains(r.scripts[3], "ufw default deny outgoing") {
 		t.Fatalf("unexpected remote scripts: %q", r.scripts)

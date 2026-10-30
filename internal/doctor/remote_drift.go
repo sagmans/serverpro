@@ -21,9 +21,9 @@ const (
 // checks cannot see: each compares the live host with what config or
 // provisioning promised. Most are read-only, because the finding needs an
 // operator decision (an unknown account, a reboot window). Restricted
-// egress, the unattended-upgrades drop-in, and provider image accounts have a
-// repair, because config, provisioning, or the provider adapter already
-// states the wanted result.
+// egress, OpenSSH off, the unattended-upgrades drop-in, and provider image
+// accounts have a repair, because config, provisioning, or the provider
+// adapter already states the wanted result.
 func remoteDriftSpecifications(cfg config.Config, opt Options) []remoteCheckSpecification {
 	user := cfg.Admin.Username
 	var specifications []remoteCheckSpecification
@@ -31,6 +31,7 @@ func remoteDriftSpecifications(cfg config.Config, opt Options) []remoteCheckSpec
 		specifications = append(specifications, remoteFixableDriftSpecification(egressRestrictedCheckName, egressRestrictedCommand(), egressRestrictedRemediation, network.LockdownScript(cfg)))
 	}
 	return append(specifications,
+		remoteOpenSSHSpecification(cfg, opt.SSHConsoleAgents),
 		remoteDriftSpecification(rebootPendingCheckName, rebootPendingCommand(), rebootPendingRemediation(cfg.Namespace, cfg.Server)),
 		remoteFixableDriftSpecification(unattendedUpgradesConfigCheckName, unattendedUpgradesConfigCommand(), unattendedUpgradesConfigRemediation, unattendedUpgradesConfigFixCommand()),
 		remotePrivilegedAccountsSpecification(user, opt.ImageDefaultUsers),
@@ -127,18 +128,37 @@ func remoteFixableDriftSpecificationWhen(name, command, remediation, fixCommand 
 			if opt.fixRan != nil && opt.fixRan(fixCommand) {
 				return []Result{fail("remote", name, result.Evidence+repairAlreadyRanEvidence, repairAlreadyRanRemediation)}
 			}
-			if fixOut, fixErr := runner.Run(ctx, user, host, fixCommand); fixErr != nil {
+			fixOut, fixErr := runner.Run(ctx, user, host, fixCommand)
+			if fixErr != nil {
 				return []Result{fail("remote", name, result.Evidence+"; fix failed: "+remoteFailureEvidence(fixOut, fixErr), remediation)}
 			}
 			out, err = runner.Run(ctx, user, host, command)
 			after := driftResult(name, out, err, remediation)
 			if after.Status == Pass {
-				after.Evidence = "fixed: " + after.Evidence
-				return []Result{after}
+				return []Result{fixedResult(name, after.Evidence, fixOut, remediation)}
 			}
 			return []Result{fail("remote", name, "fix applied but drift remains: "+after.Evidence, remediation)}
 		},
 	}
+}
+
+// fixedResult keeps the warnings a repair prints: a repair can succeed and
+// still leave the operator something to act on, such as a recovery path the
+// change removed, and dropping them would hide it behind a pass.
+func fixedResult(name, evidence, fixOut, remediation string) Result {
+	evidence = "fixed: " + evidence
+	var warnings []string
+	for _, line := range strings.Split(fixOut, "\n") {
+		if line = strings.TrimSpace(line); strings.HasPrefix(line, driftWarnPrefix) {
+			warnings = append(warnings, strings.TrimPrefix(line, driftWarnPrefix))
+		}
+	}
+	if len(warnings) == 0 {
+		return pass("remote", name, evidence)
+	}
+	result := warn("remote", name, evidence+driftEvidenceSeparator+strings.Join(warnings, driftEvidenceSeparator))
+	result.Remediation = remediation
+	return result
 }
 
 // driftResult turns probe output into one result: any fail line fails, any

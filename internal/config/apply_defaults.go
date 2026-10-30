@@ -65,6 +65,11 @@ func applyAccessDefaults(c *Config, d Config) {
 	if c.Access.Tailscale.RootPolicy == "" {
 		c.Access.Tailscale.RootPolicy = d.Access.Tailscale.RootPolicy
 	}
+	// A config saved before the openssh key existed gets the default, so an
+	// older host is held to OpenSSH off unless its config opts back in.
+	if c.Access.OpenSSH == "" {
+		c.Access.OpenSSH = d.Access.OpenSSH
+	}
 }
 
 func hasDefaultTailscaleTags(tags []string) bool {

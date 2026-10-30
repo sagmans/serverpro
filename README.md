@@ -87,6 +87,7 @@ for provider catalog choices such as location, size, and image.
 
 - Tailscale SSH admin path required.
 - Public SSH disabled.
+- OpenSSH off by default; Tailscale SSH is the only admin path.
 - Public app ingress defaults to `none`.
 - Host tools install through a checksum- and GPG-verified bootstrap script, not
   `curl|sh`.

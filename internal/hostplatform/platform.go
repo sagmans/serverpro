@@ -14,6 +14,11 @@ const (
 	ManagedHostOS          = "ubuntu"
 	ManagedHostVersion     = "24.04"
 	ManagedHostCodename    = "noble"
+	// OpenSSHSocketUnit and OpenSSHServiceUnit are the units Ubuntu's
+	// openssh-server ships. Doctor's sshd checks, the OpenSSH-off check, and
+	// the provisioning step that turns OpenSSH off name the same units.
+	OpenSSHSocketUnit  = "ssh.socket"
+	OpenSSHServiceUnit = "ssh.service"
 
 	caCertificatesPackage = "ca-certificates"
 	// USN-8944-1 drops the distrusted emSign ECC Root CA - G3, so older

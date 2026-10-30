@@ -24,6 +24,7 @@ const (
 	ProvisionPhaseRemoteAdminPassword       ProvisionPhase = "remote_admin_password"
 	ProvisionPhaseRemoteImageUsers          ProvisionPhase = "remote_image_users"
 	ProvisionPhaseRemoteBootstrap           ProvisionPhase = "remote_bootstrap"
+	ProvisionPhaseRemoteOpenSSH             ProvisionPhase = "remote_openssh"
 	ProvisionPhaseComplete                  ProvisionPhase = "complete"
 )
 

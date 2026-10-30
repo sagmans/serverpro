@@ -12,6 +12,9 @@ func (c Config) validateMVPConstraints() error {
 	if c.Access.PublicSSH {
 		return errors.New("access.public_ssh must stay false for MVP")
 	}
+	if c.Access.OpenSSH != OpenSSHDisabled && c.Access.OpenSSH != OpenSSHEnabled {
+		return errors.New("access.openssh must be disabled or enabled")
+	}
 	if c.Network.Ingress != "none" && c.Network.Ingress != "cloudflare-tunnel" {
 		return errors.New("network.ingress must be none or cloudflare-tunnel")
 	}
