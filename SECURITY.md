@@ -69,7 +69,9 @@ default.
   `/etc/default/cloudflared`, and the tunnel's remotely managed
   ingress, which create and `doctor --fix` read from the Cloudflare API
   before they change the host, with configuration-wide origin settings
-  applied to every rule and WARP routing counted as a route. On the host,
+  applied to every rule and any private network or hostname route to the
+  tunnel counted as a route, since WARP clients reach every port through
+  one. On the host,
   every `service:`, `url:`, `--url`, and `TUNNEL_URL` origin must pass the
   same allowlist as the remote ingress, with ports compared as numbers so
   `0022` is port 22; bastion and SOCKS settings in a config, flag, or

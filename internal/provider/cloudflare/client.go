@@ -2,9 +2,11 @@ package cloudflare
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/sagmans/serverpro/internal/ingress"
@@ -15,6 +17,19 @@ import (
 const (
 	connectorPollInterval = 5 * time.Second
 	connectorPollTimeout  = 2 * time.Minute
+	// tunnelNetworkRoutesPath and tunnelHostnameRoutesPath list the private
+	// IP range and private hostname routes that send WARP client traffic to
+	// a tunnel. Neither lives in the tunnel's configuration, so the OpenSSH
+	// preflight reads them on their own.
+	tunnelNetworkRoutesPath  = "/teamnet/routes"
+	tunnelHostnameRoutesPath = "/zerotrust/routes/hostname"
+	// tunnelRoutesPageSize is one, because any route counts as an SSH route:
+	// the first one answers the question, so no page walk is needed.
+	tunnelRoutesPageSize = "1"
+	// tunnelRoutesPermission is the narrowest token permission both route
+	// lists accept; a failed read names it, since a token scoped only to
+	// tunnel configuration is the likely cause.
+	tunnelRoutesPermission = "Cloudflare Tunnel Read"
 )
 
 type Client struct {
@@ -44,6 +59,10 @@ type (
 // tunnel that was asked for. An empty or foreign body must not read as a
 // tunnel without routes, because the OpenSSH preflight would then pass.
 var ErrTunnelConfigUnproven = errors.New("cloudflare: the tunnel configuration response does not name the tunnel")
+
+// ErrTunnelRoutesUnproven means a route list answered without a result list.
+// It must not read as a tunnel without routes, for the same reason.
+var ErrTunnelRoutesUnproven = errors.New("cloudflare: the tunnel route response has no result list")
 
 // tunnelOriginRequest is the part of a tunnel's origin settings that lets a
 // client pick its own destination. It appears on each rule and once for the
@@ -111,26 +130,42 @@ func (c Client) GetTunnel(ctx context.Context, id string) (Tunnel, error) {
 	return out.Result, err
 }
 
-// TunnelIngress reads the remote configuration of a remotely managed tunnel.
-// A route added in the dashboard lives only at Cloudflare and never reaches
-// the host's disk, so the OpenSSH preflight has to ask the API for it.
+// TunnelIngress reads what a remotely managed tunnel routes: its remote
+// configuration and its private network and hostname routes. A route added in
+// the dashboard lives only at Cloudflare and never reaches the host's disk,
+// so the OpenSSH preflight has to ask the API for it.
 //
-// Only a response that names the requested tunnel counts. A tunnel that has
-// never had a remote configuration, which is how serverpro creates one,
-// answers with a null config and has no routes. cloudflared applies the
-// configuration-wide originRequest to every rule as defaults and lets a
-// rule's own setting win; here a setting from either place counts, so a
-// difference from cloudflared can only make the preflight stricter.
+// Only a configuration response that names the requested tunnel counts. A
+// tunnel that has never had a remote configuration, which is how serverpro
+// creates one, answers with a null config and has no ingress rules.
+// cloudflared applies the configuration-wide originRequest to every rule as
+// defaults and lets a rule's own setting win; here a setting from either
+// place counts, so a difference from cloudflared can only make the preflight
+// stricter. The configuration's warp-routing switch is not read: cloudflared
+// has ignored it since 2023.10.0 and serves private routes whenever they
+// exist, so the route lists decide.
 func (c Client) TunnelIngress(ctx context.Context, id string) (ingress.TunnelRemoteConfig, error) {
+	remote, err := c.tunnelConfig(ctx, id)
+	if err != nil {
+		return ingress.TunnelRemoteConfig{}, err
+	}
+	if remote.PrivateNetworkRoute, err = c.tunnelHasRoute(ctx, tunnelNetworkRoutesPath, id); err != nil {
+		return ingress.TunnelRemoteConfig{}, err
+	}
+	if remote.PrivateHostnameRoute, err = c.tunnelHasRoute(ctx, tunnelHostnameRoutesPath, id); err != nil {
+		return ingress.TunnelRemoteConfig{}, err
+	}
+	return remote, nil
+}
+
+// tunnelConfig reads the tunnel's remote ingress rules.
+func (c Client) tunnelConfig(ctx context.Context, id string) (ingress.TunnelRemoteConfig, error) {
 	var out struct {
 		Result *struct {
 			TunnelID string `json:"tunnel_id"`
 			Config   *struct {
 				OriginRequest tunnelOriginRequest `json:"originRequest"`
-				WARPRouting   struct {
-					Enabled bool `json:"enabled"`
-				} `json:"warp-routing"`
-				Ingress []struct {
+				Ingress       []struct {
 					Service       string              `json:"service"`
 					OriginRequest tunnelOriginRequest `json:"originRequest"`
 				} `json:"ingress"`
@@ -147,7 +182,7 @@ func (c Client) TunnelIngress(ctx context.Context, id string) (ingress.TunnelRem
 	if config == nil {
 		return ingress.TunnelRemoteConfig{}, nil
 	}
-	remote := ingress.TunnelRemoteConfig{Rules: make([]ingress.TunnelIngressRule, 0, len(config.Ingress)), WARPRouting: config.WARPRouting.Enabled}
+	remote := ingress.TunnelRemoteConfig{Rules: make([]ingress.TunnelIngressRule, 0, len(config.Ingress))}
 	for _, rule := range config.Ingress {
 		proxyType := rule.OriginRequest.ProxyType
 		if proxyType == "" {
@@ -156,6 +191,24 @@ func (c Client) TunnelIngress(ctx context.Context, id string) (ingress.TunnelRem
 		remote.Rules = append(remote.Rules, ingress.TunnelIngressRule{Service: rule.Service, BastionMode: rule.OriginRequest.BastionMode || config.OriginRequest.BastionMode, ProxyType: proxyType})
 	}
 	return remote, nil
+}
+
+// tunnelHasRoute reports whether one route list holds a live route to the
+// tunnel. It fails closed: a failed read names the permission it needs, and
+// an answer without a result list is an error, not an empty list. A filter
+// the API ignored can only add routes, which makes the preflight stricter.
+func (c Client) tunnelHasRoute(ctx context.Context, listPath, id string) (bool, error) {
+	query := url.Values{"tunnel_id": {id}, "is_deleted": {"false"}, "per_page": {tunnelRoutesPageSize}}
+	var out struct {
+		Result *[]json.RawMessage `json:"result"`
+	}
+	if err := c.api.Do(ctx, http.MethodGet, c.path(listPath+"?"+query.Encode()), nil, &out); err != nil {
+		return false, fmt.Errorf("list the tunnel's private routes (the token needs the %s account permission): %w", tunnelRoutesPermission, err)
+	}
+	if out.Result == nil {
+		return false, ErrTunnelRoutesUnproven
+	}
+	return len(*out.Result) > 0, nil
 }
 
 func (c Client) DeleteTunnel(ctx context.Context, id string) error {

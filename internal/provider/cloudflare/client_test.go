@@ -81,9 +81,8 @@ func TestTunnelIngressReadsRemoteRules(t *testing.T) {
 		wantErr error
 	}{
 		{name: "remote ingress", body: `{"result":{"tunnel_id":"tun1","config":{"ingress":[{"hostname":"ssh.example.test","service":"ssh://localhost:22","originRequest":{"bastionMode":true,"proxyType":"socks"}},{"service":"http_status:404"}]}}}`, want: TunnelRemoteConfig{Rules: []TunnelIngressRule{{Service: "ssh://localhost:22", BastionMode: true, ProxyType: "socks"}, {Service: "http_status:404"}}}},
-		// Configuration-wide origin settings reach every rule, and WARP
-		// routing is reported with the rules.
-		{name: "configuration defaults", body: `{"result":{"tunnel_id":"tun1","config":{"originRequest":{"bastionMode":true,"proxyType":"socks"},"warp-routing":{"enabled":true},"ingress":[{"service":"http://localhost:8080"},{"service":"http_status:404"}]}}}`, want: TunnelRemoteConfig{Rules: []TunnelIngressRule{{Service: "http://localhost:8080", BastionMode: true, ProxyType: "socks"}, {Service: "http_status:404", BastionMode: true, ProxyType: "socks"}}, WARPRouting: true}},
+		// Configuration-wide origin settings reach every rule.
+		{name: "configuration defaults", body: `{"result":{"tunnel_id":"tun1","config":{"originRequest":{"bastionMode":true,"proxyType":"socks"},"ingress":[{"service":"http://localhost:8080"},{"service":"http_status:404"}]}}}`, want: TunnelRemoteConfig{Rules: []TunnelIngressRule{{Service: "http://localhost:8080", BastionMode: true, ProxyType: "socks"}, {Service: "http_status:404", BastionMode: true, ProxyType: "socks"}}}},
 		// A tunnel nobody has configured yet has no remote configuration.
 		{name: "no configuration", body: `{"result":{"tunnel_id":"tun1","config":null}}`},
 		// A body that does not name the tunnel proves nothing about it.
@@ -94,11 +93,18 @@ func TestTunnelIngressReadsRemoteRules(t *testing.T) {
 			handlerErr := testhttp.NewHandlerErrorRecorder(t)
 			defer handlerErr.Check()
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodGet || r.URL.Path != "/accounts/acc/cfd_tunnel/tun1/configurations" {
+				switch {
+				case r.Method != http.MethodGet:
 					handlerErr.Record(w, "unexpected %s %s", r.Method, r.URL.Path)
-					return
+				case r.URL.Path == "/accounts/acc/cfd_tunnel/tun1/configurations":
+					_, _ = w.Write([]byte(tc.body))
+				// The private route lists answer empty, so only the
+				// configuration decides these rows.
+				case r.URL.Path == "/accounts/acc/teamnet/routes", r.URL.Path == "/accounts/acc/zerotrust/routes/hostname":
+					_, _ = w.Write([]byte(`{"success":true,"result":[]}`))
+				default:
+					handlerErr.Record(w, "unexpected %s %s", r.Method, r.URL.Path)
 				}
-				_, _ = w.Write([]byte(tc.body))
 			}))
 			defer ts.Close()
 			remote, err := NewWithHTTP("token", "acc", ts.URL, ts.Client()).TunnelIngress(context.Background(), "tun1")

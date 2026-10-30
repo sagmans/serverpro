@@ -37,11 +37,15 @@ type TunnelIngressRule struct {
 	ProxyType   string
 }
 
-// TunnelRemoteConfig is what a remotely managed tunnel's configuration can
-// reach on the host: its ingress rules, with the configuration-wide origin
-// defaults already applied, and whether WARP routing carries private network
-// traffic, sshd's port included, through the tunnel.
+// TunnelRemoteConfig is what a remotely managed tunnel can reach on the host
+// by Cloudflare's own records: its ingress rules, with the
+// configuration-wide origin defaults already applied, and whether a private
+// network (IP range) or private hostname route sends WARP client traffic to
+// the tunnel. Such a route carries every port, sshd's included, and
+// cloudflared serves it whatever the configuration's warp-routing setting
+// says, so the routes, not that setting, decide.
 type TunnelRemoteConfig struct {
-	Rules       []TunnelIngressRule
-	WARPRouting bool
+	Rules                []TunnelIngressRule
+	PrivateNetworkRoute  bool
+	PrivateHostnameRoute bool
 }

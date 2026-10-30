@@ -780,9 +780,14 @@ changes nothing:
   Serverpro creates remotely managed tunnels, so a route added in the
   Cloudflare dashboard never reaches the server's disk. Serverpro reads the
   ingress with the Cloudflare API before it runs anything on the server.
-  Origin settings set for the whole configuration count for every rule, and
-  WARP routing turned on counts as a route, because it can carry private
-  network traffic to port 22. The message names each rule's service with any
+  Origin settings set for the whole configuration count for every rule.
+  Serverpro also lists the tunnel's private network and private hostname
+  routes, and any one counts as a route, because WARP clients reach every
+  port through it, port 22 included. cloudflared serves such routes whatever
+  the configuration's `warp-routing` setting says, so that setting does not
+  count. The lists need the `Cloudflare Tunnel Read` account permission
+  (`Cloudflare Tunnel Edit` includes it); a failed list read stops the step
+  and names it. The message names each rule's service with any
   URL password masked, or a fixed label for a service it cannot classify,
   never its hostname. If the read fails, or the answer
   does not name the tunnel, the step stops too: serverpro cannot tell that no

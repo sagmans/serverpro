@@ -459,11 +459,31 @@ https://developers.cloudflare.com/tunnel/reference/origin-parameters/
 
 Use: the remotely managed configuration the OpenSSH-off preflight reads
 (`result.tunnel_id`, `result.config.ingress[]` with `service` and
-`originRequest`, the configuration-wide `originRequest`, and
-`warp-routing.enabled`), and the origin parameters (`bastionMode`,
+`originRequest`, and the configuration-wide `originRequest`), and the origin
+parameters (`bastionMode`,
 `proxyType`) that let a rule reach any destination. cloudflared applies the
 configuration-wide `originRequest` to every rule as defaults (upstream
 `ingress/config.go`, `setConfig`).
+
+```text
+https://developers.cloudflare.com/api/resources/zero_trust/subresources/networks/subresources/routes/methods/list/
+https://developers.cloudflare.com/api/resources/zero_trust/subresources/networks/subresources/hostname_routes/methods/list/
+https://github.com/cloudflare/cloudflared/blob/2026.10.2/CHANGES.md
+https://github.com/cloudflare/cloudflared/blob/2026.10.2/config/configuration.go
+```
+
+Use: the private route lists the OpenSSH-off preflight reads. Reviewed
+2026-10-30: `GET /accounts/{account_id}/teamnet/routes` (private IP ranges)
+and `GET /accounts/{account_id}/zerotrust/routes/hostname` (private
+hostnames) both take `tunnel_id`, `is_deleted`, and `per_page` (1 to 1000)
+and accept `Cloudflare Tunnel Read`, `Cloudflare Tunnel Write`, or the
+`Cloudflare One Networks` read and write permissions. `result_info.total_count`
+counts results without any filter, so it cannot size a filtered list.
+cloudflared 2023.9.0 dropped the `warp-routing` `enabled` flag (TUN-7776):
+WARP traffic reaches cloudflared whenever routes to the tunnel exist, and
+`WarpRoutingConfig` at 2026.10.2 has no `enabled` field. The 2026-07-09
+Cloudflare changelog retires the CIDR-path route endpoints on 2026-10-05;
+the list endpoint stays.
 
 ```text
 https://github.com/cloudflare/cloudflared/blob/2026.10.2/ingress/ingress.go

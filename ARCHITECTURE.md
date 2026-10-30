@@ -440,7 +440,8 @@ flowchart LR
    phase); a create with no reachable host fails rather than skip it. Last, unless
    `access.openssh: enabled`, turn OpenSSH off (`remote_openssh` phase):
    `lifecycle.CheckTunnelSSHIngress` first reads the tunnel's remote
-   ingress through the Cloudflare client and stops on a route to SSH or a
+   ingress and its private network and hostname routes through the
+   Cloudflare client, and stops on a route to SSH, any private route, or a
    failed read, because a remotely managed tunnel's routes never reach the
    host. Then `lifecycle.OpenSSHDisableScript` stops before any change when
    Tailscale SSH is not proven, OpenSSH is in use, or a cloudflared file or

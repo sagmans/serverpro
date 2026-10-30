@@ -7,6 +7,9 @@ connector/local-route metadata only; they do not yet publish public DNS routes.
 
 1. Create or select a Cloudflare account.
 2. Create an API token with Cloudflare Tunnel access for the account.
+   `Cloudflare Tunnel Edit` covers it. Before serverpro turns OpenSSH off, it
+   reads the tunnel's remote configuration and its private network and
+   hostname routes, which needs at least `Cloudflare Tunnel Read`.
 3. Add DNS permissions only when future route publishing needs them.
 4. Keep the token private; serverpro stores it only in the selected server's
    credential file.

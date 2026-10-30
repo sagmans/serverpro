@@ -94,9 +94,11 @@ const (
 	// port, because cloudflared adds none for it and the preflight cannot
 	// tell which one it reaches.
 	tunnelTCPScheme = "tcp"
-	// tunnelWARPRoutingRoute names WARP routing in a finding: it carries
-	// private network traffic to any port a route covers, sshd's included.
-	tunnelWARPRoutingRoute = "WARP routing"
+	// tunnelNetworkRoute and tunnelHostnameRoute name a private IP range or
+	// private hostname route in a finding: WARP clients reach every port
+	// through one, sshd's included. Neither prints the range or hostname.
+	tunnelNetworkRoute  = "a private network route"
+	tunnelHostnameRoute = "a private hostname route"
 	// tunnelBastionModeRoute and tunnelProxyTypeRoute name the origin
 	// settings that let a client pick its destination. Any proxy type counts,
 	// not only socks, because the preflight cannot tell what another reaches;
@@ -163,14 +165,17 @@ func CheckTunnelSSHIngress(ctx context.Context, reader TunnelIngressReader, tunn
 	return nil
 }
 
-// TunnelSSHRoutes names the rules that may reach sshd, plus WARP routing when
-// it is on. Each name is the origin service with any URL password masked, or
-// a fixed label, so a finding carries no credential and never the route's
-// public hostname.
+// TunnelSSHRoutes names the rules that may reach sshd, plus any private
+// network or hostname route. Each name is the origin service with any URL
+// password masked, or a fixed label, so a finding carries no credential and
+// never the route's public hostname.
 func TunnelSSHRoutes(remote ingress.TunnelRemoteConfig) []string {
 	var routes []string
-	if remote.WARPRouting {
-		routes = append(routes, tunnelWARPRoutingRoute)
+	if remote.PrivateNetworkRoute {
+		routes = append(routes, tunnelNetworkRoute)
+	}
+	if remote.PrivateHostnameRoute {
+		routes = append(routes, tunnelHostnameRoute)
 	}
 	for _, rule := range remote.Rules {
 		if name, ok := tunnelRouteToSSH(rule); ok {

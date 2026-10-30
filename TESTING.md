@@ -788,6 +788,24 @@ label that prints no value. Both pass `http://localhost:8080`,
 `https://localhost`, `tcp://127.0.0.1:5432`, `unix:` sockets, `hello_world`,
 and `http_status:404`.
 
+A third harness on 2026-10-30 ran the remote half
+(`CheckTunnelSSHIngress`) through the real Cloudflare client against a fake
+API that answered the configuration and the two private route lists.
+
+- Old: a configuration with `warp-routing` on and no routes stopped the
+  step, while a private network route, a private hostname route, a `403` on
+  either list, and a list answer without `result` all passed, because the
+  old code never read the lists.
+- New: the `warp-routing`-only configuration passed; a network route and a
+  hostname route each stopped the step and were named by a fixed label; a
+  `403` stopped it and named the `Cloudflare Tunnel Read` permission; an
+  answer without `result` stopped it. Each list request carried
+  `tunnel_id`, `is_deleted=false`, and `per_page=1`, and no message held the
+  tunnel ID.
+
+Not covered: the real Cloudflare API, since serverpro has no throwaway
+Cloudflare account to add a private route to.
+
 The rendered old and new host scripts then ran with `sh` (dash) as root in a
 disposable `ubuntu:24.04` container that boots systemd, with
 `openssh-server` and `iproute2`, a dummy `tailscaled` unit, and a fake
@@ -968,7 +986,7 @@ against production, and no dogfood server exists), and the provider consoles.
 | `internal/provider/vultr` | Vultr compute adapter. | Declared `linuxuser` image account, catalog mapping, tag encoding, IPv4-only create, firewall group lifecycle, paginated firewall-rule inventory, checkpoint retry reconciliation that creates only missing required rules while rejecting foreign/broadened rules or attachments, status/power/delete/list, error identity and redaction. |
 | `internal/provider/digitalocean` | DigitalOcean compute adapter. | Catalog mapping, one namespace/server-derived firewall selector, droplet ownership/custom tags, no direct firewall droplet-ID attachments, IPv4-only create, status/power/delete, all-resource delete preflight, guarded legacy broad-selector import/cleanup with zero-unrelated-match inventory, paginated droplet/firewall inventory, malformed pagination fail-closed behavior, exact owned-policy recovery and checkpoint retry validation, missing/ambiguous/foreign/broadened fail-closed behavior, error identity and redaction. |
 | `internal/provider/tailscale` | Tailscale API adapter. | Auth key create/list/tracked-ID delete, devices, device waits that skip devices enrolled before the key and return ambiguity without polling, ACL policy read/validate/update, conservative global reconcile planning, retained tag-owner dependency protection, approved-plan refetch equality, no-change behavior, custom-shape retention, mixed-rule destination rewrite, exact `If-Match` propagation, missing-ETag mutation rejection, and a read-only HuJSON packet-policy read with API errors propagated. |
-| `internal/provider/cloudflare` | Cloudflare API adapter. | Account validation, tunnel list/create/token/get/delete, remote ingress read (with and without a remote configuration, configuration-wide origin defaults merged into every rule, WARP routing, and an empty or foreign answer rejected), connector health polling, pagination. |
+| `internal/provider/cloudflare` | Cloudflare API adapter. | Account validation, tunnel list/create/token/get/delete, remote ingress read (with and without a remote configuration, configuration-wide origin defaults merged into every rule, empty private network and hostname route lists, and an empty or foreign answer rejected), connector health polling, pagination. |
 | `internal/provider/httpjson` | Shared HTTP JSON client. | Auth headers, JSON encode/decode, bounded body, status errors (text with account and tunnel IDs and the query masked and a long body cut on a UTF-8 boundary, fields kept whole), redaction by caller. |
 | `internal/provider/providerutil` | Shared provider mutation validation and secret-safe diagnostics. | Provider mismatch, token/bootstrap redaction, encoded bootstrap forms. |
 | `internal/redact` | Secret redaction. | Token/password/hash/auth-key removal from strings/errors; redacted errors preserve sentinel, cancellation, and typed identity through `errors.Is`/`errors.As`. |
