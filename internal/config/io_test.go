@@ -18,7 +18,7 @@ func TestLoadAppliesDefaultsExceptCatalogSelections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Namespace != "prod" || cfg.Admin.Username != "deploy" || cfg.Compute.Image != "ubuntu-24.04" || cfg.Network.Egress.Mode != "restricted" || !cfg.Hardening.UFW {
+	if cfg.Namespace != "prod" || cfg.Admin.Username != "deploy" || cfg.Compute.Image != "ubuntu-24.04" || cfg.Network.Egress.Mode != "restricted" || !cfg.Network.Egress.LockdownDue() || !cfg.Hardening.UFW {
 		t.Fatalf("defaults not applied: %+v", cfg)
 	}
 }
