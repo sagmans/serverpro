@@ -124,6 +124,13 @@ and the provider `tailnet policy` check warns when:
 - an `acls` rule accepts `*` to `*:*`;
 - a grant gives `*` to `*` on ip `*`.
 
+Doctor reads each "everything" spelling the same way. A source of `*`,
+`autogroup:member`, `0.0.0.0/0`, or `::/0` is every source. A host of `*`,
+`0.0.0.0/0`, or `::/0` (also `[::/0]` in an acl) is every host. Ports of
+`*`, `0-65535`, or `1-65535` (also inside an acl port list) are every port.
+So `{"src": ["autogroup:member"], "dst": ["0.0.0.0/0"], "ip": ["1-65535"]}`
+warns like the default grant.
+
 An empty `"acls": []` denies all traffic, so doctor does not warn on it.
 Doctor reads a file with `grants` and no `acls` as grants only. Tailscale's
 docs do not say whether the default allow-all still applies to such a file:

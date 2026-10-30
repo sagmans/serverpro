@@ -15,6 +15,27 @@ const (
 	policyWildcardHostPort = "*:*"
 	// policyActionAccept is the only action first-generation ACLs define.
 	policyActionAccept = "accept"
+	// policyAllMembers selects the devices of every tailnet member, which for
+	// a reachable server is every person's device: as wide as "*" in practice.
+	policyAllMembers = "autogroup:member"
+	// policyAllIPv4 and policyAllIPv6 are the CIDR spellings of every address.
+	policyAllIPv4 = "0.0.0.0/0"
+	policyAllIPv6 = "::/0"
+	// policyAllPortsFromZero and policyAllPortsFromOne are the range
+	// spellings of every port.
+	policyAllPortsFromZero = "0-65535"
+	policyAllPortsFromOne  = "1-65535"
+	// policyPortListSeparator splits an ACL destination's port list.
+	policyPortListSeparator = ","
+)
+
+// A rule allows all when a selector is any spelling of "everything", not only
+// the literal wildcard; a policy that writes 0.0.0.0/0 or 1-65535 opens the
+// same ports as one that writes "*".
+var (
+	allSources = []string{policyWildcard, policyAllMembers, policyAllIPv4, policyAllIPv6}
+	allHosts   = []string{policyWildcard, policyAllIPv4, policyAllIPv6}
+	allPorts   = []string{policyWildcard, policyAllPortsFromZero, policyAllPortsFromOne}
 )
 
 // PacketPolicy is the network-layer part of a tailnet policy file: the
@@ -57,30 +78,71 @@ func (p PacketPolicy) AllowAllRules() []string {
 	var rules []string
 	if p.ACLs != nil {
 		for i, rule := range *p.ACLs {
-			if rule.allowsAll() {
-				rules = append(rules, fmt.Sprintf("acls[%d] accepts %s to %s", i, policyWildcard, policyWildcardHostPort))
+			if source, destination, ok := rule.allowsAll(); ok {
+				rules = append(rules, fmt.Sprintf("acls[%d] accepts %s to %s", i, source, destination))
 			}
 		}
 	}
 	if p.Grants != nil {
 		for i, grant := range *p.Grants {
-			if grant.allowsAll() {
-				rules = append(rules, fmt.Sprintf("grants[%d] grants %s to %s on ip %s", i, policyWildcard, policyWildcard, policyWildcard))
+			if source, destination, ports, ok := grant.allowsAll(); ok {
+				rules = append(rules, fmt.Sprintf("grants[%d] grants %s to %s on ip %s", i, source, destination, ports))
 			}
 		}
 	}
 	return rules
 }
 
-func (r ACLRule) allowsAll() bool {
+// allowsAll returns the matching source and destination, so the finding
+// names the spelling the policy file uses.
+func (r ACLRule) allowsAll() (string, string, bool) {
 	if !strings.EqualFold(r.Action, policyActionAccept) {
-		return false
+		return "", "", false
 	}
-	sources := append(append([]string(nil), r.Src...), r.Users...)
-	destinations := append(append([]string(nil), r.Dst...), r.Ports...)
-	return slices.Contains(sources, policyWildcard) && slices.Contains(destinations, policyWildcardHostPort)
+	source, found := firstOf(append(append([]string(nil), r.Src...), r.Users...), allSources)
+	if !found {
+		return "", "", false
+	}
+	for _, destination := range append(append([]string(nil), r.Dst...), r.Ports...) {
+		if aclDestinationAllowsAll(destination) {
+			return source, destination, true
+		}
+	}
+	return "", "", false
 }
 
-func (g Grant) allowsAll() bool {
-	return slices.Contains(g.Src, policyWildcard) && slices.Contains(g.Dst, policyWildcard) && slices.Contains(g.IP, policyWildcard)
+func (g Grant) allowsAll() (string, string, string, bool) {
+	source, sourceFound := firstOf(g.Src, allSources)
+	destination, destinationFound := firstOf(g.Dst, allHosts)
+	ports, portsFound := firstOf(g.IP, allPorts)
+	return source, destination, ports, sourceFound && destinationFound && portsFound
+}
+
+// aclDestinationAllowsAll reads a first-generation <host>:<ports>
+// destination. The ports follow the last colon, so an IPv6 host such as
+// ::/0 or [::/0] keeps its own colons, and one all-ports entry in a port
+// list opens every port.
+func aclDestinationAllowsAll(destination string) bool {
+	if destination == policyWildcardHostPort {
+		return true
+	}
+	separator := strings.LastIndex(destination, ":")
+	if separator < 0 {
+		return false
+	}
+	host := strings.TrimSuffix(strings.TrimPrefix(destination[:separator], "["), "]")
+	if !slices.Contains(allHosts, host) {
+		return false
+	}
+	_, found := firstOf(strings.Split(destination[separator+1:], policyPortListSeparator), allPorts)
+	return found
+}
+
+func firstOf(selectors, everything []string) (string, bool) {
+	for _, selector := range selectors {
+		if slices.Contains(everything, strings.TrimSpace(selector)) {
+			return selector, true
+		}
+	}
+	return "", false
 }
