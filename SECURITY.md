@@ -188,31 +188,40 @@ default.
   parser (`cvtsudoers`: JSON, aliases expanded, every include followed),
   never with line patterns that a continued line, a user list, a `#uid`, or
   `!!` can get past, and the check fails closed when the parser is missing,
-  fails, or prints output doctor cannot read. A sudoers rule without a
-  command limit fails, and so does a rule that lists a root-equivalent
-  command (a shell, editor, pager, interpreter, file writer, loader, or
-  account, package, service, module, capability, or container manager) by
-  any path or arguments, a rule with `SETENV` or an option doctor does not
-  grade as safe, and a `Defaults` entry, whatever it binds to, that
-  doctor's allowlist does not pass. The allowlist names each option doctor
-  grades as safe with the values it may hold, so an option it does not list
-  (`env_file`, `mailerpath`, `runchroot`) fails, and so does a value it
-  cannot grade. `env_keep` and `env_check` may add only the names sudo
-  itself keeps or checks after `env_reset`, less `PATH`; a wildcard passes
-  only inside one of them (`LC_*`). Each `secure_path` directory and the
-  `logfile` and `iolog_dir` paths must pass the same root-only path walk as
-  a listed command, and a relative entry, a `%` escape, or no `secure_path`
-  at all fails. A rule that lists only other absolute
-  command paths warns and names them. On the server, every hop of each
-  listed path, each symlink and the directory it sits in included, must be
-  root-owned and not writable by group or others, and the last hop must be
-  a regular file that is not a root-equivalent command; otherwise the rule
-  fails, because a symlink or a writable script runs anything as root
-  behind a narrow-looking path. A listed path also fails when a file with
-  the same name plus a space exists, since the parser's output cannot tell
-  an escaped space from arguments. Give such an account a root-owned
-  wrapper script that it cannot write and that runs one fixed action. See
-  USAGE.md, Drift checks and Provider image accounts.
+  fails, or prints output doctor cannot read. The parser reads only
+  `/etc/sudoers` and its includes, which is all sudo reads under Ubuntu's
+  stock `/etc/sudo.conf` and `/etc/nsswitch.conf`. Serverpro assumes that
+  layout and checks it: doctor fails, and the image account removal stops
+  before any change, when `sudo.conf` loads a plugin other than
+  `sudoers.so`, passes `sudoers.so` an option other than `error_recovery`
+  (`sudoers_file`, `sudoers_uid`, `sudoers_gid`, `sudoers_mode`,
+  `ignore_perms`, or one it does not know), or moves the plugin directory,
+  or when the first `sudoers:` line in `nsswitch.conf` names a source other
+  than `files` (SSSD or LDAP rules that neither check can read). A sudoers
+  rule without a command limit fails, and so does a rule that lists a
+  root-equivalent command (a shell, editor, pager, interpreter, file writer,
+  loader, or account, package, service, module, capability, or container
+  manager) by any path or arguments, a rule with `SETENV` or an option
+  doctor does not grade as safe, and a `Defaults` entry, whatever it binds
+  to, that doctor's allowlist does not pass. The allowlist names each option
+  doctor grades as safe with the values it may hold, so an option it does
+  not list (`env_file`, `mailerpath`, `runchroot`) fails, and so does a
+  value it cannot grade. `env_keep` and `env_check` may add only the names
+  sudo itself keeps or checks after `env_reset`, less `PATH`; a wildcard
+  passes only inside one of them (`LC_*`). Each `secure_path` directory and
+  the `logfile` and `iolog_dir` paths must pass the same root-only path walk
+  as a listed command, and a relative entry, a `%` escape, or no
+  `secure_path` at all fails. A rule that lists only other absolute command
+  paths warns and names them. On the server, every hop of each listed path,
+  each symlink and the directory it sits in included, must be root-owned and
+  not writable by group or others, and the last hop must be a regular file
+  that is not a root-equivalent command; otherwise the rule fails, because a
+  symlink or a writable script runs anything as root behind a narrow-looking
+  path. A listed path also fails when a file with the same name plus a space
+  exists, since the parser's output cannot tell an escaped space from
+  arguments. Give such an account a root-owned wrapper script that it cannot
+  write and that runs one fixed action. See USAGE.md, Drift checks and
+  Provider image accounts.
 - Tailnet packet rules are outside serverpro's ownership: serverpro edits only
   its tag owners and SSH rule. Doctor warns when the tailnet policy lets every
   source reach every port, since UFW is then the only barrier between any

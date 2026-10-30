@@ -95,8 +95,11 @@ var imageUserNamePattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 // match rules by name only. Last, before userdel, sudo's own parser must
 // find no rule or Defaults entry left that names the account or its uid, so
 // a form the line edits cannot see stops the removal instead of outliving
-// it; output it cannot read in full stops it too. The script never touches root, the admin user, or a uid 0 account,
-// and it is a no-op for an account that is already gone.
+// it; output it cannot read in full stops it too. All of that reads only the
+// sudoers files, so a sudo.conf or nsswitch.conf setting that makes sudo
+// read rules from anywhere else stops the removal before any account is
+// touched. The script never touches root, the admin user, or a uid 0
+// account, and it is a no-op for an account that is already gone.
 func ImageUsersRemovalScript(admin string, users []string) (string, error) {
 	for _, user := range users {
 		if !imageUserNamePattern.MatchString(user) || user == admin || user == "root" {
@@ -116,7 +119,7 @@ stop() {
   printf '` + imageUserRemovalFailedPrefix + `%s\n' "$1" >&2
   exit 1
 }
-# without_user_rules prints sudoers file $2 without the rules for $1 alone.
+` + SudoersSourceGapsFunction() + `# without_user_rules prints sudoers file $2 without the rules for $1 alone.
 # It joins continued lines first, as sudo does even when blanks follow the
 # backslash, so a wrapped rule goes as a whole and leaves no orphaned
 # continuation behind. A rule whose user list goes on after $1 ("$1 , other")
@@ -395,6 +398,11 @@ remove_image_user() {
   fi
 }
 [ "$admin" != root ] || stop "admin user is root"
+# Every check below reads the sudoers files alone. When sudo can take rules
+# from elsewhere, none of them proves an account holds nothing, so nothing
+# changes; the gaps are joined so one stop line names them all.
+gaps=$(sudoers_source_gaps '') || stop "cannot read ` + sudoConfPath + ` or ` + nsswitchConfPath + `"
+[ -z "$gaps" ] || stop "sudo may read rules that serverpro does not check, so nothing was changed: $(printf '%s\n' "$gaps" | awk 'NR > 1 { printf "; " } { printf "%s", $0 }')"
 for user in ` + strings.Join(quoted, " ") + `; do
   remove_image_user "$user"
 done`, nil

@@ -22,6 +22,10 @@ const (
 	sudoersPathsSectionMarker = "--- sudoers paths"
 	adminUIDSectionMarker     = "--- admin uid"
 	accountsSectionMarker     = "--- accounts"
+	// sudoersSourceFindingLead starts each finding for a sudo.conf or
+	// nsswitch.conf setting that lets sudo read rules the parse above does
+	// not hold, so the operator reads why every other grade may be short.
+	sudoersSourceFindingLead = "sudo may read rules that doctor does not grade: "
 	// sudoCommandVerdictSeparator splits a path from the host's verdict on
 	// it, and a Defaults path's kind from the path. A path read out of the
 	// JSON cannot hold a raw tab, because JSON escapes control characters.

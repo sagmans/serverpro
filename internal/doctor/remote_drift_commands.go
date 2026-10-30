@@ -331,6 +331,10 @@ func rebootPendingCommand() string {
 // with sed; a path with an escaped character does not match, gets no
 // verdict, and Go fails it.
 //
+// cvtsudoers reads only /etc/sudoers and its includes, so the probe also
+// reports each sudo.conf or nsswitch.conf setting that lets sudo take rules
+// from elsewhere: grades of the parse alone would miss those rules.
+//
 // Each scan is captured and its status checked on its own, and the account
 // database is read once: in a pipeline without pipefail a scan that failed
 // part way would still exit 0 through sort, and a partial list would read as
@@ -361,6 +365,7 @@ func privilegedAccountsCommand(admin string, imageUsers []string) string {
 		"  printf 'could not evaluate privileged accounts: cannot read %s\\n' \"$1\"\n" +
 		"  exit 1\n" +
 		"}\n" +
+		lifecycle.SudoersSourceGapsFunction() +
 		"root_equivalent_names=" + shell.Quote(strings.Join(rootEquivalentCommands, " ")) + "\n" +
 		"root_equivalent_prefixes=" + shell.Quote(strings.Join(rootEquivalentPrefixes, " ")) + "\n" +
 		// entry_gap prints why ls -ldn entry $2 of path $1 lets someone other
@@ -485,7 +490,8 @@ func privilegedAccountsCommand(admin string, imageUsers []string) string {
 		"done\n" +
 		") || unreadable 'the privileged groups'\n" +
 		"uids=$(printf '%s\\n' \"$accounts\" | awk -F: '$3 == 0 && $1 != \"root\" { printf \"" + driftFailPrefix + "%s has uid 0\\n\", $1 }') || unreadable 'the uid 0 accounts'\n" +
-		"printf '%s\\n' " + shell.Quote(sudoersSectionMarker) + " \"$sudoers\" " + shell.Quote(sudoCommandsSectionMarker) + " \"$commands\" " + shell.Quote(sudoersPathsSectionMarker) + " \"$paths\" " + shell.Quote(adminUIDSectionMarker) + " \"$admin_uid\" " + shell.Quote(accountsSectionMarker) + " \"$images\" \"$groups\" \"$uids\"\n" +
+		"sources=$(sudoers_source_gaps " + shell.Quote(driftFailPrefix+sudoersSourceFindingLead) + ") || unreadable 'the sudo.conf or nsswitch.conf settings'\n" +
+		"printf '%s\\n' " + shell.Quote(sudoersSectionMarker) + " \"$sudoers\" " + shell.Quote(sudoCommandsSectionMarker) + " \"$commands\" " + shell.Quote(sudoersPathsSectionMarker) + " \"$paths\" " + shell.Quote(adminUIDSectionMarker) + " \"$admin_uid\" " + shell.Quote(accountsSectionMarker) + " \"$images\" \"$groups\" \"$uids\" \"$sources\"\n" +
 		"printf 'checked groups: %s\\n' " + shell.Quote(strings.Join(privilegedGroups, " "))
 }
 

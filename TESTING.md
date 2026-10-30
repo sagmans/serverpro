@@ -623,8 +623,30 @@ unreadable: a missing blank after or an extra blank before a colon, a quoted
 uid, an escaped name, one-line JSON, and output without the `User_Specs`
 line.
 
+`cvtsudoers` reads only `/etc/sudoers` and its includes, but `sudo.conf` and
+`nsswitch.conf` can make sudo read other rules. A seventh run, on 2026-10-31
+in the same kind of container, ran the old and new doctor probes against
+sudo.conf and nsswitch.conf samples. With `sudoers_file=` pointing at a
+copy of the rules plus a grant for another account, `sudo -l` listed that
+grant while the parser did not; the old probe passed and the new one failed
+and named the file, line, and option. The new probe also failed, where the
+old passed: `sudoers_uid=`, `sudoers_gid=`, `ignore_perms=`, another policy
+plugin, a moved `Path plugin_dir`, a Plugin line with no file, an override
+on a continued line, a lower-case `plugin` keyword, `sudoers: files sss`,
+`sudoers: ldap`, and an indented `SUDOERS:sss`. Both passed with no finding: the
+stock files, explicit stock Plugin lines with `error_recovery=false` and the
+packaged plugin directory, an override inside a comment, a comment that
+ends a continuation (sudo also ignored the next line), `[NOTFOUND=return]`
+and `[SUCCESS=return]` after `files`, a second `sudoers:` line after a
+`files` one, and both files missing. A directory in place of `sudo.conf`
+made the new probe fail as unreadable. In the removal runs, a `sudoers:
+files sss` line let the old script remove the account, and the new one
+stopped with nothing changed; with `sudoers_file=`, both stopped (the old one
+because `visudo -c` follows the override), and with only
+`error_recovery=false` both removed the account.
+
 Not covered: a real Vultr host (doctor `--fix` was not run against
-production).
+production), and a live SSSD or LDAP sudoers source.
 
 ### Unattended-upgrades drop-in dogfood
 

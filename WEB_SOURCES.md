@@ -682,6 +682,29 @@ the names sudo keeps or checks after `env_reset`; doctor lets `env_keep` and
 `env_check` add only those names, less `PATH`. The tag matches Ubuntu 24.04's
 sudo 1.9.15p5.
 
+### sudo source: sudo.conf and nsswitch.conf readers
+
+```text
+https://www.sudo.ws/docs/man/sudo.conf.man/
+https://github.com/sudo-project/sudo/blob/SUDO_1_9_15p5/lib/util/sudo_conf.c
+https://github.com/sudo-project/sudo/blob/SUDO_1_9_15p5/lib/util/parseln.c
+https://github.com/sudo-project/sudo/blob/SUDO_1_9_15p5/plugins/sudoers/policy.c
+https://github.com/sudo-project/sudo/blob/SUDO_1_9_15p5/plugins/sudoers/sudo_nss.c
+```
+
+Use: where sudo takes its rules from before any sudoers file, behind
+`lifecycle.SudoersSourceGapsFunction`. `sudo.conf(5)` and `sudo_conf.c`
+define the `Plugin` and `Path plugin_dir` lines (keywords matched without
+case, a blank after each); `parseln.c` is the line reader both files share (a
+`#` anywhere starts a comment, a trailing backslash continues a line only
+without one, blanks trimmed); `policy.c` lists the `sudoers.so` options
+(`error_recovery`, `ignore_perms`, `sudoers_file`, `sudoers_uid`,
+`sudoers_gid`, `sudoers_mode`, `ldap_conf`, `ldap_secret`), also described
+in `sudoers(5)`; `sudo_nss.c` reads only the first `sudoers:` line of
+`/etc/nsswitch.conf` and falls back to `files`. Ubuntu 24.04's `sudo -V`
+shows `--with-sssd`, so an `sss` source there is live. Checked on
+2026-10-31.
+
 ### cvtsudoers
 
 ```text
