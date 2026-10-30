@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/network"
 	"github.com/sagmans/serverpro/internal/remote"
 )
 
@@ -15,15 +16,16 @@ const (
 	driftEvidenceSeparator      = "; "
 )
 
-// remoteDriftSpecifications are read-only checks for host drift that the
-// hardening checks cannot see: each compares the live host with what config
-// or provisioning promised. None has a repair, because each finding needs an
-// operator decision (a workload port, an unknown account, a reboot window).
+// remoteDriftSpecifications are checks for host drift that the hardening
+// checks cannot see: each compares the live host with what config or
+// provisioning promised. Most are read-only, because the finding needs an
+// operator decision (an unknown account, a reboot window). Restricted egress
+// has a repair, because config already states the wanted policy.
 func remoteDriftSpecifications(cfg config.Config, opt Options) []remoteCheckSpecification {
 	user := cfg.Admin.Username
 	var specifications []remoteCheckSpecification
-	if cfg.Network.Egress.Mode == "restricted" {
-		specifications = append(specifications, remoteDriftSpecification(egressRestrictedCheckName, egressRestrictedCommand(), egressRestrictedRemediation))
+	if cfg.Network.Egress.Mode == config.EgressModeRestricted {
+		specifications = append(specifications, remoteFixableDriftSpecification(egressRestrictedCheckName, egressRestrictedCommand(), egressRestrictedRemediation, network.LockdownScript(cfg)))
 	}
 	return append(specifications,
 		remoteDriftSpecification(rebootPendingCheckName, rebootPendingCommand(), rebootPendingRemediation),
@@ -50,6 +52,44 @@ func remoteDriftSpecification(name, command, remediation string) remoteCheckSpec
 		run: func(ctx context.Context, runner remote.Runner, user, host string, _ Options) []Result {
 			out, err := runner.Run(ctx, user, host, command)
 			return []Result{driftResult(name, out, err, remediation)}
+		},
+	}
+}
+
+// remoteFixableDriftSpecification gives a drift check a repair that
+// converges the host back to config. The repair runs only on a finding the
+// probe could read: a probe that never ran leaves the host state unknown, and
+// a repair on an unknown state could undo an operator's deliberate change.
+// The check re-reads live after another check ran the same repair, so a
+// shared repair settles every check that depends on it.
+func remoteFixableDriftSpecification(name, command, remediation, fixCommand string) remoteCheckSpecification {
+	return remoteCheckSpecification{
+		readCommands:     []string{command},
+		liveCommands:     []string{fixCommand},
+		refreshAfterLive: []string{fixCommand},
+		run: func(ctx context.Context, runner remote.Runner, user, host string, opt Options) []Result {
+			if opt.refreshBaseline {
+				// The batch baseline predates a repair earlier in this run.
+				discardBaseline(runner, command)
+			}
+			out, err := runner.Run(ctx, user, host, command)
+			result := driftResult(name, out, err, remediation)
+			if err != nil || result.Status == Pass || !opt.Fix {
+				return []Result{result}
+			}
+			if opt.fixRan != nil && opt.fixRan(fixCommand) {
+				return []Result{fail("remote", name, result.Evidence+repairAlreadyRanEvidence, repairAlreadyRanRemediation)}
+			}
+			if fixOut, fixErr := runner.Run(ctx, user, host, fixCommand); fixErr != nil {
+				return []Result{fail("remote", name, result.Evidence+"; fix failed: "+remoteFailureEvidence(fixOut, fixErr), remediation)}
+			}
+			out, err = runner.Run(ctx, user, host, command)
+			after := driftResult(name, out, err, remediation)
+			if after.Status == Pass {
+				after.Evidence = "fixed: " + after.Evidence
+				return []Result{after}
+			}
+			return []Result{fail("remote", name, "fix applied but drift remains: "+after.Evidence, remediation)}
 		},
 	}
 }

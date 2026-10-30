@@ -8,6 +8,7 @@ import (
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/hostplatform"
 	"github.com/sagmans/serverpro/internal/lifecycle"
+	"github.com/sagmans/serverpro/internal/network"
 	"github.com/sagmans/serverpro/internal/remote"
 	"github.com/sagmans/serverpro/internal/shell"
 	"github.com/sagmans/serverpro/internal/tailscaletools"
@@ -83,9 +84,12 @@ func remoteCheckSpecifications(cfg config.Config, opt Options) []remoteCheckSpec
 		remoteDNSResolutionSpecification(),
 		remoteEgressPositiveSpecification(),
 	)
-	if cfg.Network.Egress.Mode == "restricted" {
+	if cfg.Network.Egress.Mode == config.EgressModeRestricted {
 		specifications = append(specifications,
-			remoteFixableSpecification("ufw ssh egress", "ufw status numbered verbose | grep -E '(^|[[:space:]])22/tcp[[:space:]].*ALLOW OUT'", "ufw allow out 22/tcp && ufw --force reload"),
+			// The repair is the whole lockdown, not just the 22/tcp rule: adding
+			// one rule to a host whose default still allows everything hid
+			// that the lockdown had never run.
+			remoteFixableSpecification("ufw ssh egress", "ufw status numbered verbose | grep -E '(^|[[:space:]])22/tcp[[:space:]].*ALLOW OUT'", network.LockdownScript(cfg)),
 			remoteStaticSpecification(warn("remote", "egress precision", "restricted mode is port/protocol best-effort; global 22/80/443 and Cloudflare edge 7844 remain open for git/updates/connectors")),
 		)
 	}

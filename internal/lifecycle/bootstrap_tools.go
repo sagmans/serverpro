@@ -7,6 +7,7 @@ import (
 
 	"github.com/sagmans/serverpro/internal/bootstraptools"
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/network"
 	"github.com/sagmans/serverpro/internal/remote"
 	"github.com/sagmans/serverpro/internal/state"
 )
@@ -21,6 +22,20 @@ func BootstrapTools(ctx context.Context, r remote.Runner, cfg config.Config, st 
 	}
 	if _, err := remote.WithTimeout(r, 20*time.Minute).Run(ctx, cfg.Admin.Username, st.Tailscale.Name, script); err != nil {
 		return fmt.Errorf("bootstrap %s: %w", target, err)
+	}
+	return applyEgressLockdown(ctx, r, cfg, st)
+}
+
+// applyEgressLockdown is the last remote step of create and of server
+// bootstrap. Bootstrap is the recovery after a create whose tool phase
+// failed, and that create never reached the lockdown, so bootstrap must
+// converge egress too or the host stays open with only the tools' rules.
+func applyEgressLockdown(ctx context.Context, r remote.Runner, cfg config.Config, st state.State) error {
+	if !cfg.Network.Egress.PhaseLockdownAfterBootstrap {
+		return nil
+	}
+	if _, err := r.Run(ctx, cfg.Admin.Username, st.Tailscale.Name, network.LockdownScript(cfg)); err != nil {
+		return fmt.Errorf("egress lockdown: %w", err)
 	}
 	return nil
 }

@@ -62,8 +62,11 @@ default.
 - Post-bootstrap egress lockdown is fail-closed: an omitted
   `phase_lockdown_after_bootstrap` value behaves as `true`; only explicit
   `false` disables it. Restricted egress still permits outbound SSH (22/tcp)
-  for git-over-SSH workflows; `serverpro server doctor NAME --fix` adds the rule
-  to hosts provisioned before it existed.
+  for git-over-SSH workflows. Create, `server bootstrap`, and
+  `serverpro server doctor NAME --fix` all apply the same lockdown, and it
+  exits non-zero unless UFW denies outgoing, a non-allowlisted connect is
+  blocked, and the Tailscale coordination server is still reachable. A create
+  that cannot reach the host fails instead of completing open.
 - GitHub development access is opt-in and least-privilege by default: the
   read-only deploy key flow stays the default; full account-key access requires
   a PAT and grants the server git write to every repo the account can write, so
@@ -110,15 +113,16 @@ default.
   reports presence only and keeps the body, hash, and shadow entry out of
   output and reports. The compute provider adapter declares the metadata path;
   doctor never takes it from the host.
-- Doctor drift checks report, read-only, what weakens this model after
-  provisioning: restricted egress not in force (UFW policy and a real connect
-  to a port the lockdown never allows), a pending reboot, extra accounts in
+- Doctor drift checks report what weakens this model after provisioning:
+  restricted egress not in force (UFW policy, every lockdown rule, and a real
+  connect to a port the lockdown never allows), a pending reboot, extra accounts in
   `sudo`/`admin`/`lxd`/`docker` or with uid 0, a Tailscale `OperatorUser`,
   Tailscale Funnel or Serve entries with no local listener, runtime sysctl
   values that differ from the serverpro drop-in, and a cloudflared service that
-  is enabled or running on a host whose config ingress is `none`. None of them
-  has a repair, because each finding needs an operator decision. See USAGE.md,
-  Drift checks.
+  is enabled or running on a host whose config ingress is `none`. Only
+  restricted egress has a repair (the provisioning lockdown), because config
+  states the wanted policy; the others need an operator decision. See
+  USAGE.md, Drift checks.
 - Tailnet packet rules are outside serverpro's ownership: serverpro edits only
   its tag owners and SSH rule. Doctor warns when the tailnet policy lets every
   source reach every port, since UFW is then the only barrier between any

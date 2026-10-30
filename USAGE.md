@@ -662,13 +662,15 @@ toolset summary.
 ### Drift checks
 
 These doctor checks compare the live host with what config and provisioning
-set up. They are read-only. `--fix` never changes what they find, because each
-finding needs an operator decision. Only the `cloudflared apt pin` check has a
-repair, and only when config ingress is `cloudflare-tunnel`.
+set up. Most are read-only: `--fix` does not change what they find, because
+each finding needs an operator decision. Two checks have a repair, because
+config already states the wanted result: `egress restricted` re-applies the
+restricted egress lockdown, and `cloudflared apt pin` rewrites the pin (only
+with ingress `cloudflare-tunnel`).
 
 | Check | Result | Finding |
 | --- | --- | --- |
-| `egress restricted` | fail | UFW's default outgoing policy is not `deny`/`reject`, or a TCP connect to `1.1.1.1:853` succeeds. Runs only with `network.egress.mode: restricted`. |
+| `egress restricted` | fail | UFW's default outgoing policy is not `deny`/`reject`, a lockdown `ALLOW OUT` rule is missing, or a TCP connect to `1.1.1.1:853` succeeds. Runs only with `network.egress.mode: restricted`; `--fix` re-applies the lockdown. |
 | `reboot pending` | warn | `/var/run/reboot-required` exists, or an installed kernel is newer than the running one. |
 | `privileged accounts` | fail | An account other than the admin user is in `sudo`, `admin`, `lxd`, or `docker` (also as primary group), or a non-root account has uid 0. |
 | `metadata user-data` | fail or warn | The provider metadata user-data holds the admin's current password hash (fail), or another password hash or `passwd` key (warn). |
@@ -692,8 +694,13 @@ tailnet packet rules.
 
 ### Restricted egress
 
-With `network.egress.mode: restricted`, provisioning applies this UFW lockdown
-as root:
+With `network.egress.mode: restricted` and
+`phase_lockdown_after_bootstrap: true`, `server create` applies this UFW
+lockdown as root as its last remote step. `server bootstrap` applies it again
+after the tools, because it is the recovery for a create that stopped before
+the lockdown. A create that cannot reach the host fails instead of completing
+without the lockdown. The lockdown only adds rules, so rules that other tools
+added (for example the Docker bridge rules) stay:
 
 ```sh
 ufw default deny outgoing
@@ -708,10 +715,22 @@ ufw allow out 41641/udp
 ufw --force reload
 ```
 
+The lockdown then proves itself and exits non-zero, which fails create,
+bootstrap, or the doctor repair, when any of these is true:
+
+- UFW does not report `deny` (or `reject`) for outgoing, for example because
+  UFW is inactive.
+- A TCP connect to `1.1.1.1:853` succeeds. No lockdown rule allows it.
+- A TCP connect to `controlplane.tailscale.com:443` fails after 3 attempts.
+  The host would lose its Tailscale coordination server, and with it the
+  operator's only SSH path.
+
 When `egress restricted` fails, find out first which workload needs other
-outbound ports (`sudo ufw status verbose`, `ss -tnp`). Then run the lockdown
-again with `sudo` and rerun doctor. An `ALLOW OUT Anywhere` rule also opens
-egress: delete it with `sudo ufw status numbered` and `sudo ufw delete N`.
+outbound ports (`sudo ufw status verbose`, `ss -tnp`). Then run
+`serverpro server doctor NAME --fix`. It re-applies the lockdown and reads the
+host again. The `ufw ssh egress` check uses the same repair. An
+`ALLOW OUT Anywhere` rule also opens egress: delete it with
+`sudo ufw status numbered` and `sudo ufw delete N`.
 
 ## Optional ingress
 

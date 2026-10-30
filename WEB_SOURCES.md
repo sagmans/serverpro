@@ -516,9 +516,12 @@ removed package in `config-files` state, so package-floor checks require
 
 ```text
 https://documentation.ubuntu.com/server/how-to/security/firewalls/
+https://tailscale.com/docs/reference/faq/firewall-ports
 ```
 
-Use: host firewall checks.
+Use: host firewall checks and the restricted egress lockdown. Tailscale's
+firewall FAQ states that the coordination server and DERP relays use HTTPS on
+443, so the lockdown proves `controlplane.tailscale.com:443` still connects.
 
 ### OpenSSH
 

@@ -540,8 +540,12 @@ never replaced.
 - Public app ingress defaults to `none`.
 - Omitted post-bootstrap egress-lockdown configuration defaults to enabled;
   disabling it requires an explicit `false`. Restricted egress permits
-  outbound SSH (22/tcp) so git-over-SSH keeps working; doctor detects and
-  repairs pre-existing hosts missing the rule.
+  outbound SSH (22/tcp) so git-over-SSH keeps working. Create runs the
+  lockdown last, `server bootstrap` runs it again after the tools, and doctor
+  `--fix` runs the same script for `egress restricted` and `ufw ssh egress`.
+  The script verifies the UFW default, a blocked connect, and an allowed
+  connect, and fails closed; a create with no reachable host fails rather than
+  skip it.
 - GitHub access levels are explicit operator choices: `none`, read-only
   `deploy-key`, or full-development `account-key`. Full development requires a
   PAT. Secrets (PAT, private keys) never persist in config or state, though the

@@ -11,7 +11,7 @@ func (a *app) completeNetworkConfig(cfg *config.Config, ask bool) error {
 		return err
 	}
 	switch cfg.Network.Egress.Mode {
-	case "restricted", "open":
+	case config.EgressModeRestricted, config.EgressModeOpen:
 		return nil
 	default:
 		return fmt.Errorf("network.egress.mode must be restricted or open")

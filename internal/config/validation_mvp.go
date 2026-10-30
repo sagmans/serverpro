@@ -15,7 +15,7 @@ func (c Config) validateMVPConstraints() error {
 	if c.Network.Ingress != "none" && c.Network.Ingress != "cloudflare-tunnel" {
 		return errors.New("network.ingress must be none or cloudflare-tunnel")
 	}
-	if c.Network.Egress.Mode != "restricted" && c.Network.Egress.Mode != "open" {
+	if c.Network.Egress.Mode != EgressModeRestricted && c.Network.Egress.Mode != EgressModeOpen {
 		return errors.New("network.egress.mode must be restricted or open")
 	}
 	if c.Hardening.Profile != "strict" || !c.Hardening.UnattendedUpgrades || !c.Hardening.AppArmor || !c.Hardening.UFW || !c.Hardening.JournaldPersistent {

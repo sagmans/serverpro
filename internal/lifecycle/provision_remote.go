@@ -8,7 +8,6 @@ import (
 
 	"github.com/sagmans/serverpro/internal/bootstraptools"
 	"github.com/sagmans/serverpro/internal/config"
-	"github.com/sagmans/serverpro/internal/network"
 	"github.com/sagmans/serverpro/internal/poll"
 	"github.com/sagmans/serverpro/internal/remote"
 	"github.com/sagmans/serverpro/internal/state"
@@ -24,7 +23,7 @@ func waitRemoteReady(ctx context.Context, r remote.Runner, cfg config.Config, st
 
 func bootstrapRemoteNetwork(ctx context.Context, r remote.Runner, c CloudflareClient, cfg config.Config, st state.State) error {
 	if r == nil || st.Tailscale.Name == "" {
-		return nil
+		return lockdownUnreachable(cfg)
 	}
 	if cloudflareTunnelConfigured(cfg) && st.Cloudflare.TunnelID != "" {
 		tok, err := c.TunnelToken(ctx, st.Cloudflare.TunnelID)
@@ -41,10 +40,16 @@ func bootstrapRemoteNetwork(ctx context.Context, r remote.Runner, c CloudflareCl
 	if _, err := bootstrapRunner.Run(ctx, cfg.Admin.Username, st.Tailscale.Name, bootstraptools.InstallScriptForUser(cfg.Admin.Username)); err != nil {
 		return fmt.Errorf("server tool bootstrap failed: %w", err)
 	}
-	if cfg.Network.Egress.PhaseLockdownAfterBootstrap {
-		if _, err := r.Run(ctx, cfg.Admin.Username, st.Tailscale.Name, network.LockdownScript(cfg)); err != nil {
-			return err
-		}
+	return applyEgressLockdown(ctx, r, cfg, st)
+}
+
+// lockdownUnreachable fails closed when restricted egress is due but no
+// remote host can take it: cloud-init leaves outgoing open, so returning nil
+// here would complete a create whose config promises a lockdown that never
+// ran.
+func lockdownUnreachable(cfg config.Config) error {
+	if cfg.Network.Egress.PhaseLockdownAfterBootstrap && cfg.Network.Egress.Mode == config.EgressModeRestricted {
+		return fmt.Errorf("egress lockdown: no remote host to apply restricted egress on")
 	}
 	return nil
 }

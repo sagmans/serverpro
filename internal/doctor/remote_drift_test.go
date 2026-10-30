@@ -10,6 +10,7 @@ import (
 
 	"github.com/sagmans/serverpro/internal/cloudinit"
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/network"
 )
 
 // driftProbe runs a drift command under sh with fake host tools first on
@@ -66,6 +67,20 @@ func TestRemoteDriftSpecificationsProbeEgressOnlyWhenRestricted(t *testing.T) {
 	if !specificationsRead(remoteDriftSpecifications(cfg, Options{}), egressRestrictedCommand()) {
 		t.Fatal("restricted egress is not probed")
 	}
+	// Restricted egress is the one drift check config can converge, and its
+	// repair is the provisioning lockdown itself, not a doctor-only variant.
+	for _, specification := range remoteDriftSpecifications(cfg, Options{}) {
+		want := 0
+		if specificationsRead([]remoteCheckSpecification{specification}, egressRestrictedCommand()) {
+			want = 1
+			if len(specification.liveCommands) != want || specification.liveCommands[0] != network.LockdownScript(cfg) {
+				t.Fatal("egress repair is not the provisioning lockdown")
+			}
+		}
+		if len(specification.liveCommands) != want {
+			t.Fatalf("drift check %v declares %d repairs, want %d", specification.readCommands, len(specification.liveCommands), want)
+		}
+	}
 	cfg.Network.Egress.Mode = "open"
 	if specificationsRead(remoteDriftSpecifications(cfg, Options{}), egressRestrictedCommand()) {
 		t.Fatal("open egress is probed as restricted")
@@ -74,6 +89,45 @@ func TestRemoteDriftSpecificationsProbeEgressOnlyWhenRestricted(t *testing.T) {
 		if len(specification.liveCommands) != 0 {
 			t.Fatalf("drift check declares a repair: %+v", specification.liveCommands)
 		}
+	}
+}
+
+func TestRemoteFixableDriftSpecificationRepairsOnlyReadableDrift(t *testing.T) {
+	const (
+		probe = "probe"
+		fix   = "fix"
+	)
+	drift := remoteCall{out: "fail: drifted"}
+	clean := remoteCall{out: "converged"}
+	for _, tc := range []struct {
+		name         string
+		calls        map[string][]remoteCall
+		opt          Options
+		want         Status
+		wantEvidence string
+		wantFixRuns  int
+	}{
+		{name: "clean", calls: map[string][]remoteCall{probe: {clean}}, opt: Options{Fix: true}, want: Pass, wantEvidence: "converged"},
+		{name: "report only", calls: map[string][]remoteCall{probe: {drift}}, want: Fail, wantEvidence: "drifted"},
+		{name: "probe failed", calls: map[string][]remoteCall{probe: {{out: "denied", err: errors.New("exit status 1")}}}, opt: Options{Fix: true}, want: Fail, wantEvidence: "denied"},
+		{name: "fixed", calls: map[string][]remoteCall{probe: {drift, clean}}, opt: Options{Fix: true}, want: Pass, wantEvidence: "fixed: converged", wantFixRuns: 1},
+		{name: "fix failed", calls: map[string][]remoteCall{probe: {drift}, fix: {{out: "lockdown did not take effect", err: errors.New("exit status 1")}}}, opt: Options{Fix: true}, want: Fail, wantEvidence: "lockdown did not take effect", wantFixRuns: 1},
+		{name: "drift remains", calls: map[string][]remoteCall{probe: {drift, drift}}, opt: Options{Fix: true}, want: Fail, wantEvidence: "fix applied but drift remains: drifted", wantFixRuns: 1},
+		{name: "repair already ran", calls: map[string][]remoteCall{probe: {drift}}, opt: Options{Fix: true, fixRan: func(string) bool { return true }}, want: Fail, wantEvidence: repairAlreadyRanEvidence},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &scriptedRemote{responses: tc.calls}
+			results := remoteFixableDriftSpecification("drift", probe, "lead", fix).run(context.Background(), runner, "deploy", "prod-01", tc.opt)
+			fixRuns := 0
+			for _, command := range runner.commands {
+				if command == fix {
+					fixRuns++
+				}
+			}
+			if len(results) != 1 || results[0].Status != tc.want || !strings.Contains(results[0].Evidence, tc.wantEvidence) || fixRuns != tc.wantFixRuns {
+				t.Fatalf("results = %+v fix runs = %d, want %s with %q and %d fix runs", results, fixRuns, tc.want, tc.wantEvidence, tc.wantFixRuns)
+			}
+		})
 	}
 }
 
@@ -98,7 +152,15 @@ func TestRemoteDriftSpecificationReportsProbeOutput(t *testing.T) {
 }
 
 func TestEgressRestrictedCommandProvesPolicyAndEffect(t *testing.T) {
-	const denyStatus = "Status: active\nDefault: deny (incoming), deny (outgoing), deny (routed)\n"
+	// The rule lines mirror ufw's own "To  Action  From" layout, v6 rows
+	// included, so the anchored rule match is tested against real shapes.
+	var rules strings.Builder
+	for _, rule := range network.RestrictedAllowOut() {
+		rules.WriteString(rule + "                         ALLOW OUT   Anywhere\n")
+		rules.WriteString(rule + " (v6)                    ALLOW OUT   Anywhere (v6)\n")
+	}
+	denyStatus := "Status: active\nDefault: deny (incoming), deny (outgoing), deny (routed)\n\nTo                         Action      From\n--                         ------      ----\n" + rules.String()
+	withoutDNS := strings.ReplaceAll(denyStatus, "\n53 ", "\n5353 ")
 	for _, tc := range []struct {
 		name, ufw, timeoutStatus string
 		ufwStatus                string
@@ -108,6 +170,7 @@ func TestEgressRestrictedCommandProvesPolicyAndEffect(t *testing.T) {
 		{name: "locked down", ufw: denyStatus, ufwStatus: "0", timeoutStatus: "124", want: Pass, wantEvidence: "tcp 1.1.1.1:853 blocked"},
 		{name: "outgoing allowed", ufw: "Status: active\nDefault: deny (incoming), allow (outgoing), disabled (routed)\n", ufwStatus: "0", timeoutStatus: "124", want: Fail, wantEvidence: "ufw default outgoing is allow"},
 		{name: "ufw inactive", ufw: "Status: inactive\n", ufwStatus: "0", timeoutStatus: "124", want: Fail, wantEvidence: "unset (ufw inactive?)"},
+		{name: "allow rule missing", ufw: withoutDNS, ufwStatus: "0", timeoutStatus: "124", want: Fail, wantEvidence: "ufw allow out 53 missing"},
 		{name: "probe connects", ufw: denyStatus, ufwStatus: "0", timeoutStatus: "0", want: Fail, wantEvidence: "connected; non-allowlisted egress is open"},
 		{name: "ufw unreadable", ufwStatus: "1", timeoutStatus: "124", want: Fail, wantEvidence: driftProbeFailedRemediation},
 	} {

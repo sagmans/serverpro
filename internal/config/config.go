@@ -39,6 +39,14 @@ type Network struct {
 	Egress  Egress `yaml:"egress" json:"egress"`
 }
 
+// Egress modes. Restricted is the default and the only mode that provisioning
+// locks down and doctor checks; open is the explicit opt-out for workloads
+// that need arbitrary outbound ports.
+const (
+	EgressModeRestricted = "restricted"
+	EgressModeOpen       = "open"
+)
+
 type Egress struct {
 	Mode                        string `yaml:"mode" json:"mode"`
 	PhaseLockdownAfterBootstrap bool   `yaml:"phase_lockdown_after_bootstrap" json:"phase_lockdown_after_bootstrap"`

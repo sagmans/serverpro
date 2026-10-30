@@ -1,10 +1,12 @@
 package doctor
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/sagmans/serverpro/internal/cloudinit"
+	"github.com/sagmans/serverpro/internal/network"
 	"github.com/sagmans/serverpro/internal/shell"
 )
 
@@ -19,15 +21,8 @@ const (
 )
 
 const (
-	egressRestrictedCheckName = "egress restricted"
-	// The blocked-egress probe connects to DNS over TLS on a public resolver:
-	// the port is always served there, so a connect proves the path is open,
-	// and it is not on serverpro's allow-out list (internal/network), so
-	// restricted egress must drop it.
-	egressBlockedProbeHost        = "1.1.1.1"
-	egressBlockedProbePort        = 853
-	egressBlockedProbeTimeoutSecs = 3
-	egressRestrictedRemediation   = "restricted egress is not in force: confirm no workload needs other outbound ports, then apply the serverpro egress lockdown (USAGE.md, Restricted egress) and rerun doctor"
+	egressRestrictedCheckName   = "egress restricted"
+	egressRestrictedRemediation = "restricted egress is not in force: confirm no workload needs other outbound ports, then run serverpro server doctor --fix to re-apply the serverpro egress lockdown (USAGE.md, Restricted egress)"
 
 	rebootPendingCheckName = "reboot pending"
 	rebootRequiredPath     = "/var/run/reboot-required"
@@ -80,9 +75,13 @@ var privilegedGroups = []string{"sudo", "admin", "lxd", "docker"}
 // egressRestrictedCommand checks the policy and the effect separately: UFW
 // can report "deny (outgoing)" while an ALLOW OUT Anywhere rule, a second
 // firewall, or a missed reload still lets traffic out, so a real connect to a
-// port the lockdown never allows is the proof.
+// port the lockdown never allows is the proof. It also lists every lockdown
+// rule that is missing, because a deny default without them breaks apt,
+// tunnels, and Tailscale on the next reconnect.
 func egressRestrictedCommand() string {
-	target := egressBlockedProbeHost + ":" + strconv.Itoa(egressBlockedProbePort)
+	// The probe target is the lockdown's own proof, so doctor and
+	// provisioning cannot disagree on whether restricted egress is in force.
+	target := network.EgressBlockedProbeHost + ":" + strconv.Itoa(network.EgressBlockedProbePort)
 	return "export LC_ALL=C\n" +
 		"status=$(ufw status verbose) || exit 1\n" +
 		"outgoing=$(printf '%s\\n' \"$status\" | sed -n 's/^Default:.*[[:space:]]\\([a-z]*\\) (outgoing).*/\\1/p')\n" +
@@ -90,11 +89,23 @@ func egressRestrictedCommand() string {
 		"  deny|reject) printf 'ufw default outgoing: %s\\n' \"$outgoing\" ;;\n" +
 		"  *) printf '" + driftFailPrefix + "ufw default outgoing is %s, want deny\\n' \"${outgoing:-unset (ufw inactive?)}\" ;;\n" +
 		"esac\n" +
-		"if timeout " + strconv.Itoa(egressBlockedProbeTimeoutSecs) + " bash -c " + shell.Quote("exec 3<>/dev/tcp/"+egressBlockedProbeHost+"/"+strconv.Itoa(egressBlockedProbePort)) + " 2>/dev/null; then\n" +
+		egressAllowRulesCommand() +
+		"if timeout " + strconv.Itoa(network.EgressBlockedProbeTimeoutSeconds) + " bash -c " + shell.Quote("exec 3<>/dev/tcp/"+network.EgressBlockedProbeHost+"/"+strconv.Itoa(network.EgressBlockedProbePort)) + " 2>/dev/null; then\n" +
 		"  printf '%s\\n' " + shell.Quote(driftFailPrefix+"tcp "+target+" connected; non-allowlisted egress is open") + "\n" +
 		"else\n" +
 		"  printf '%s\\n' " + shell.Quote("tcp "+target+" blocked") + "\n" +
 		"fi"
+}
+
+// egressAllowRulesCommand prints one finding per lockdown rule missing from
+// the ufw status already read into $status. The rule leads the line in ufw's
+// "To" column, so an anchored match cannot hit a port inside another rule.
+func egressAllowRulesCommand() string {
+	var command strings.Builder
+	for _, rule := range network.RestrictedAllowOut() {
+		command.WriteString("printf '%s\\n' \"$status\" | grep -Eq " + shell.Quote("^(\\[ *[0-9]+\\] )?"+regexp.QuoteMeta(rule)+"( \\(v6\\))?[[:space:]]+ALLOW OUT") + " || printf '%s\\n' " + shell.Quote(driftFailPrefix+"ufw allow out "+rule+" missing") + "\n")
+	}
+	return command.String()
 }
 
 // rebootPendingCommand reports both Ubuntu's own flag and a newer installed
