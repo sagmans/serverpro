@@ -33,6 +33,10 @@ func NewWithHTTP(token, accountID, baseURL string, h *http.Client) Client {
 
 type Tunnel = ingress.Tunnel
 
+// TunnelIngressRule lets callers name the rule type through this package,
+// as they do Tunnel.
+type TunnelIngressRule = ingress.TunnelIngressRule
+
 func (c Client) ValidateAccount(ctx context.Context) error {
 	var out struct {
 		Result []Tunnel `json:"result"`
@@ -89,6 +93,37 @@ func (c Client) GetTunnel(ctx context.Context, id string) (Tunnel, error) {
 	}
 	err := c.api.Do(ctx, http.MethodGet, c.path("/cfd_tunnel/"+id), nil, &out)
 	return out.Result, err
+}
+
+// TunnelIngress reads the ingress rules of a remotely managed tunnel. A route
+// added in the dashboard lives only at Cloudflare and never reaches the
+// host's disk, so the OpenSSH preflight has to ask the API for it. A tunnel
+// without a remote configuration has no rules.
+func (c Client) TunnelIngress(ctx context.Context, id string) ([]ingress.TunnelIngressRule, error) {
+	var out struct {
+		Result struct {
+			Config *struct {
+				Ingress []struct {
+					Service       string `json:"service"`
+					OriginRequest struct {
+						BastionMode bool   `json:"bastionMode"`
+						ProxyType   string `json:"proxyType"`
+					} `json:"originRequest"`
+				} `json:"ingress"`
+			} `json:"config"`
+		} `json:"result"`
+	}
+	if err := c.api.Do(ctx, http.MethodGet, c.path("/cfd_tunnel/"+id+"/configurations"), nil, &out); err != nil {
+		return nil, err
+	}
+	if out.Result.Config == nil {
+		return nil, nil
+	}
+	rules := make([]ingress.TunnelIngressRule, 0, len(out.Result.Config.Ingress))
+	for _, rule := range out.Result.Config.Ingress {
+		rules = append(rules, ingress.TunnelIngressRule{Service: rule.Service, BastionMode: rule.OriginRequest.BastionMode, ProxyType: rule.OriginRequest.ProxyType})
+	}
+	return rules, nil
 }
 
 func (c Client) DeleteTunnel(ctx context.Context, id string) error {

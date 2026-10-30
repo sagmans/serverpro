@@ -118,7 +118,7 @@ func Run(ctx context.Context, opt Options) (state.State, error) {
 	if err := installRebootGate(ctx, opt.Clients.Remote, cfg, st); err != nil {
 		return st, newProvisionError(ProvisionPhaseRemoteRebootGate, st, err)
 	}
-	if err := disableOpenSSH(ctx, opt.Clients.Remote, opt.Clients.Compute, cfg, st); err != nil {
+	if err := disableOpenSSH(ctx, opt.Clients.Remote, opt.Clients.Compute, opt.Clients.Cloudflare, cfg, st); err != nil {
 		return st, newProvisionError(ProvisionPhaseRemoteOpenSSH, st, err)
 	}
 	// Auth-key cleanup is best-effort: the server is created and bootstrapped, so

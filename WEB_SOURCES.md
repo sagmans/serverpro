@@ -437,6 +437,18 @@ https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-
 
 Use: optional ingress route model and outbound firewall guidance.
 
+### Cloudflare Tunnel remote configuration
+
+```text
+https://developers.cloudflare.com/api/resources/zero_trust/subresources/tunnels/subresources/cloudflared/subresources/configurations/methods/get/
+https://developers.cloudflare.com/tunnel/reference/origin-parameters/
+```
+
+Use: the remotely managed ingress the OpenSSH-off preflight reads
+(`result.config.ingress[]` with `service` and `originRequest`), and the
+origin parameters (`bastionMode`, `proxyType`) that let a rule reach any
+destination.
+
 ### Cloudflare Tunnel configuration file
 
 ```text

@@ -25,3 +25,14 @@ func MatchTunnelByName(tunnels []Tunnel, name string) (Tunnel, bool, error) {
 	}
 	return match, found, nil
 }
+
+// TunnelIngressRule is one rule of a remotely managed tunnel's ingress. It
+// keeps only what decides where the rule can reach: the origin service, and
+// the origin settings that let a client pick any destination (bastion mode
+// and a SOCKS proxy). Hostnames stay with the provider, because no caller
+// needs them and they would only leak into errors and evidence.
+type TunnelIngressRule struct {
+	Service     string
+	BastionMode bool
+	ProxyType   string
+}

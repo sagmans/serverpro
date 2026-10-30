@@ -17,6 +17,9 @@ func RetryRemote(ctx context.Context, cfg config.Config, st state.State, existin
 	if identityBlocked(existing.Results) {
 		return existing
 	}
+	// The retry has no Cloudflare client. Keeping the tunnel in view means a
+	// repair here would fail closed instead of skipping the remote preflight.
+	opt.tunnelID = st.Cloudflare.TunnelID
 	inventory := replaceRemoteInventory(existing.Inventory, remoteInventory(ctx, runner, cfg.Admin.Username, st.Tailscale.Name))
 	results := replaceRemoteResults(existing.Results, remoteChecksWithOptions(ctx, cfg, runner, st.Tailscale.Name, opt))
 	for i := range results {

@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"strconv"
 
 	"github.com/sagmans/serverpro/internal/config"
@@ -11,20 +12,27 @@ import (
 
 const (
 	openSSHDisabledCheckName   = "openssh disabled"
-	openSSHDisabledRemediation = "OpenSSH must stay off while Tailscale SSH is the admin path: run serverpro server doctor --fix, which checks that Tailscale SSH serves the host and that nobody uses OpenSSH before it masks the ssh units, or set access.openssh: enabled to keep OpenSSH (USAGE.md, OpenSSH off)"
+	openSSHDisabledRemediation = "OpenSSH must stay off while Tailscale SSH is the admin path: run serverpro server doctor --fix, which checks that Tailscale SSH serves the host, that nobody uses OpenSSH, and that no cloudflared route on the host or in the tunnel's Cloudflare configuration reaches SSH before it masks the ssh units, or set access.openssh: enabled to keep OpenSSH (USAGE.md, OpenSSH off)"
 	openSSHEnabledSkip         = "access.openssh is enabled"
 )
 
 // remoteOpenSSHSpecification holds a host to the config's OpenSSH mode. The
-// repair is the provisioning script itself, preflight included, so doctor
-// --fix turns OpenSSH off only under the same gates as a create. A config
+// repair is the provisioning script itself, preflight included, and it runs
+// after the same remote ingress read as a create, so doctor --fix turns
+// OpenSSH off only under the same gates. A config
 // that opts back in skips the check instead of passing it: doctor did not
 // look, and an enabled sshd is then the operator's decision.
 func remoteOpenSSHSpecification(cfg config.Config, consoleAgents []string) remoteCheckSpecification {
 	if cfg.Access.OpenSSH == config.OpenSSHEnabled {
 		return remoteStaticSpecification(skip("remote", openSSHDisabledCheckName, openSSHEnabledSkip))
 	}
-	return remoteFixableDriftSpecification(openSSHDisabledCheckName, openSSHDisabledCommand(), openSSHDisabledRemediation, lifecycle.OpenSSHDisableScript(cfg.Admin.Username, consoleAgents))
+	return remoteGuardedFixableDriftSpecification(openSSHDisabledCheckName, openSSHDisabledCommand(), openSSHDisabledRemediation, lifecycle.OpenSSHDisableScript(cfg.Admin.Username, consoleAgents), nil, tunnelSSHIngressGuard)
+}
+
+// tunnelSSHIngressGuard reads the tunnel's remote ingress at repair time, not
+// at the start of the run, so a route added since then still stops it.
+func tunnelSSHIngressGuard(ctx context.Context, opt Options) error {
+	return lifecycle.CheckTunnelSSHIngress(ctx, opt.tunnelIngress, opt.tunnelID)
 }
 
 // openSSHDisabledCommand fails while either ssh unit is enabled or active, or

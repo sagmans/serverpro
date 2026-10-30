@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -69,6 +70,35 @@ func TestTunnelTokenReturnsConnectorToken(t *testing.T) {
 	token, err := NewWithHTTP("token", "acc", ts.URL, ts.Client()).TunnelToken(context.Background(), "tun1")
 	if err != nil || token != "connector-token" {
 		t.Fatalf("token = %q err = %v", token, err)
+	}
+}
+
+func TestTunnelIngressReadsRemoteRules(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want []TunnelIngressRule
+	}{
+		{name: "remote ingress", body: `{"result":{"config":{"ingress":[{"hostname":"ssh.example.test","service":"ssh://localhost:22","originRequest":{"bastionMode":true,"proxyType":"socks"}},{"service":"http_status:404"}]}}}`, want: []TunnelIngressRule{{Service: "ssh://localhost:22", BastionMode: true, ProxyType: "socks"}, {Service: "http_status:404"}}},
+		// A tunnel nobody has configured yet has no remote configuration.
+		{name: "no configuration", body: `{"result":{"config":null}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handlerErr := testhttp.NewHandlerErrorRecorder(t)
+			defer handlerErr.Check()
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/accounts/acc/cfd_tunnel/tun1/configurations" {
+					handlerErr.Record(w, "unexpected %s %s", r.Method, r.URL.Path)
+					return
+				}
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer ts.Close()
+			rules, err := NewWithHTTP("token", "acc", ts.URL, ts.Client()).TunnelIngress(context.Background(), "tun1")
+			if err != nil || !slices.Equal(rules, tc.want) {
+				t.Fatalf("rules = %+v err = %v, want %+v", rules, err, tc.want)
+			}
+		})
 	}
 }
 

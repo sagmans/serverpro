@@ -695,7 +695,7 @@ drop-in, `privileged accounts` removes the provider's own image accounts, and
 | Check | Result | Finding |
 | --- | --- | --- |
 | `egress restricted` | fail | UFW's default outgoing policy is not `deny`/`reject`, a lockdown `ALLOW OUT` rule is missing, or a TCP connect to `1.1.1.1:853` succeeds. Runs only when the lockdown is due: `network.egress.mode: restricted` and `phase_lockdown_after_bootstrap` not `false`, the same rule create and `server bootstrap` use; `--fix` re-applies the lockdown. |
-| `openssh disabled` | fail or warn | `ssh.socket` or `ssh.service` is enabled or active, or a process listens on TCP port 22, or `sshd` listens on any port (fail). A unit is disabled but not masked, or `/etc/ssh/sshd_not_to_be_run` is missing (warn). Skipped with `access.openssh: enabled`; `--fix` runs the create step, safety checks included. See OpenSSH off. |
+| `openssh disabled` | fail or warn | `ssh.socket` or `ssh.service` is enabled or active, or a process listens on TCP port 22, or `sshd` listens on any port (fail). A unit is disabled but not masked, or `/etc/ssh/sshd_not_to_be_run` is missing (warn). Skipped with `access.openssh: enabled`; `--fix` runs the create step, safety checks included, and reads the tunnel's ingress at Cloudflare right before it; a route to SSH or a failed read keeps the repair from running (`fix not run`). See OpenSSH off. |
 | `reboot pending` | warn | `/var/run/reboot-required` exists, or an installed kernel is newer than the running one. Doctor never reboots, also with `--fix`. With `reboot.enabled: true` the gated reboot runs in the window once `reboot survivability` shows no gap; see Gated reboot. |
 | `reboot survivability` | fail or warn | Fail: with `reboot.enabled: true`, the gated reboot's script, timer, or units are missing, changed, or not enabled (`install:` findings). Warn: a running workload would not come back after any reboot (see Gated reboot for the rules), the post-reboot check in the current boot was not `ok` or did not finish, or the timer is enabled while `reboot.enabled: false`. `--fix` repairs only the `install:` findings: it never reboots and never changes a workload. |
 | `unattended upgrades config` | fail or warn | An option of `/etc/apt/apt.conf.d/52serverpro-unattended-upgrades` has another effective value in `apt-config` (fail), or is not set at all (warn: a host created before the drop-in). `--fix` rewrites the drop-in; a later apt.conf.d file that overrides it stays a finding. |
@@ -739,6 +739,20 @@ changes nothing:
   the user, never the source address. An `auth.log` line in the classic
   syslog format has no year, so it counts even when it is older.
 - A file under `/etc/cloudflared` routes to `ssh://` or to port 22.
+- A `cloudflared` unit (`cloudflared.service`, or any running
+  `cloudflared*.service`) has `--url` or `TUNNEL_URL` set to `ssh://` or to
+  port 22 in its `ExecStart` or `Environment`, or
+  `/etc/default/cloudflared` does. These settings also hold the tunnel
+  token, so the step only reports that a match exists and prints no value.
+- The server has a Cloudflare tunnel in state, and its ingress at Cloudflare
+  has a rule that reaches SSH: an `ssh://` service, any service on port 22,
+  the `bastion` or `socks5` service, bastion mode, or a SOCKS proxy type.
+  Serverpro creates remotely managed tunnels, so a route added in the
+  Cloudflare dashboard never reaches the server's disk. Serverpro reads the
+  ingress with the Cloudflare API before it runs anything on the server. The
+  message names each rule's service with any URL password masked, never its
+  hostname. If the read fails, the step stops too: serverpro cannot tell that
+  no route needs sshd.
 
 Then it:
 

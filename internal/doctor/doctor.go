@@ -7,6 +7,7 @@ import (
 	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
+	"github.com/sagmans/serverpro/internal/lifecycle"
 	"github.com/sagmans/serverpro/internal/state"
 )
 
@@ -15,6 +16,10 @@ func Run(ctx context.Context, cfg config.Config, st state.State, creds credentia
 }
 
 func RunWithOptions(ctx context.Context, cfg config.Config, st state.State, creds credentials.Set, clients Clients, opt Options) Report {
+	// The OpenSSH repair reads the tunnel's remote ingress right before it
+	// runs, so it takes the live client, not the run's snapshot.
+	opt.tunnelID = st.Cloudflare.TunnelID
+	opt.tunnelIngress, _ = clients.Cloudflare.(lifecycle.TunnelIngressReader)
 	clients = snapshotProviderClients(clients)
 	node := checkTailscaleNode(ctx, cfg, st, creds.Tailscale, clients.Tailscale)
 	// Remote steps address the host by name and may pipe the sudo password, so

@@ -254,7 +254,9 @@ access paths for app-owned deployment flows.
     passing.
     Five have a repair: restricted egress re-runs the provisioning lockdown,
     OpenSSH off re-runs the create step (`lifecycle.OpenSSHDisableScript`,
-    safety checks included, and a repair's warnings stay in the result),
+    safety checks included, and a repair's warnings stay in the result)
+    after the same remote ingress read (`lifecycle.CheckTunnelSSHIngress`,
+    run as a guard right before the repair with the live Cloudflare client),
     reboot survivability re-runs `rebootgate.InstallScript` for `install:`
     findings only, the unattended-upgrades drop-in is rewritten from the function that
     renders it for cloud-init, and privileged accounts removes the accounts
@@ -420,8 +422,12 @@ flowchart LR
    `reboot.enabled: true`, install the gated reboot (`remote_reboot_gate`
    phase); a create with no reachable host fails rather than skip it. Last, unless
    `access.openssh: enabled`, turn OpenSSH off (`remote_openssh` phase):
-   `lifecycle.OpenSSHDisableScript` stops before any change when Tailscale
-   SSH is not proven or OpenSSH is in use, records the original unit states
+   `lifecycle.CheckTunnelSSHIngress` first reads the tunnel's remote
+   ingress through the Cloudflare client and stops on a route to SSH or a
+   failed read, because a remotely managed tunnel's routes never reach the
+   host. Then `lifecycle.OpenSSHDisableScript` stops before any change when
+   Tailscale SSH is not proven, OpenSSH is in use, or a cloudflared file or
+   unit on the host routes to SSH, records the original unit states
    in `/var/lib/serverpro/openssh-disabled.state`, masks `ssh.socket` and
    `ssh.service`, and creates `/etc/ssh/sshd_not_to_be_run`. The compute
    adapter can declare an sshd console agent (`compute.SSHConsoleAgents`)

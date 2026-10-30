@@ -67,9 +67,13 @@ const (
 	cloudflaredServiceUser = "cloudflared"
 	// CloudflaredConfigDir also holds any locally managed ingress file, which
 	// the OpenSSH preflight reads before it turns sshd off.
-	CloudflaredConfigDir  = "/etc/cloudflared"
-	cloudflaredTokenPath  = CloudflaredConfigDir + "/token"
-	cloudflaredUnitPath   = "/etc/systemd/system/cloudflared.service"
+	CloudflaredConfigDir = "/etc/cloudflared"
+	cloudflaredTokenPath = CloudflaredConfigDir + "/token"
+	cloudflaredUnitPath  = "/etc/systemd/system/" + CloudflaredUnit
+	// CloudflaredUnit is the unit provisioning installs. The OpenSSH preflight
+	// reads its settings by name, so a stopped unit that a boot would start
+	// still counts.
+	CloudflaredUnit       = cloudflaredServiceName + ".service"
 	cloudflaredBinaryPath = "/usr/bin/cloudflared"
 )
 

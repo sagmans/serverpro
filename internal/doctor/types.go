@@ -1,6 +1,9 @@
 package doctor
 
-import "github.com/sagmans/serverpro/internal/compute"
+import (
+	"github.com/sagmans/serverpro/internal/compute"
+	"github.com/sagmans/serverpro/internal/lifecycle"
+)
 
 type Status string
 
@@ -51,6 +54,12 @@ type Options struct {
 	// console that logs in through sshd (compute.SSHConsoleAgents). The
 	// OpenSSH-off repair warns while one is active.
 	SSHConsoleAgents []string
+	// tunnelID and tunnelIngress feed the OpenSSH repair's remote preflight
+	// (lifecycle.CheckTunnelSSHIngress). RunWithOptions and RetryRemote set
+	// them from state and the live Cloudflare client; a nil reader with a
+	// tunnel in state blocks that repair.
+	tunnelID      string
+	tunnelIngress lifecycle.TunnelIngressReader
 	// refreshBaseline makes a check skip its batch baseline and read live,
 	// because a repair earlier in the same run may have changed the host.
 	refreshBaseline bool

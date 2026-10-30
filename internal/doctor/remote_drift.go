@@ -113,6 +113,14 @@ func remoteFixableDriftSpecification(name, command, remediation, fixCommand stri
 // covers only some findings: fixable sees the drift result and decides
 // whether the repair can change it. A nil gate repairs any drift.
 func remoteFixableDriftSpecificationWhen(name, command, remediation, fixCommand string, fixable func(Result) bool) remoteCheckSpecification {
+	return remoteGuardedFixableDriftSpecification(name, command, remediation, fixCommand, fixable, nil)
+}
+
+// remoteGuardedFixableDriftSpecification adds a preflight that runs off the
+// host, right before the repair, for a repair whose safety depends on state
+// the host cannot see. An error keeps the repair from running and becomes
+// the finding's evidence. A nil guard always lets the repair run.
+func remoteGuardedFixableDriftSpecification(name, command, remediation, fixCommand string, fixable func(Result) bool, guard func(context.Context, Options) error) remoteCheckSpecification {
 	return remoteCheckSpecification{
 		readCommands:     []string{command},
 		liveCommands:     []string{fixCommand},
@@ -129,6 +137,11 @@ func remoteFixableDriftSpecificationWhen(name, command, remediation, fixCommand 
 			}
 			if opt.fixRan != nil && opt.fixRan(fixCommand) {
 				return []Result{fail("remote", name, result.Evidence+repairAlreadyRanEvidence, repairAlreadyRanRemediation)}
+			}
+			if guard != nil {
+				if err := guard(ctx, opt); err != nil {
+					return []Result{fail("remote", name, result.Evidence+"; fix not run: "+err.Error(), remediation)}
+				}
 			}
 			fixOut, fixErr := runner.Run(ctx, user, host, fixCommand)
 			if fixErr != nil {

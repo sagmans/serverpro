@@ -129,6 +129,7 @@ func TestRemoteFixableDriftSpecificationRepairsOnlyReadableDrift(t *testing.T) {
 		name         string
 		calls        map[string][]remoteCall
 		opt          Options
+		guard        func(context.Context, Options) error
 		want         Status
 		wantEvidence string
 		wantFixRuns  int
@@ -143,10 +144,15 @@ func TestRemoteFixableDriftSpecificationRepairsOnlyReadableDrift(t *testing.T) {
 		{name: "fix failed", calls: map[string][]remoteCall{probe: {drift}, fix: {{out: "lockdown did not take effect", err: errors.New("exit status 1")}}}, opt: Options{Fix: true}, want: Fail, wantEvidence: "lockdown did not take effect", wantFixRuns: 1},
 		{name: "drift remains", calls: map[string][]remoteCall{probe: {drift, drift}}, opt: Options{Fix: true}, want: Fail, wantEvidence: "fix applied but drift remains: drifted", wantFixRuns: 1},
 		{name: "repair already ran", calls: map[string][]remoteCall{probe: {drift}}, opt: Options{Fix: true, fixRan: func(string) bool { return true }}, want: Fail, wantEvidence: repairAlreadyRanEvidence},
+		// The OpenSSH-off guard: a server without a tunnel has no remote
+		// ingress to read, while a tunnel whose ingress doctor cannot read
+		// keeps the repair from running, since a route there could need sshd.
+		{name: "guard without tunnel", calls: map[string][]remoteCall{probe: {drift, clean}}, opt: Options{Fix: true}, guard: tunnelSSHIngressGuard, want: Pass, wantEvidence: "fixed: converged", wantFixRuns: 1},
+		{name: "guard refused", calls: map[string][]remoteCall{probe: {drift}}, opt: Options{Fix: true, tunnelID: "tun1"}, guard: tunnelSSHIngressGuard, want: Fail, wantEvidence: lifecycle.ErrTunnelIngressUnread.Error()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			runner := &scriptedRemote{responses: tc.calls}
-			results := remoteFixableDriftSpecification("drift", probe, "lead", fix).run(context.Background(), runner, "deploy", "prod-01", tc.opt)
+			results := remoteGuardedFixableDriftSpecification("drift", probe, "lead", fix, nil, tc.guard).run(context.Background(), runner, "deploy", "prod-01", tc.opt)
 			fixRuns := 0
 			for _, command := range runner.commands {
 				if command == fix {

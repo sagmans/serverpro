@@ -62,7 +62,13 @@ default.
   as its last remote step, after Tailscale SSH has carried the bootstrap. The
   step stops before any change when `tailscaled` is down, Tailscale SSH is
   off, an OpenSSH session is established, an OpenSSH login is in the last 30
-  days, or a local cloudflared ingress routes to SSH. It masks both ssh units
+  days, or a cloudflared ingress routes to SSH. That covers an ingress file
+  under `/etc/cloudflared`, a `--url` or `TUNNEL_URL` origin in a cloudflared
+  unit or `/etc/default/cloudflared`, and the tunnel's remotely managed
+  ingress, which create and `doctor --fix` read from the Cloudflare API
+  before they change the host. A failed API read stops the step, so a route
+  the read could not see never loses its origin. The host grep prints no
+  value, because those settings hold the tunnel token. It masks both ssh units
   and creates `/etc/ssh/sshd_not_to_be_run`, so neither a dependency nor a
   package upgrade starts sshd again. Login reports name the method and user,
   never the source address. The packages stay installed for updates and

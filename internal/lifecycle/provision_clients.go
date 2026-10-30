@@ -29,6 +29,8 @@ type CloudflareClient interface {
 	CreateTunnel(context.Context, string) (ingress.Tunnel, error)
 	DeleteTunnel(context.Context, string) error
 	TunnelToken(context.Context, string) (string, error)
+	// TunnelIngress backs the OpenSSH preflight (TunnelIngressReader).
+	TunnelIngress(context.Context, string) ([]ingress.TunnelIngressRule, error)
 }
 
 type Clients struct {
