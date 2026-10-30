@@ -309,11 +309,13 @@ func TestPrivilegedAccountsCommandListsEveryRootPath(t *testing.T) {
 		"wild":                "wild ALL=(root) /usr/bin/*\n",
 		"multi":               "multi ALL = /usr/bin/id : ALL = ALL\n",
 		"split":               "split ALL=(root) NOPASSWD: /usr/bin/id : web1=(root : adm) NOPASSWD: /usr/bin/whoami\n",
+		"toolchain":           "toolchain ALL=(root) /usr/bin/compile\n",
+		"owned":               "owned ALL=(root) /usr/bin/owned, /usr/bin/missing\n",
 	})
 	out, err := driftProbe{
 		command:      privilegedAccountsCommand("deploy", []string{"linuxuser", "absent"}),
 		replacements: map[string]string{sudoersPath: sudoers},
-		tools:        map[string]string{"getent": fakeGetent},
+		tools:        map[string]string{"getent": fakeGetent, "realpath": fakeRealpath, "ls": fakeLs},
 		env:          []string{"FAKE_ETC=" + etc},
 	}.run(t)
 	result := driftResult(privilegedAccountsCheckName, out, err, privilegedAccountsRemediation)
@@ -335,6 +337,12 @@ func TestPrivilegedAccountsCommandListsEveryRootPath(t *testing.T) {
 		// Every ":"-joined part of a rule is graded, so a later ALL fails.
 		driftFailPrefix + sudoers + ".d/multi grants sudo to multi without a command limit\n",
 		driftWarnPrefix + sudoers + ".d/split grants sudo to split for listed commands: /usr/bin/id /usr/bin/whoami\n",
+		// A listed path is graded by what it resolves to on the host.
+		driftFailPrefix + sudoers + ".d/split grants sudo to split for /usr/bin/whoami, which resolves to root-equivalent /usr/bin/bash\n",
+		driftFailPrefix + sudoers + ".d/toolchain grants sudo to toolchain for /usr/bin/compile, which resolves to root-equivalent /usr/bin/x86_64-linux-gnu-gcc-13\n",
+		driftFailPrefix + sudoers + ".d/ci grants sudo to ci for /usr/local/bin/deploy-app, whose path /opt/app is writable by group or others\n",
+		driftFailPrefix + sudoers + ".d/owned grants sudo to owned for /usr/bin/owned, whose path /usr/bin/owned is not owned by root\n",
+		driftFailPrefix + sudoers + ".d/owned grants sudo to owned for /usr/bin/missing, which does not resolve to a file\n",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output %q lacks %q", out, want)
@@ -343,12 +351,32 @@ func TestPrivilegedAccountsCommandListsEveryRootPath(t *testing.T) {
 	// The admin, root, the sudo group, a continued command list, command
 	// arguments, a drop-in sudo itself skips, and an image account that is
 	// gone are not drift.
-	for _, unwanted := range []string{"deploy is", "root has", "to deploy", "to %sudo", "to /usr/", "status app", "ghost", "absent"} {
+	for _, unwanted := range []string{"deploy is", "root has", "to deploy", "to %sudo", "to /usr/", "status app", "ghost", "absent", "for /usr/bin/id,"} {
 		if strings.Contains(result.Evidence, unwanted) {
 			t.Fatalf("evidence %q reports %q", result.Evidence, unwanted)
 		}
 	}
 }
+
+// fakeRealpath and fakeLs stand in for the host's view of listed sudo
+// commands, so the test does not depend on the files of the machine running
+// it: whoami and compile resolve to root-equivalent binaries, deploy-app to a
+// directory its group can write, owned to a file another user owns, and
+// missing to nothing.
+const (
+	fakeRealpath = `case "$2" in
+(/usr/bin/whoami) echo /usr/bin/bash ;;
+(/usr/bin/compile) echo /usr/bin/x86_64-linux-gnu-gcc-13 ;;
+(/usr/local/bin/deploy-app) echo /opt/app/deploy-app ;;
+(/usr/bin/missing) exit 1 ;;
+(*) printf '%s\n' "$2" ;;
+esac`
+	fakeLs = `case "$3" in
+(/opt/app) echo "drwxrwxr-x 2 0 1001 4096 Jan 1 00:00 $3" ;;
+(/usr/bin/owned) echo "-rwxr-xr-x 1 1001 0 10 Jan 1 00:00 $3" ;;
+(*) echo "-rwxr-xr-x 1 0 0 10 Jan 1 00:00 $3" ;;
+esac`
+)
 
 // fakeSudoers writes a sudoers file and its drop-in directory side by side,
 // so replacing the sudoers path also redirects the drop-in directory.

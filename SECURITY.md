@@ -174,7 +174,11 @@ default.
   any of its `:`-joined command lists fails, and so does a rule that lists a root-equivalent command (a shell,
   editor, pager, interpreter, file writer, or account, package, service, or
   container manager) by any path or arguments; a rule that lists only other
-  absolute command paths warns and names them. Give such an account a
+  absolute command paths warns and names them. On the server, each listed
+  path must resolve to a root-owned file that no group or other user can
+  write, below directories that are the same, and not to a root-equivalent
+  command; otherwise the rule fails, because a symlink or a writable script
+  runs anything as root behind a narrow-looking path. Give such an account a
   root-owned wrapper script that it cannot write and that runs one fixed
   action. See USAGE.md, Drift checks and Provider image accounts.
 - Tailnet packet rules are outside serverpro's ownership: serverpro edits only

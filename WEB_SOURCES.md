@@ -623,7 +623,9 @@ https://gtfobins.github.io/
 Use: the sudo entries behind doctor's root-equivalent command list for
 `privileged accounts`: shells, interpreters, editors, pagers, file writers,
 and package, service, or container managers that reach root through a
-sudoers rule even when it names them by absolute path.
+sudoers rule even when it names them by absolute path. The list adds the
+Debian alternatives (`editor`, `sensible-editor`, `pager`) that point at one
+of them.
 
 ### chpasswd
 
