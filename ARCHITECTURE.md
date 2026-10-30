@@ -410,7 +410,9 @@ flowchart LR
    password sudo, restoring the sudoers files on failure. `doctor --fix` runs
    the same script. Then remove the compute provider's image accounts
    (`remote_image_users` phase), because the admin user now works through
-   sudo: `lifecycle.ImageUsersRemovalScript` locks each account, archives its
+   sudo: `lifecycle.ImageUsersRemovalScript` first stops with nothing changed
+   when `/etc/sudoers` or a file it includes outside sudoers.d (the list
+   `visudo -c` prints) names the account, then locks each account, archives its
    home, crontab, and single-account sudoers.d files under
    `/root/serverpro-removed-accounts`, removes only that account's rules from
    a shared sudoers.d file (archiving the original), checks `visudo -c`, and

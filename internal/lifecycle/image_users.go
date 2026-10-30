@@ -21,6 +21,14 @@ const (
 	// imageUserRemovalFailedPrefix starts every reason the removal stops, so
 	// operators and tests can find it in output.
 	imageUserRemovalFailedPrefix = "image account removal stopped: "
+	// sudoersMainPath and sudoersDropInGlob are the sudoers files the removal
+	// knows: it edits only the drop-ins, and it requires the main file in
+	// visudo's list so an empty list cannot read as "nothing names it".
+	sudoersMainPath   = "/etc/sudoers"
+	sudoersDropInGlob = "/etc/sudoers.d/*"
+	// visudoParsedSuffix ends each line visudo -c prints for a file it read
+	// (under LC_ALL=C), which is how sudo itself lists every include.
+	visudoParsedSuffix = ": parsed OK"
 )
 
 // imageUserNamePattern is the portable account-name set useradd accepts. The
@@ -44,9 +52,14 @@ var imageUserNamePattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 // name, so a shared file that still names the account elsewhere (an alias or
 // a rule for several accounts) stops the removal before userdel. An account
 // with running processes also stops it, because deleting the account would
-// orphan them; it stays locked and the message says how to undo that. The
-// script never touches root, the admin user, or a uid 0 account, and it is a
-// no-op for an account that is already gone.
+// orphan them; it stays locked and the message says how to undo that. Before
+// any of that, a rule for the account in /etc/sudoers or in a file it
+// includes from outside /etc/sudoers.d stops the removal with nothing
+// changed: serverpro does not edit those files, and the rule would outlive
+// userdel. The file list comes from visudo -c, so it follows every #include,
+// @include, and includedir exactly as sudo does. The script never touches
+// root, the admin user, or a uid 0 account, and it is a no-op for an account
+// that is already gone.
 func ImageUsersRemovalScript(admin string, users []string) (string, error) {
 	for _, user := range users {
 		if !imageUserNamePattern.MatchString(user) || user == admin || user == "root" {
@@ -94,9 +107,34 @@ names_user() {
 # A candidate left by an early exit would keep a copy of sudoers rules.
 candidate=
 trap '[ -z "$candidate" ] || rm -f "$candidate"' EXIT
+# outside_sudoers_d stops when a sudoers file outside the drop-ins names $1.
+outside_sudoers_d() {
+  parsed=$(visudo -c 2>&1) || stop "visudo -c fails before any change; fix the sudoers files first"
+  files=$(printf '%s\n' "$parsed" | sed -n ` + shell.Quote("s/"+visudoParsedSuffix+"$//p") + `) || stop "cannot list the sudoers files"
+  seen_main=
+  set -f
+  old_ifs=$IFS
+  IFS='
+'
+  for sudoers_file in $files; do
+    [ "$sudoers_file" != ` + shell.Quote(sudoersMainPath) + ` ] || seen_main=1
+    case $sudoers_file in (` + sudoersDropInGlob + `) continue ;; esac
+    status=0
+    names_user "$1" "$sudoers_file" || status=$?
+    case $status in
+      (0) stop "$sudoers_file names $1, and serverpro does not edit that file; take $1 out of it with visudo -f $sudoers_file and rerun" ;;
+      (1) ;;
+      (*) stop "cannot read $sudoers_file" ;;
+    esac
+  done
+  IFS=$old_ifs
+  set +f
+  [ -n "$seen_main" ] || stop "visudo -c did not list ` + sudoersMainPath + `"
+}
 remove_image_user() {
   user=$1
   dest="$archive_root/$user-$stamp"
+  outside_sudoers_d "$user"
   if entry=$(getent passwd "$user"); then
     uid=$(printf '%s\n' "$entry" | cut -d: -f3)
     [ "$uid" != 0 ] || stop "$user has uid 0"
@@ -114,7 +152,7 @@ remove_image_user() {
       mv "/var/spool/cron/crontabs/$user" "$dest/crontab"
     fi
   fi
-  for file in /etc/sudoers.d/*; do
+  for file in ` + sudoersDropInGlob + `; do
     [ -f "$file" ] || continue
     grep -Eq "(^|[^a-z0-9_-])$user([^a-z0-9_-]|\$)" "$file" || continue
     name=$(basename "$file")

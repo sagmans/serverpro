@@ -488,6 +488,16 @@ account had its own and a wrapped rule in a sudoers.d file that also had a
   locked and expired the account, and the undo command in its message gave
   back the password, the expiry, and the shell.
 
+A third run compared the script before and after the check of sudoers
+files outside `/etc/sudoers.d`, in the same kind of container. With a rule
+for the image account in `/etc/sudoers`, in an `@include` file, or in an
+`#includedir` file, the earlier script removed the account, and a new
+account with the same name got that rule (`sudo -l -U`). The current script
+stopped before any change: the account kept its shell, expiry, and home,
+and its sudoers.d file stayed. With a broken drop-in it stopped before any
+change too, where the earlier script had locked the account first. With
+only its own drop-in, both removed the account.
+
 Not covered: a real Vultr host (doctor `--fix` was not run against
 production).
 

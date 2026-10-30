@@ -815,20 +815,25 @@ removes these accounts after the admin password step proves that the admin
 user works through sudo. `serverpro server doctor NAME --fix` removes them
 from older hosts. For each account, the removal:
 
-1. Locks the account and expires it, so no new session starts.
-2. Stops if the account has running processes. The account stays locked, and
+1. Stops before any change if `/etc/sudoers`, or a file it includes from
+   outside `/etc/sudoers.d` (`#include`, `@include`, or an `includedir`),
+   names the account, or if `visudo -c` already fails. Serverpro never edits
+   those files, and a rule there would outlive the account. Take the account
+   out with `visudo -f FILE` and rerun.
+2. Locks the account and expires it, so no new session starts.
+3. Stops if the account has running processes. The account stays locked, and
    the message names the command that undoes the lock. End the processes, for
    example with `sudo loginctl terminate-user linuxuser`, and rerun.
-3. Archives its home and crontab under
+4. Archives its home and crontab under
    `/root/serverpro-removed-accounts/<account>-<UTC time>/`.
-4. Moves each `/etc/sudoers.d` file whose rules are all for that account into
+5. Moves each `/etc/sudoers.d` file whose rules are all for that account into
    the same archive. From a file that also has rules for other accounts, it
    removes only that account's rules and keeps the original in the archive.
    It stops before any change when such a file still names the account in
    another place, for example a `User_Alias` or a rule for several accounts:
    edit that file with `visudo -f` and rerun. After each change it runs
    `visudo -c`. If that fails, it puts the original back and stops.
-5. Runs `userdel -r`. No sudoers.d rule for the name stays, so an account
+6. Runs `userdel -r`. No sudoers rule for the name stays, so an account
    created later with the same name gets no sudo from it.
 
 Any other account that `privileged accounts` lists is report-only, also
