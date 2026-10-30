@@ -59,6 +59,25 @@ func ImageDefaultUsers(provider Provider) []string {
 	return source.ImageDefaultUsers()
 }
 
+// SSHConsoleAgentsProvider is implemented by providers that run an on-host
+// agent for a browser console that logs in through sshd. Once OpenSSH is off
+// that console stops working, so turning OpenSSH off warns while one of these
+// systemd units is active and points the operator at the provider's recovery
+// console instead.
+type SSHConsoleAgentsProvider interface {
+	SSHConsoleAgents() []string
+}
+
+// SSHConsoleAgents returns the provider's sshd console agent units, or nil
+// when it declares none, so callers need no type assertion.
+func SSHConsoleAgents(provider Provider) []string {
+	source, ok := provider.(SSHConsoleAgentsProvider)
+	if !ok {
+		return nil
+	}
+	return source.SSHConsoleAgents()
+}
+
 type Account struct {
 	Name     string
 	Provider ProviderName

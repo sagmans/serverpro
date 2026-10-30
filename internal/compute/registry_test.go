@@ -105,3 +105,22 @@ func TestImageDefaultUsersIsOptional(t *testing.T) {
 		t.Fatalf("image accounts = %v", got)
 	}
 }
+
+type fakeConsoleAgentsProvider struct {
+	fakeProvider
+	agents []string
+}
+
+func (p fakeConsoleAgentsProvider) SSHConsoleAgents() []string { return p.agents }
+
+// TestSSHConsoleAgentsIsOptional keeps the console warning provider-owned: a
+// provider that declares no agent yields nil, so turning OpenSSH off warns
+// about no unit.
+func TestSSHConsoleAgentsIsOptional(t *testing.T) {
+	if got := SSHConsoleAgents(fakeProvider{name: "plain"}); got != nil {
+		t.Fatalf("provider without console agents = %v", got)
+	}
+	if got := SSHConsoleAgents(fakeConsoleAgentsProvider{fakeProvider: fakeProvider{name: "cloud"}, agents: []string{"console-agent"}}); len(got) != 1 || got[0] != "console-agent" {
+		t.Fatalf("console agents = %v", got)
+	}
+}

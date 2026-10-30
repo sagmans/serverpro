@@ -30,6 +30,9 @@ func TestComputeProviderNameAndCapabilities(t *testing.T) {
 	if got := compute.ImageDefaultUsers(p); got != nil {
 		t.Fatalf("image accounts = %v", got)
 	}
+	if got := compute.SSHConsoleAgents(p); len(got) != 1 || got[0] != sshConsoleAgentUnit {
+		t.Fatalf("ssh console agents = %v", got)
+	}
 }
 
 func TestComputeProviderDoctorRedactsAndPreservesProviderError(t *testing.T) {

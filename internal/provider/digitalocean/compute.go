@@ -10,6 +10,9 @@ import (
 // metadataUserDataPath is DigitalOcean's documented user-data path.
 const metadataUserDataPath = "/metadata/v1/user-data"
 
+// sshConsoleAgentUnit runs the Droplet Console, which logs in through sshd.
+const sshConsoleAgentUnit = "droplet-agent"
+
 type ClientFactory func(token string) Client
 
 type ComputeProvider struct {
@@ -28,6 +31,10 @@ func (p ComputeProvider) Name() compute.ProviderName { return compute.ProviderNa
 // MetadataUserDataPath lets doctor check what this provider's metadata
 // service still serves to every local process on the server.
 func (p ComputeProvider) MetadataUserDataPath() string { return metadataUserDataPath }
+
+// SSHConsoleAgents declares the agent behind the Droplet Console, which logs
+// in through sshd; the Recovery Console does not need it.
+func (p ComputeProvider) SSHConsoleAgents() []string { return []string{sshConsoleAgentUnit} }
 
 func (p ComputeProvider) Capabilities(context.Context) compute.Capabilities {
 	return compute.Capabilities{CreateServer: true, DeleteServer: true, PowerServer: true, Catalog: true, ListServers: true}
