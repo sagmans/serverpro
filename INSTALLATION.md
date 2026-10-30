@@ -27,7 +27,7 @@ counterpart on DigitalOcean. Confirm current catalog availability before create.
 ### Managed tool baseline
 
 Reviewed 2026-10-30. Stable releases normally require seven days of age.
-Tailscale, Docker Engine, Buildx, Compose, mise, Node.js, uv, and gh use explicitly
+Tailscale, Docker Engine, Buildx, Compose, mise, Node.js, uv, gh, and sem use explicitly
 approved security exceptions; `WEB_SOURCES.md` records the release dates and advisories. Node.js
 stays on the supported 24 LTS line with its bundled npm.
 
@@ -55,18 +55,18 @@ reviewed pins, integrity checks, and replacement lifecycle.
 | Docker Buildx | 0.38.1 | Minimum vendor package `0.38.1-1~ubuntu.24.04~noble`, or exact checksum-verified official fallback. |
 | Docker Compose | 5.6.1 | Minimum vendor package version `5.6.1-1~ubuntu.24.04~noble`. |
 | htop | 3.3.0 | Minimum Ubuntu package version `3.3.0-4build1`. |
-| mise | 2026.10.17 | Minimum release; newer compatible mise remains installed. |
+| mise | 2026.10.24 | Minimum release; newer compatible mise remains installed. |
 | Node.js | 24.22.1 LTS | Exact mise-managed runtime. |
 | npm | 11.19.1 | Exact npm bundled with the managed Node.js release. |
 | Pi | 0.87.1 | Exact global package under managed Node.js. |
 | uv | 0.13.5 | Exact mise-managed release. |
-| Rust | 1.99.0 | Exact rustup toolchain with default profile. |
+| Rust | 1.99.1 | Exact rustup toolchain with default profile. |
 | tmux | 3.7c | Exact mise-managed release. |
-| GitHub CLI (`gh`) | 2.102.1 | Exact mise-managed release. |
+| GitHub CLI (`gh`) | 2.103.3 | Exact mise-managed release. |
 | ripgrep (`rg`) | 15.2.0 | Exact mise-managed release. |
 | fd | 10.5.0 | Exact mise-managed release. |
 | ast-grep | 0.51.0 | Exact release and architecture-specific asset digest. |
-| sem | 0.27.0 | Exact release and architecture-specific asset digest. |
+| sem | 0.29.0 | Exact release and architecture-specific asset digest. |
 | inspect | 0.1.1 | Exact architecture-specific binary digest. |
 | Herdr | 0.9.5 | Exact release and architecture-specific binary digest. |
 | cloudflared | 2026.10.2 | Minimum Cloudflare apt package version when ingress is enabled. |

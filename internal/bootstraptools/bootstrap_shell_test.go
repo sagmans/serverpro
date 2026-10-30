@@ -953,7 +953,7 @@ func TestManagedMiseDoctorProbeMatrix(t *testing.T) {
 		"npm":       "#!/bin/sh\nprintf '" + NPMVersion + "\\n'\n",
 		"uv":        "#!/bin/sh\nprintf 'uv %s (fixture metadata)\\n' \"$FAKE_UV_VERSION\"\n",
 		"rustc":     "#!/bin/sh\nprintf 'rustc %s (fixture)\\n' \"$FAKE_RUST_VERSION\"\n",
-		"cargo":     "#!/bin/sh\nif [ \"${1:-}\" = clippy ]; then printf 'clippy 0.1.99\\n'; else printf 'cargo 1.99.0\\n'; fi\n",
+		"cargo":     "#!/bin/sh\nif [ \"${1:-}\" = clippy ]; then printf 'clippy 0.1.99\\n'; else printf 'cargo 1.99.1\\n'; fi\n",
 		"rustfmt":   "#!/bin/sh\nprintf 'rustfmt 1.8.0\\n'\n",
 		"rustup":    "#!/bin/sh\nprintf 'rust-docs-x86_64-unknown-linux-gnu (installed)\\n'\n",
 		"tmux":      "#!/bin/sh\nprintf 'tmux %s\\n' \"$FAKE_TMUX_VERSION\"\n",
@@ -1045,7 +1045,7 @@ func TestShellVersionAtLeast(t *testing.T) {
 	}{
 		{"equal-minimum", MinimumMiseVersion, true},
 		{"release-date-suffix", MinimumMiseVersion + " (2026-08-03)", true},
-		{"newer-patch", "2026.10.18", true},
+		{"newer-patch", "2026.10.25", true},
 		{"newer-minor", "2026.11.1", true},
 		{"newer-year", "2027.1.1", true},
 		{"older-patch", "2026.7.17", false},
@@ -1141,7 +1141,7 @@ func TestShellMiseCheckCommandVersionMatrix(t *testing.T) {
 // fetch_verified_mise_binary runs hermetically; tests override one stage to
 // exercise a specific failure gate.
 const fetchFixtureStubs = `
-bootstrap_min_mise_version() { printf '2026.10.17'; }
+bootstrap_min_mise_version() { printf '2026.10.24'; }
 mise_release_arch() { printf 'x64'; }
 bootstrap_sha256_env() { printf '%064d' 0; }
 mktemp() {
@@ -1161,7 +1161,7 @@ curl() {
   done
   printf 'archive' >"$out"
 }
-sha256sum() { printf 'mise-v2026.10.17-linux-x64.tar.gz: OK\n'; }
+sha256sum() { printf 'mise-v2026.10.24-linux-x64.tar.gz: OK\n'; }
 tar() {
   mkdir -p "$TEST_TMP/download/mise/bin"
   printf 'binary' >"$TEST_TMP/download/mise/bin/mise"

@@ -611,12 +611,12 @@ release changes. Other dependencies are not fully vendored, so residual npm
 supply-chain risk remains. The `all`
 target also installs Node.js `24.22.1` LTS with bundled npm `11.19.1`, Pi
 `0.87.1`, uv `0.13.5` through mise's explicit `aqua:astral-sh/uv` backend, and
-Rust `1.99.0` through `core:rust` with the default rustc, Cargo, rustfmt, Clippy,
+Rust `1.99.1` through `core:rust` with the default rustc, Cargo, rustfmt, Clippy,
 and docs profile. Doctor checks those exact versions and all Rust
 default-profile components. Wrong Node/npm state forces same-version Node
 replacement; `pi` and `all` reinstall Pi afterward because its global npm
-package belongs to that Node installation. It also installs tmux `3.7c`, gh `2.102.1`, rg
-`15.2.0`, fd `10.5.0`, ast-grep `0.51.0`, sem `0.27.0`, and inspect `0.1.1`.
+package belongs to that Node installation. It also installs tmux `3.7c`, gh `2.103.3`, rg
+`15.2.0`, fd `10.5.0`, ast-grep `0.51.0`, sem `0.29.0`, and inspect `0.1.1`.
 ast-grep, sem, and inspect use checksum-pinned GitHub release assets; inspect's bare binary
 digest is checked before execution. On existing hosts, `all` removes the active
 deprecated `sg` mise key before managing `ast-grep`; mise prunes the old install

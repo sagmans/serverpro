@@ -198,8 +198,8 @@ without one get this secure default.
 
 The 2026-10-03 managed-tool review, refreshed 2026-10-22 and 2026-10-30, selects stable releases at least seven days
 old, except explicitly approved fixes for disclosed vulnerabilities. Tailscale
-`1.104.4`, Docker Engine `29.9.2`, Buildx `0.38.1`, Compose `5.6.1`, mise `2026.10.17`,
-Node.js `24.22.1`, uv `0.13.5`, and gh `2.102.1` use those exceptions; `WEB_SOURCES.md` records the evidence. The age
+`1.104.4`, Docker Engine `29.9.2`, Buildx `0.38.1`, Compose `5.6.1`, mise `2026.10.24`,
+Node.js `24.22.1`, uv `0.13.5`, gh `2.103.3`, and sem `0.29.0` use those exceptions; `WEB_SOURCES.md` records the evidence. The age
 threshold governs release selection. Signed apt candidates can be newer.
 Pi installation and local dependency repair also enforce seven days through
 npm’s `--min-release-age` option. containerd `2.4.2` meets seven days and
@@ -220,6 +220,11 @@ configuration could load native code as a custom language library.
 The 2026-10-30 Tailscale exception fixes Tailscale SSH forwarding to root-only
 unix sockets (TS-2026-014), an SSH memory denial of service (TS-2026-015), and
 Serve flaws (TS-2026-016, TS-2026-017); it keeps the TS-2026-013 eMudhra fix.
+The same review raises the mise floor to `2026.10.24`: pinned checksums, Node
+signatures, and attestations fail closed, the GitHub token goes only to GitHub
+API hosts, and git refs can no longer inject options. gh `2.103.3` carries the
+`digitorus/pkcs7` fix for `GHSA-3xqc-rpq8-wgp9`, and sem `0.29.0` drops the
+compromised eMudhra CAs from its bundled roots.
 `MISE_SAFE=1` skips mise’s trust check; never use it to inspect untrusted projects.
 
 Buildx `0.38.1` is in Docker’s Noble apt repository for both supported
@@ -255,18 +260,18 @@ Managed host tools install through integrity-checked sources, not
   keyring contains exactly one primary key with fingerprint
   `9DC858229FC7DD38854AE2D88D81803C0EBFCD88`; subkeys are allowed, but missing,
   substituted, or additional primary keys fail before publication.
-- mise `2026.10.17` is fetched as a release tarball and verified against its
+- mise `2026.10.24` is fetched as a release tarball and verified against its
   published SHA-256 checksum before the target user installs it into
   `~/.local/bin`; newer compatible mise releases remain valid.
 - uv `0.13.5` is pinned and installed through mise's explicit
   `aqua:astral-sh/uv` backend. That registry entry advertises release SHA-256
   and GitHub-attestation verification; doctor verifies the exact version.
-- Rust `1.99.0` is pinned and installed through mise's `core:rust` backend with
+- Rust `1.99.1` is pinned and installed through mise's `core:rust` backend with
   the default rustup profile. Doctor verifies rustc, Cargo, rustfmt, Clippy, and Rust
   docs. rustup downloads over HTTPS, but its official security documentation
   states download signatures are not yet enforced; this remains a trust
   boundary despite the exact version pin.
-- ast-grep `0.51.0`, sem `0.27.0`, and inspect `0.1.1` are installed from exact
+- ast-grep `0.51.0`, sem `0.29.0`, and inspect `0.1.1` are installed from exact
   mise GitHub backends and versions. Their x86_64/arm64 release assets are pinned by reviewed
   SHA-256 values; unsupported architectures fail before mutation. Doctor checks
   exact ast-grep and sem version output. Existing active `sg` mise configuration

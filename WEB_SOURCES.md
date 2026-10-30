@@ -38,6 +38,23 @@ first-party dependencies float to the newest matching release. tmux stays on
 Rust `1.99.1`, sem `0.28.x`, Pi `1.3.0`, and gh `2.103.0` are younger than seven
 days and fix no disclosed vulnerability. ripgrep, fd, and inspect have no newer release.
 
+Reviewed 2026-10-30 (cutoff 2026-10-23): mise moves to `2026.10.24`,
+gh to `2.103.3`, sem to `0.29.0`, and Rust to `1.99.1`. mise, gh, and sem are
+younger than seven days; the owner approved them as security exceptions. mise
+`2026.10.19` makes pinned-checksum, Node-signature, SLSA, and attestation checks
+fail closed and sends the GitHub token only to GitHub API hosts; `2026.10.22`
+rejects git refs that inject options; `2026.10.23` stops projects from granting
+themselves personal fnox secrets. gh `2.103.1` updates `digitorus/pkcs7` for
+`GHSA-3xqc-rpq8-wgp9`. sem `0.28.2` updates `webpki-roots` to `1.0.10`, which
+drops the compromised eMudhra CAs. Rust `1.99.1` passes the age gate and fixes
+a miscompilation. Every new mise, gh, and sem archive matched its published
+checksum file. Since mise `2026.10.19`, `lockfile_mode = "generate"` is the
+default, Node installs need `SHASUMS256.txt.sig`, and `mise set`/`unset` ask
+for trust. Bootstrap writes no lockfile, installs Node from `nodejs.org`, which
+publishes the signature, and edits only global config with `mise config set`.
+Node.js, npm, uv, tmux, ripgrep, fd, ast-grep, inspect, Herdr, and Pi keep
+their pins.
+
 | Updated tool | Selected release | Published (UTC) | Selection |
 | --- | --- | --- | --- |
 | Tailscale | 1.104.4 | 2026-10-28 01:05 | Approved security exception; Tailscale SSH and Serve fixes (TS-2026-014 to TS-2026-017) |
@@ -45,14 +62,14 @@ days and fix no disclosed vulnerability. ripgrep, fd, and inspect have no newer 
 | containerd | 2.4.2 | 2026-10-13 22:35:06 | Normal age gate; Docker's Noble package line is now 2.4 |
 | Buildx | 0.38.1 | 2026-10-20 22:09:11 | Approved security exception; Go `CVE-2026-111943` rebuild; reviewed official binary fallback |
 | Compose | 5.6.1 | 2026-10-21 07:54:18 | Approved security exception; Go `CVE-2026-111943` rebuild |
-| mise | 2026.10.17 | 2026-10-21 01:29:26 | Approved security exception; distrusts compromised eMudhra intermediate CAs and keeps the inline-options token exfiltration fix |
+| mise | 2026.10.24 | 2026-10-30 10:15:02 | Approved security exception; fail-closed verification, GitHub token limited to GitHub hosts, git ref option-injection and fnox secret-grant fixes |
 | Node.js | 24.22.1 LTS | 2026-10-20 | Approved security exception; Node 24 security release |
 | Pi | 0.87.1 | 2026-09-22 | Normal age gate |
 | uv | 0.13.5 | 2026-10-22 01:35:54 | Approved security exception; removes the compromised emSign root (`GHSA-hq85-5cpj-mr62`) |
-| Rust | 1.99.0 | 2026-10-01 12:41:12 | Normal age gate |
-| gh | 2.102.1 | 2026-10-20 19:35:51 | Approved security exception; Go `1.27.3` standard-library fixes |
+| Rust | 1.99.1 | 2026-10-16 04:47:44 | Normal age gate; miscompilation fix |
+| gh | 2.103.3 | 2026-10-26 19:20:08 | Approved security exception; `digitorus/pkcs7` fix for `GHSA-3xqc-rpq8-wgp9` |
 | ast-grep | 0.51.0 | 2026-10-15 15:10:15 | Normal age gate; fixes `GHSA-xx6h-xcfw-vf5j` and `GHSA-cmvf-x8f7-rvp6` |
-| sem | 0.27.0 | 2026-10-04 11:22:08 | Normal age gate |
+| sem | 0.29.0 | 2026-10-30 00:51:43 | Approved security exception; `webpki-roots` `1.0.10` drops compromised eMudhra CAs |
 | Herdr | 0.9.5 | 2026-10-14 16:07:28 | Normal age gate |
 | cloudflared | 2026.10.2 | 2026-10-20 09:17:30 | Normal age gate; Go `1.27.3` build distrusts compromised eMudhra intermediate CAs |
 
@@ -78,15 +95,18 @@ Primary selection and security evidence:
 - https://github.com/jdx/mise/security/advisories/GHSA-wcqh-j26q-g44x
 - https://github.com/astral-sh/uv/releases/tag/0.13.5
 - https://github.com/astral-sh/uv/security/advisories/GHSA-hq85-5cpj-mr62
-- https://github.com/cli/cli/releases/tag/v2.102.1
+- https://github.com/cli/cli/releases/tag/v2.103.3
+- https://github.com/cli/cli/pull/14791
 - https://nodejs.org/dist/index.json
 - https://github.com/ast-grep/ast-grep/security/advisories/GHSA-xx6h-xcfw-vf5j
 - https://github.com/ast-grep/ast-grep/security/advisories/GHSA-cmvf-x8f7-rvp6
 - https://github.com/astral-sh/uv/security/advisories/GHSA-2cv4-cqwr-gwf7
-- https://github.com/jdx/mise/releases/tag/v2026.10.17
+- https://github.com/jdx/mise/releases/tag/v2026.10.24
+- https://github.com/jdx/mise/releases/tag/v2026.10.19
 - https://github.com/jdx/mise/pull/14781
-- https://github.com/jdx/mise/releases/download/v2026.10.17/SHASUMS256.txt
-- https://github.com/Ataraxy-Labs/sem/releases/download/v0.27.0/checksums.txt
+- https://github.com/jdx/mise/releases/download/v2026.10.24/SHASUMS256.txt
+- https://github.com/Ataraxy-Labs/sem/releases/download/v0.29.0/checksums.txt
+- https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_checksums.txt
 
 On 2026-10-22 the Docker repository contains Engine 29.9.2, containerd 2.4.2,
 Buildx 0.38.1, and Compose 5.6.1 on both architectures. Keep the reviewed
@@ -621,22 +641,27 @@ https://mise.jdx.dev/installing-mise.html
 https://mise.jdx.dev/cli/install.html
 https://mise.jdx.dev/cli/unuse.html
 https://mise.jdx.dev/dev-tools/backends/github.html
-https://github.com/jdx/mise/releases/tag/v2026.10.17
-https://api.github.com/repos/jdx/mise/releases/tags/v2026.10.17
-https://github.com/jdx/mise/releases/download/v2026.10.17/SHASUMS256.txt
+https://github.com/jdx/mise/releases/tag/v2026.10.24
+https://api.github.com/repos/jdx/mise/releases/tags/v2026.10.24
+https://github.com/jdx/mise/releases/download/v2026.10.24/SHASUMS256.txt
+https://github.com/jdx/mise/releases/tag/v2026.10.19
+https://github.com/jdx/mise/releases/tag/v2026.10.22
+https://github.com/jdx/mise/releases/tag/v2026.10.23
 ```
 
 Use: mise prerequisite, scoped managed-tool installation, legacy managed-tool
-removal, and reviewed minimum version `2026.10.17`. Pinned release artifact
-SHA-256 values, matched against the release `SHASUMS256.txt` on 2026-10-22:
+removal, and reviewed minimum version `2026.10.24`. Pinned release artifact
+SHA-256 values, matched against the release `SHASUMS256.txt` on 2026-10-30:
 
-- Linux x64: `17565e268c5542d8ce944321e17af81e0b741b65af4aa7e8e010ee77376a4aa3`
-- Linux arm64: `cac510e51793ad45e65fe92305bdbe4309c9c60b5907badbc7eba111738ab08f`
+- Linux x64: `9a6c9c55f5c6372d0af70a9979fe6d742aea3793267a929e1738022143c466cc`
+- Linux arm64: `8c8f5d7f748bf3aef431dc50f0ad776270f36025c788aa21c74e2fabdbbd6d3e`
 
-The `2026.10.17` floor is an owner-approved exception to the seven-day release
-age gate. It removes trust in eight compromised eMudhra intermediate CA
-certificates from the npm backend's bundled roots. Its only listed upgrade
-note changes relative `find_up` in `env._.file`; serverpro does not use it.
+The `2026.10.24` floor is an owner-approved exception to the seven-day release
+age gate. It keeps the `2026.10.17` eMudhra distrust and adds fail-closed
+verification, GitHub-host-only token use, git ref option-injection rejection,
+and the fnox personal-secret fix. Its breaking changes were checked against
+bootstrap: no lockfile is enabled, Node comes from `nodejs.org` with its
+`SHASUMS256.txt.sig`, and only global config is written with `mise config set`.
 
 ### mise bootstrap
 
@@ -678,14 +703,14 @@ aarch64 `4bb69cf95ed13f23713bb7bc09f241896ea0c75b7c557e615a20604b82f9c403`.
 ### Rust and rustup
 
 ```text
-https://github.com/rust-lang/rust/releases/tag/1.99.0
+https://github.com/rust-lang/rust/releases/tag/1.99.1
 https://doc.rust-lang.org/stable/releases.html
 https://mise.jdx.dev/lang/rust.html
 https://rust-lang.github.io/rustup/security.html
 ```
 
-Use: pinned Rust `1.99.0` through mise's `core:rust` backend and rustup default
-profile. Reviewed 2026-10-22. rustup uses HTTPS for downloads but does not yet
+Use: pinned Rust `1.99.1` through mise's `core:rust` backend and rustup default
+profile. Reviewed 2026-10-30. rustup uses HTTPS for downloads but does not yet
 enforce download signatures.
 
 ### mise npm backend
@@ -738,10 +763,14 @@ Reviewed 2026-10-22. Pinned release SHA-256 values:
 
 ```text
 https://cli.github.com/manual/
-https://github.com/cli/cli/releases/tag/v2.102.1
+https://github.com/cli/cli/releases/tag/v2.103.3
+https://github.com/cli/cli/pull/14791
 ```
 
-Use: pinned `gh` `2.102.1` install reference; reviewed 2026-10-22.
+Use: pinned `gh` `2.103.3` install reference; reviewed 2026-10-30.
+Published GNU/Linux SHA-256 values: amd64
+`4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d`; arm64
+`ee32df2323c8847f5fac6cb6b4b69ca75828e9329a8f22f677021f7b3306ce63` (`.tar.gz`).
 Authentication remains operator-owned.
 
 ### ripgrep
@@ -780,15 +809,16 @@ Use: pinned ast-grep `0.51.0` through mise's GitHub backend; reviewed
 
 ```text
 https://github.com/Ataraxy-Labs/sem
-https://github.com/Ataraxy-Labs/sem/releases/tag/v0.27.0
-https://api.github.com/repos/Ataraxy-Labs/sem/releases/tags/v0.27.0
+https://github.com/Ataraxy-Labs/sem/releases/tag/v0.29.0
+https://api.github.com/repos/Ataraxy-Labs/sem/releases/tags/v0.29.0
+https://github.com/Ataraxy-Labs/sem/pull/526
 ```
 
-Use: pinned Ataraxy Labs sem `0.27.0` through mise's GitHub backend; reviewed
-2026-10-22. Pinned release SHA-256 values:
+Use: pinned Ataraxy Labs sem `0.29.0` through mise's GitHub backend; reviewed
+2026-10-30. Pinned release archive (`sem-linux-*.tar.gz`) SHA-256 values:
 
-- Linux x64: `3f588a3c62e2d34ba427d51e754f31977922227e5f99a9c69e05977f16900713`
-- Linux arm64: `48875c490af25a114c5e8a36a4187a4c1e49e5e1868c5b9f969725420dd6993c`
+- Linux x64: `30fa7ab79aaffaf0cc2d317ac771fa4330e6de6a9c0830cbe35d1ba149322dc3`
+- Linux arm64: `e7cd85d2c34dc6e8a9505a365a8639b7203c8cf6ad2d94e2b8a07e1acc8854b5`
 
 ### inspect
 
