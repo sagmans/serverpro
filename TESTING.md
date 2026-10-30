@@ -745,6 +745,21 @@ change) and new code.
 Not covered: the real tailnet policy file, and a custom IP pool narrower than
 `100.64.0.0/10`, which a CIDR could cover without covering the whole range.
 
+A second run on 2026-10-30 used the same harness shape for
+`autogroup:danger-all` and IP sets.
+
+- Old: a grant and an acl from `autogroup:danger-all` to every host on every
+  port passed, and so did grants and acls with an IP set as the source or the
+  host (`ipset:all:*` in an acl), a nested set among them.
+- New: each of those warned, and an IP set showed as
+  `ipset:all (an IP set doctor does not resolve, counted as every address)`.
+  `autogroup:danger-all` on `tcp:22` only, an IP set source to the server tag,
+  an IP set on `tcp:22` or `ipset:prod:22`, and a least-privilege policy
+  still passed.
+
+Not covered: the add and remove lines of a real IP set, since doctor does not
+evaluate them.
+
 ### Tunnel SSH route preflight dogfood
 
 On 2026-10-30 two throwaway harnesses, never committed, ran the old (before

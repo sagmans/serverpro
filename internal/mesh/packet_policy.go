@@ -19,6 +19,18 @@ const (
 	// policyAllMembers selects the devices of every tailnet member, which for
 	// a reachable server is every person's device: as wide as "*" in practice.
 	policyAllMembers = "autogroup:member"
+	// policyAllSourcesAnywhere selects every device, even ones outside the
+	// tailnet, so as a source it is at least as wide as "*". Tailscale keeps
+	// it only for backward compatibility and allows it only in src.
+	policyAllSourcesAnywhere = "autogroup:danger-all"
+	// policyIPSetPrefix starts a reference to a named IP set, whose add and
+	// remove lines run in order and may nest other sets. Doctor does not
+	// evaluate them, so it fails closed: a set counts as every address, and
+	// the finding says so, so the operator checks the set by hand.
+	policyIPSetPrefix = "ipset:"
+	// policyIPSetUnresolved is what a finding shows in place of the addresses
+	// of an IP set, since doctor never reads them.
+	policyIPSetUnresolved = "an IP set doctor does not resolve, counted as every address"
 	// policyAllTagged selects every tagged device. serverpro enrolls every
 	// server with a tag, so as a destination it reaches every server.
 	policyAllTagged = "autogroup:tagged"
@@ -42,7 +54,7 @@ const (
 // the literal wildcard; a policy that writes 100.64.0.0/10, tcp:*, or
 // 1-65535 opens the same ports as one that writes "*".
 var (
-	allSources = []string{policyWildcard, policyAllMembers}
+	allSources = []string{policyWildcard, policyAllMembers, policyAllSourcesAnywhere}
 	allHosts   = []string{policyWildcard, policyAllTagged}
 	allPorts   = []string{policyWildcard, policyAllPortsFromZero, policyAllPortsFromOne}
 	// portProtocols are the grant ip protocols, by name and IANA number,
@@ -185,9 +197,10 @@ func isAllPorts(ports string) bool {
 }
 
 // firstAll returns the first selector that is one of the given spellings of
-// everything or a CIDR that covers a tailnet address range, after a hosts
-// alias is replaced by its value. A finding through an alias names both, so
-// the operator sees the name and the range behind it.
+// everything, a CIDR that covers a tailnet address range, or an IP set,
+// after a hosts alias is replaced by its value. A finding through an alias
+// or an IP set names both, so the operator sees the name and what doctor
+// read behind it.
 func (hosts HostAliases) firstAll(selectors, everything []string) (string, bool) {
 	for _, selector := range selectors {
 		name := strings.TrimSpace(selector)
@@ -196,10 +209,16 @@ func (hosts HostAliases) firstAll(selectors, everything []string) (string, bool)
 		if isAlias {
 			resolved = strings.TrimSpace(value)
 		}
-		if !slices.Contains(everything, resolved) && !coversTailnet(resolved) {
+		// Case-folded, so a spelling Tailscale may read the same way cannot
+		// slip past the fail-closed reading.
+		ipSet := strings.HasPrefix(strings.ToLower(resolved), policyIPSetPrefix)
+		if !ipSet && !slices.Contains(everything, resolved) && !coversTailnet(resolved) {
 			continue
 		}
-		if isAlias {
+		switch {
+		case ipSet:
+			return fmt.Sprintf("%s (%s)", name, policyIPSetUnresolved), true
+		case isAlias:
 			return fmt.Sprintf("%s (%s)", name, resolved), true
 		}
 		return selector, true

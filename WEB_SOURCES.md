@@ -375,6 +375,8 @@ https://tailscale.com/docs/reference/syntax/grants
 https://tailscale.com/docs/features/access-control/acls
 https://tailscale.com/docs/reference/examples/acls
 https://tailscale.com/docs/concepts/ip-and-dns-addresses
+https://tailscale.com/docs/reference/targets-and-selectors
+https://tailscale.com/docs/features/tailnet-policy-file/ip-sets
 ```
 
 Use: doctor `tailnet policy` allow-all detection and the recommended grants
@@ -391,7 +393,12 @@ range, `<proto>:*`, or `<proto>:<port>`, where the protocol is a name or an
 IANA number; `autogroup:tagged` selects every tagged device in `dst`; `src`
 and `dst` take CIDRs and `hosts` aliases, and a `hosts` value is an address
 or a CIDR. Tailscale gives devices IPv4 addresses from `100.64.0.0/10` and
-IPv6 addresses from `fd7a:115c:a1e0::/48`.
+IPv6 addresses from `fd7a:115c:a1e0::/48`. `autogroup:danger-all` selects
+every device, even ones outside the tailnet; Tailscale keeps it only for
+backward compatibility and allows it only as an access-control `src`. An IP
+set (`ipset:<name>`) is allowed in access-control `src` and `dst`; its
+`add` and `remove` operations run in order, and a target is a CIDR, an
+address, a host, an autogroup, or another IP set.
 
 ### Tailscale auth keys
 

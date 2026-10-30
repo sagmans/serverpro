@@ -125,14 +125,18 @@ and the provider `tailnet policy` check warns when:
 - a grant gives `*` to `*` on ip `*`.
 
 Doctor reads each "everything" spelling the same way. A source of `*`,
-`autogroup:member`, or a CIDR that covers the whole tailnet range
-(`100.64.0.0/10` or `fd7a:115c:a1e0::/48`, so also `0.0.0.0/0` and `::/0`)
-is every source. A host of `*`, `autogroup:tagged` (serverpro tags every
-server), or such a CIDR (also in brackets in an acl) is every host. A
-`hosts` alias counts as the address or range it names, and the warning shows
-both. Ports of `*`, `0-65535`, or `1-65535` (also inside an acl port list)
-are every port, and so is a grant `ip` of `tcp:*`, `udp:*`, `6:*`, or `17:*`
-(or a full range after the protocol). So
+`autogroup:member`, `autogroup:danger-all` (every device, even outside the
+tailnet), or a CIDR that covers the whole tailnet range (`100.64.0.0/10` or
+`fd7a:115c:a1e0::/48`, so also `0.0.0.0/0` and `::/0`) is every source. A
+host of `*`, `autogroup:tagged` (serverpro tags every server), or such a
+CIDR (also in brackets in an acl) is every host. A `hosts` alias counts as
+the address or range it names, and the warning shows both. Doctor does not
+evaluate an IP set (`ipset:<name>`), whose `add` and `remove` lines run in
+order and can nest other sets. So a source or host of an IP set counts as
+every address, and the warning says so: check that set by hand, or name the
+tag or range directly. Ports of `*`, `0-65535`, or `1-65535` (also inside an
+acl port list) are every port, and so is a grant `ip` of `tcp:*`, `udp:*`,
+`6:*`, or `17:*` (or a full range after the protocol). So
 `{"src": ["autogroup:member"], "dst": ["autogroup:tagged"], "ip": ["tcp:*"]}`
 warns like the default grant. A part of the tailnet range, a single
 address, and `icmp:*` do not warn.

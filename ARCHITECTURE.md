@@ -283,7 +283,9 @@ access paths for app-owned deployment flows.
     and the shared fail-closed device selector used by create, doctor, and import.
   - `PacketPolicy` models the tailnet `acls` and `grants` sections as
     pointers, because an absent section (default allow-all) differs from an
-    empty one (deny all).
+    empty one (deny all). It does not model the `ipsets` section: allow-all
+    detection counts an IP set reference as every address, so an unread set
+    fails closed.
 - Tailscale adapter: `internal/provider/tailscale`
   - Mesh API operations and explicit tailnet-global policy reconciliation.
 - Provider utilities: `internal/provider/providerutil`
