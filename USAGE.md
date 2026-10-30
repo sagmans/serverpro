@@ -911,11 +911,14 @@ The preflight reports each running workload that a reboot would drop:
   static socket, timer, or path triggers it, or an active target, a device,
   or a running service wants it. A service whose D-Bus name has a system
   bus activation file (`<name>.service` under
-  `/usr/share/dbus-1/system-services`, `/usr/local/share/dbus-1/system-services`,
+  `/usr/local/share/dbus-1/system-services`, `/usr/share/dbus-1/system-services`,
   or `/lib/dbus-1/system-services`) comes back on demand, such as
-  `upower.service`, which is `disabled`. A `static` or `disabled` unit that
-  none of these starts, such as one started by hand, is a gap. The bus
-  rule does not apply to a `masked` unit.
+  `upower.service`, which is `disabled`, but only when the file's
+  `SystemdService=` names that service or one of its aliases. The first file
+  in that directory order decides, as it does for the bus. A `static` or
+  `disabled` unit that none of these starts, such as one started by hand, is
+  a gap. The bus rule does not apply to a `masked` unit or to a `transient`
+  one, such as a `systemd-run` service, which a reboot removes.
 - A running container with a restart policy other than `always` or
   `unless-stopped`. Docker does not start a `no` container when the daemon
   starts. It starts an `on-failure` container only when the shutdown made it

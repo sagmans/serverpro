@@ -746,6 +746,7 @@ https://docs.docker.com/engine/containers/start-containers-automatically/
 https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html
 https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html
 https://www.freedesktop.org/software/systemd/man/latest/loginctl.html
+https://manpages.ubuntu.com/manpages/noble/man1/dbus-daemon.1.html
 ```
 
 Use: the gated reboot's rules and units. Docker restarts `always` and
@@ -757,7 +758,11 @@ that exited 0 did not, so the gate accepts only `always` and
 window at boot. `Type=exec` lets boot finish while the verify unit waits,
 and `RuntimeMaxSec=` stops it if its own deadlines fail. A lingering user's
 manager starts at boot; without linger it stops at the last logout.
-Reviewed 2026-10-30, and checked in a systemd 255 container.
+On Ubuntu 24.04 (dbus 1.14.10) `<standard_system_servicedirs/>` is
+`/usr/local/share`, then `/usr/share`, then `/lib` `dbus-1/system-services`,
+and the first directory listed has the highest precedence; later dbus
+releases add `/etc` and `/run` directories ahead of them. Reviewed
+2026-10-30, and checked in a systemd 255 container.
 
 ### Provider image accounts
 

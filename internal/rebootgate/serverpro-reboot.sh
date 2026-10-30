@@ -39,10 +39,15 @@ BOOT_ID_PATH=/proc/sys/kernel/random/boot_id
 # drivers. Bootstrap turns on live-restore, so containers keep running
 # while dockerd is stopped, and docker cannot list them then.
 DOCKER_SCOPE_PROCS_GLOBS='/sys/fs/cgroup/system.slice/docker-*.scope/cgroup.procs /sys/fs/cgroup/docker/*/cgroup.procs'
-# The system bus's standard activation directories (dbus-daemon's
-# <standard_system_servicedirs/>). The system bus loads only a file named
-# after the bus name, so one test per directory finds the name's file.
+# The system bus's standard activation directories on Ubuntu 24.04 (dbus
+# 1.14's <standard_system_servicedirs/>), highest precedence first. The
+# system bus loads only a file named after the bus name, so one test per
+# directory finds the name's file.
 DBUS_SYSTEM_SERVICE_DIRS='/usr/local/share/dbus-1/system-services /usr/share/dbus-1/system-services /lib/dbus-1/system-services'
+# The activation file key that hands a bus name's activation to systemd. A
+# file without it makes dbus-daemon run its Exec= line itself, inside
+# dbus.service, so no service unit of its own comes back.
+DBUS_SYSTEMD_SERVICE_KEY=SystemdService
 # Records use the ASCII unit separator: read treats a tab as IFS
 # whitespace and merges an empty field, such as a service with no
 # TriggeredBy, into its neighbour, which would shift every later field.
@@ -115,14 +120,14 @@ listed() {
 }
 
 # show_records turns systemctl show blocks into one FS_CHAR-separated line
-# per unit: id, unit file state, TriggeredBy, WantedBy and RequiredBy, then
-# BusName. systemctl prints properties in its own order, so the keys are
-# matched by name.
+# per unit: id, unit file state, TriggeredBy, WantedBy and RequiredBy,
+# BusName, Names (the id and every alias), then Transient. systemctl prints
+# properties in its own order, so the keys are matched by name.
 show_records() {
   awk -v sep="$FS_CHAR" '
     function flush() {
-      if (id != "") print id sep state sep triggers sep wanted sep bus
-      id = ""; state = ""; triggers = ""; wanted = ""; bus = ""
+      if (id != "") print id sep state sep triggers sep wanted sep bus sep names sep transient
+      id = ""; state = ""; triggers = ""; wanted = ""; bus = ""; names = ""; transient = ""
     }
     /^$/ { flush(); next }
     {
@@ -134,6 +139,8 @@ show_records() {
     key == "TriggeredBy" { triggers = value }
     key == "WantedBy" || key == "RequiredBy" { wanted = wanted " " value }
     key == "BusName" { bus = value }
+    key == "Names" { names = value }
+    key == "Transient" { transient = value }
     END { flush() }'
 }
 
@@ -149,7 +156,7 @@ collect_services() {
   [ -n "$running_services" ] || return 0
   # One name per line: a unit name can hold a backslash escape, which
   # xargs would strip without -d.
-  shown=$(printf '%s\n' "$running_services" | run_bounded xargs -r -d '\n' systemctl show --no-pager -p Id -p UnitFileState -p TriggeredBy -p WantedBy -p RequiredBy -p BusName) ||
+  shown=$(printf '%s\n' "$running_services" | run_bounded xargs -r -d '\n' systemctl show --no-pager -p Id -p UnitFileState -p TriggeredBy -p WantedBy -p RequiredBy -p BusName -p Names -p Transient) ||
     fail_closed "cannot read the unit files of running services"
   service_records=$(printf '%s\n' "$shown" | show_records)
   triggers=$(printf '%s\n' "$service_records" | awk -F "$FS_CHAR" '{ n = split($3, t, " "); for (i = 1; i <= n; i++) print t[i] }' | sort -u)
@@ -183,15 +190,29 @@ generator_wants() {
   return 1
 }
 
-# bus_activated tells whether the system bus starts the unit that owns a
-# D-Bus name when a client asks for it. A BusName with no activation file
-# only says what the unit claims once it runs, not that anything starts it.
+# bus_activated tells whether the system bus starts this unit when a client
+# asks for D-Bus name $1. The name's activation file must hand the request to
+# systemd as one of the unit's names in $2 (its id or an alias, such as
+# dbus-org.freedesktop.timedate1.service). A BusName with no activation file
+# only says what the unit claims once it runs, and a file that starts
+# another unit, or none, leaves this one down after a reboot. dbus-daemon
+# keeps the first file for a name in directory order, so that file decides.
 bus_activated() {
   case "$1" in
     '' | */* | .*) return 1 ;;
   esac
   for dir in $DBUS_SYSTEM_SERVICE_DIRS; do
-    grep -Fqsx -- "Name=$1" "$dir/$1.service" && return 0
+    activation_file="$dir/$1.service"
+    grep -Fqsx -- "Name=$1" "$activation_file" || continue
+    # More than one key, or an unreadable file, names no unit.
+    activated_unit=$(awk -F= -v key="$DBUS_SYSTEMD_SERVICE_KEY" '
+      $1 == key { count++; value = substr($0, length(key) + 2) }
+      END { if (count == 1) print value }' "$activation_file" 2>/dev/null) || return 1
+    case "$activated_unit" in
+      '' | *[[:space:]]*) return 1 ;;
+    esac
+    listed "$activated_unit" "$2"
+    return
   done
   return 1
 }
@@ -200,10 +221,11 @@ bus_activated() {
 # starts a running service again: its own enabled unit file, an enabled or
 # static socket, timer, or path that triggers it, a target that starts at
 # boot, a device, or a running service that wants it, or a D-Bus activation
-# file for its bus name. Neither static (no [Install] section) nor disabled
-# (an [Install] section nobody enabled) says how a unit started: a D-Bus
-# activated one, such as upower, comes back on demand; one started by hand
-# does not. The bus rule skips a masked unit, which no client can start.
+# file that starts it for its bus name. Neither static (no [Install] section)
+# nor disabled (an [Install] section nobody enabled) says how a unit started:
+# a D-Bus activated one, such as upower, comes back on demand; one started by
+# hand does not. The bus rule skips a masked unit, which no client can start,
+# and a transient one, whose definition under /run is gone after a reboot.
 service_comes_back() {
   case "$2" in
     enabled | generated) return 0 ;;
@@ -211,8 +233,14 @@ service_comes_back() {
       generator_wants "$1"
       return
       ;;
-    masked) ;;
-    *) bus_activated "$5" && return 0 ;;
+    masked | transient) ;;
+    *)
+      # Transient=yes covers a systemd that reports another unit file state
+      # for a transient unit.
+      if [ "$7" != yes ] && bus_activated "$5" "$6"; then
+        return 0
+      fi
+      ;;
   esac
   for trigger in $3; do
     case "$(trigger_state "$trigger")" in
@@ -239,10 +267,10 @@ skipped_service() {
 }
 
 check_services() {
-  while IFS="$FS_CHAR" read -r id state triggers wanted bus; do
+  while IFS="$FS_CHAR" read -r id state triggers wanted bus names transient; do
     [ -n "$id" ] || continue
     skipped_service "$id" && continue
-    service_comes_back "$id" "$state" "$triggers" "$wanted" "$bus" && continue
+    service_comes_back "$id" "$state" "$triggers" "$wanted" "$bus" "$names" "$transient" && continue
     report_gap service "$id" "runs, but its unit file state is ${state:-unknown} and nothing that starts at boot wants it: sudo systemctl enable $id, or stop it"
   done <<EOF
 $service_records
@@ -430,7 +458,7 @@ tcp_listeners() {
 # or generated units that an active target wants. A service started on
 # demand, such as a D-Bus activated one, is not expected back after boot.
 snapshot_units() {
-  while IFS="$FS_CHAR" read -r id state _triggers wanted _bus; do
+  while IFS="$FS_CHAR" read -r id state _triggers wanted _bus _names _transient; do
     [ -n "$id" ] || continue
     skipped_service "$id" && continue
     case "$state" in

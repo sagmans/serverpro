@@ -656,6 +656,15 @@ test unit was graded, since the container's own gettys are always gaps.
   a gap, and neither was one whose file named its `dbus-org.*` alias, the
   way `systemd-timedated` is named.
 - A unit masked while it ran was a gap with its activation file in place.
+- The same run against the rule before `SystemdService=` was checked
+  passed four units that do not come back: one whose activation file named
+  another unit, one whose file had no `SystemdService=` (dbus-daemon would
+  run its `Exec=` line itself), one whose matching file in
+  `/usr/share/dbus-1/system-services` was shadowed by a file for the same
+  name in `/usr/local/share/dbus-1/system-services` that named another unit,
+  and a `systemd-run` unit (`UnitFileState=transient`, `Transient=yes`)
+  whose file named it. The current rule reports each as a gap and still
+  passes the id and alias cases above.
 
 Not covered: a real VM reboot, a real kernel update, and a real host
 (doctor `--fix` was not run against production).
