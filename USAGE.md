@@ -882,6 +882,15 @@ The preflight reports each running workload that a reboot would drop:
 - A running service in the systemd user manager of a user without linger,
   or a user manager whose services or account the gate cannot read.
 
+The gate sees four kinds of workload: system services, systemd user
+services, Docker containers, and processes that hold a listening TCP or UDP
+socket. It does not see any other kind, so it neither blocks a reboot for
+one nor waits for one after the reboot. Examples are a Podman container
+(serverpro does not install Podman), a tmux or screen session, a `nohup`
+process, and a cron job's child process, each when it holds no listening
+socket. Before you turn on the gated reboot, move such a workload into a
+systemd service or a Docker container with a restart policy.
+
 A logged-in user with no listener does not block a reboot. Known limit: the
 gate does not check the services of a user with linger. That user's
 manager starts at boot, but a user service in it that is not enabled does

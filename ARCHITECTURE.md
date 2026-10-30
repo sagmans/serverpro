@@ -112,7 +112,11 @@ access paths for app-owned deployment flows.
     `preflight` mode, so the host gate and the doctor check apply one set of
     rules. The script reads systemd, Docker, `ss`, `/proc/PID/cgroup`, and
     Docker's container scopes, fails closed when it cannot read them, and
-    never starts a workload that was not running before the reboot. The
+    never starts a workload that was not running before the reboot. It
+    covers system and user services, Docker containers, and processes with
+    a listening socket; Podman containers and tmux, screen, `nohup`, or cron
+    processes without a listener are outside its view (USAGE.md, Gated
+    reboot). The
     snapshot records the boot ID and write time, so the boot check acts only
     on a snapshot from the boot just before and at most one hour old.
 - Host platform baseline: `internal/hostplatform`
