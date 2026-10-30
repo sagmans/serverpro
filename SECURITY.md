@@ -195,8 +195,11 @@ default.
   before any change, when `sudo.conf` loads a plugin other than
   `sudoers.so`, passes `sudoers.so` an option other than `error_recovery`
   (`sudoers_file`, `sudoers_uid`, `sudoers_gid`, `sudoers_mode`,
-  `ignore_perms`, or one it does not know), or moves the plugin directory,
-  or when the first `sudoers:` line in `nsswitch.conf` names a source other
+  `ignore_perms`, or one it does not know), or sets a `Path` entry other
+  than `askpass` (which runs as the caller) to anything but its packaged
+  value: `plugin_dir`, `noexec`, `intercept`, and `sesh` name what sudo
+  loads into or runs as root, and any other name fails. It does the same
+  when the first `sudoers:` line in `nsswitch.conf` names a source other
   than `files` (SSSD or LDAP rules that neither check can read). A sudoers
   rule without a command limit fails, and so does a rule that lists a
   root-equivalent command (a shell, editor, pager, interpreter, file writer,

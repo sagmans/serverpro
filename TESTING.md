@@ -645,6 +645,16 @@ stopped with nothing changed; with `sudoers_file=`, both stopped (the old one
 because `visudo -c` follows the override), and with only
 `error_recovery=false` both removed the account.
 
+An eighth run, on 2026-10-31 in the same kind of container, added
+`sudo.conf` `Path` lines. The new probe failed, where the old passed, on
+`Path noexec`, `Path intercept`, and `Path sesh` pointing into another
+account's home, `Path noexec` with no value, an upper-case `PATH NOEXEC`,
+`Path devsearch`, and an unknown `Path` name. It passed with no finding on
+the stock file and on a sample that sets `noexec`, `intercept`, `sesh`, and
+`plugin_dir` to their packaged paths and `askpass` into another account's
+home. With `Path noexec` moved, the old removal script removed the account
+and the new one stopped with nothing changed.
+
 Not covered: a real Vultr host (doctor `--fix` was not run against
 production), and a live SSSD or LDAP sudoers source.
 

@@ -261,7 +261,8 @@ access paths for app-owned deployment flows.
     a path-walk verdict for each listed command and for each path a
     `Defaults` path option names, and the account findings, among them each
     `sudo.conf` or `nsswitch.conf` setting that lets sudo read rules the
-    parse does not hold (`lifecycle.SudoersSourceGapsFunction`), and
+    parse does not hold or load a swapped helper as root
+    (`lifecycle.SudoersSourceGapsFunction`), and
     `gradePrivilegedAccounts` grades the rules and every `Defaults` option
     against its allowlist (`sudoersSafeDefaults`, `sudoersKeptEnvNames`)
     into the same fail and warn lines. Output it cannot read is a probe
@@ -428,8 +429,9 @@ flowchart LR
    (`remote_image_users` phase), because the admin user now works through
    sudo: `lifecycle.ImageUsersRemovalScript` first stops with nothing changed
    when `sudo.conf` or `nsswitch.conf` lets sudo read rules from outside the
-   sudoers files (`lifecycle.SudoersSourceGapsFunction`, shared with
-   doctor), when a file sudo reads that is not directly in sudoers.d (the list
+   sudoers files or load a swapped helper as root
+   (`lifecycle.SudoersSourceGapsFunction`, shared with doctor), when a
+   file sudo reads that is not directly in sudoers.d (the list
    `visudo -c` prints) names the account, or a rule names its uid, then
    locks each account, archives its
    home, crontab, and single-account sudoers.d files under

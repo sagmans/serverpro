@@ -1,5 +1,7 @@
 package lifecycle
 
+import "github.com/sagmans/serverpro/internal/shell"
+
 const (
 	// sudoConfPath and nsswitchConfPath are the two files that decide where
 	// sudo takes its rules from before it reads any sudoers file: sudo.conf
@@ -13,6 +15,23 @@ const (
 	// directory, or the full path; any other file is a different policy.
 	sudoersPlugin = "sudoers.so"
 	sudoPluginDir = "/usr/libexec/sudo"
+	// sudoNoexecPath, sudoInterceptPath, and sudoSeshPath are the helpers
+	// Ubuntu's sudo package ships and sudo uses by default: the noexec and
+	// intercept libraries load into each command sudo runs as root, and
+	// sesh runs as root for sudoedit. A sudo.conf Path line that points one
+	// elsewhere hands root to whoever can write that file.
+	sudoNoexecPath    = sudoPluginDir + "/sudo_noexec.so"
+	sudoInterceptPath = sudoPluginDir + "/sudo_intercept.so"
+	sudoSeshPath      = sudoPluginDir + "/sesh"
+	// sudoPackagedPaths lists, as name=path words, each sudo.conf Path entry
+	// that may be set and the only value it may hold. Any Path name not here
+	// is reported, so a name sudo learns later fails closed.
+	sudoPackagedPaths = "plugin_dir=" + sudoPluginDir + " noexec=" + sudoNoexecPath +
+		" intercept=" + sudoInterceptPath + " sesh=" + sudoSeshPath
+	// sudoCallerPathName is the one Path entry that may hold any value:
+	// sudo runs the askpass program as the invoking user to read a
+	// password, so it never runs as root.
+	sudoCallerPathName = "askpass"
 	// sudoersSafePluginOption is the one sudoers.so option that changes
 	// neither which rules sudo reads nor how it trusts their files: it only
 	// decides whether a syntax error is fatal. Every other option (the
@@ -29,8 +48,10 @@ const (
 // cvtsudoers reads /etc/sudoers and its includes, but sudo itself may read
 // other rules: sudo.conf can load another policy plugin, point sudoers.so at
 // another file, owner, or group, or move the plugin directory, and
-// nsswitch.conf can add SSSD or LDAP as a sudoers source. Doctor and the
-// image account removal both trust the parse only when neither file does
+// nsswitch.conf can add SSSD or LDAP as a sudoers source. sudo.conf Path
+// lines can also swap a library or helper that sudo loads or runs as root,
+// so each one but askpass must hold its packaged value. Doctor and the image
+// account removal both trust the parse only when neither file does any of
 // that, so they share this one reader.
 //
 // sudoers_source_gaps prints one line per setting that does, each starting
@@ -47,10 +68,19 @@ func SudoersSourceGapsFunction() string {
     [ -e "${conf#*:}" ] || continue
     awk -v prefix="$1" -v mode="${conf%%:*}" -v file="${conf#*:}" \
       -v plugin=` + sudoersPlugin + ` -v plugin_dir=` + sudoPluginDir + ` -v safe_option=` + sudoersSafePluginOption + ` \
-      -v nss_key=` + nsswitchSudoersKey + ` -v nss_files=` + nsswitchFilesSource + ` '
+      -v nss_key=` + nsswitchSudoersKey + ` -v nss_files=` + nsswitchFilesSource + ` \
+      -v packaged=` + shell.Quote(sudoPackagedPaths) + ` -v caller_path=` + sudoCallerPathName + ` '
+      BEGIN {
+        n = split(packaged, pairs, " ")
+        for (i = 1; i <= n; i++) {
+          cut = index(pairs[i], "=")
+          path[substr(pairs[i], 1, cut - 1)] = substr(pairs[i], cut + 1)
+        }
+      }
       function gap(at, why) { printf "%s%s line %d %s\n", prefix, file, at, why }
       # conf grades one sudo.conf setting: only the sudoers.so policy from
-      # the packaged directory, with no option but the safe one, passes.
+      # the packaged directory, with no option but the safe one, passes, and
+      # a Path line passes only for askpass or at its packaged value.
       function conf(text, at,    n, f, i, name, label) {
         n = split(text, f, /[ \t]+/)
         if (n < 2) return
@@ -67,8 +97,15 @@ func SudoersSourceGapsFunction() string {
             label = (name ~ /^[a-z_]+$/) ? "the " name " option" : "an option serverpro does not know"
             gap(at, "passes " plugin " " label ", which can change which sudoers rules sudo reads or how it trusts them")
           }
-        } else if (tolower(f[1]) == "path" && tolower(f[2]) == "plugin_dir" && (n < 3 || f[3] != plugin_dir)) {
-          gap(at, "moves the sudo plugin directory, so sudo can load a " plugin " other than the packaged one")
+        } else if (tolower(f[1]) == "path") {
+          name = tolower(f[2])
+          if (name == caller_path) return
+          if (!(name in path)) {
+            label = (name ~ /^[a-z_]+$/) ? "Path " name : "a Path entry"
+            gap(at, "sets " label ", which serverpro does not check")
+          } else if (n < 3 || f[3] != path[name]) {
+            gap(at, "sets Path " name " to other than the packaged " path[name] ", so sudo can load or run another file as root")
+          }
         }
       }
       # nss grades the first sudoers line, the only one sudo reads; the

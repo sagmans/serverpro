@@ -97,9 +97,10 @@ var imageUserNamePattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 // a form the line edits cannot see stops the removal instead of outliving
 // it; output it cannot read in full stops it too. All of that reads only the
 // sudoers files, so a sudo.conf or nsswitch.conf setting that makes sudo
-// read rules from anywhere else stops the removal before any account is
-// touched. The script never touches root, the admin user, or a uid 0
-// account, and it is a no-op for an account that is already gone.
+// read rules from anywhere else, or load or run a helper other than the
+// packaged one as root, stops the removal before any account is touched.
+// The script never touches root, the admin user, or a uid 0 account, and it
+// is a no-op for an account that is already gone.
 func ImageUsersRemovalScript(admin string, users []string) (string, error) {
 	for _, user := range users {
 		if !imageUserNamePattern.MatchString(user) || user == admin || user == "root" {
@@ -399,10 +400,11 @@ remove_image_user() {
 }
 [ "$admin" != root ] || stop "admin user is root"
 # Every check below reads the sudoers files alone. When sudo can take rules
-# from elsewhere, none of them proves an account holds nothing, so nothing
-# changes; the gaps are joined so one stop line names them all.
+# from elsewhere or run a swapped helper as root, none of them proves an
+# account holds nothing, so nothing changes; the gaps are joined so one stop
+# line names them all.
 gaps=$(sudoers_source_gaps '') || stop "cannot read ` + sudoConfPath + ` or ` + nsswitchConfPath + `"
-[ -z "$gaps" ] || stop "sudo may read rules that serverpro does not check, so nothing was changed: $(printf '%s\n' "$gaps" | awk 'NR > 1 { printf "; " } { printf "%s", $0 }')"
+[ -z "$gaps" ] || stop "sudo is set up beyond what serverpro checks, so nothing was changed: $(printf '%s\n' "$gaps" | awk 'NR > 1 { printf "; " } { printf "%s", $0 }')"
 for user in ` + strings.Join(quoted, " ") + `; do
   remove_image_user "$user"
 done`, nil

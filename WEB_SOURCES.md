@@ -690,12 +690,24 @@ https://github.com/sudo-project/sudo/blob/SUDO_1_9_15p5/lib/util/sudo_conf.c
 https://github.com/sudo-project/sudo/blob/SUDO_1_9_15p5/lib/util/parseln.c
 https://github.com/sudo-project/sudo/blob/SUDO_1_9_15p5/plugins/sudoers/policy.c
 https://github.com/sudo-project/sudo/blob/SUDO_1_9_15p5/plugins/sudoers/sudo_nss.c
+https://packages.ubuntu.com/noble/amd64/sudo/filelist
+https://packages.ubuntu.com/noble/arm64/sudo/filelist
 ```
 
-Use: where sudo takes its rules from before any sudoers file, behind
+Use: where sudo takes its rules from before any sudoers file, and which
+helpers it loads or runs as root, behind
 `lifecycle.SudoersSourceGapsFunction`. `sudo.conf(5)` and `sudo_conf.c`
-define the `Plugin` and `Path plugin_dir` lines (keywords matched without
-case, a blank after each); `parseln.c` is the line reader both files share (a
+define the `Plugin` and `Path` lines (keywords and `Path` names matched
+without case, a blank after each). The `Path` names are `askpass`, `sesh`,
+`intercept`, `noexec`, `plugin_dir`, and `devsearch`; `askpass` runs as the
+invoking user, while `sesh` runs as root and `noexec` and `intercept` are
+preloaded into the commands sudo runs. The noble file lists, for amd64 and
+arm64, ship `/usr/libexec/sudo/sesh`, `/usr/libexec/sudo/sudo_noexec.so`,
+`/usr/libexec/sudo/sudo_intercept.so`, and `sudoers.so` in
+`/usr/libexec/sudo`, and the same paths are the compiled defaults in the
+package's `libsudo_util.so` (sudo 1.9.15p5-3ubuntu5.24.04.4), so serverpro
+lets each `Path` entry hold only that value. `parseln.c` is the line
+reader both files share (a
 `#` anywhere starts a comment, a trailing backslash continues a line only
 without one, blanks trimmed); `policy.c` lists the `sudoers.so` options
 (`error_recovery`, `ignore_perms`, `sudoers_file`, `sudoers_uid`,

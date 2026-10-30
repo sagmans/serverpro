@@ -333,7 +333,8 @@ func rebootPendingCommand() string {
 //
 // cvtsudoers reads only /etc/sudoers and its includes, so the probe also
 // reports each sudo.conf or nsswitch.conf setting that lets sudo take rules
-// from elsewhere: grades of the parse alone would miss those rules.
+// from elsewhere, or load or run a helper other than the packaged one as
+// root: grades of the parse alone would miss what those settings grant.
 //
 // Each scan is captured and its status checked on its own, and the account
 // database is read once: in a pipeline without pipefail a scan that failed
