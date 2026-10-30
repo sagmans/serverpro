@@ -292,8 +292,10 @@ Managed host tools install through integrity-checked sources, not
   contain exactly one primary key with fingerprint
   `CC94B39C77AE7342A68B89628A682D308D4E5E73`. Missing, substituted, or additional
   primary keys fail before the key can enter the trusted keyring. The installer
-  uses the explicit noble repository and requires cloudflared `2026.9.3` or
+  uses the explicit noble repository and requires cloudflared `2026.10.2` or
   newer; ingress-enabled doctor runs verify both that floor and service state.
+  Older connectors still trust eight eMudhra intermediate CAs whose private
+  keys were compromised, so doctor fails them and `--fix` upgrades them.
   Install and repair pin the `cloudflared` package to origin
   `pkg.cloudflare.com` (apt preferences, priority 990) so apt prefers it. The
   pin only ranks sources. The control is the origin gate: install and repair

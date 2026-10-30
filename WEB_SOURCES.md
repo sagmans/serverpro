@@ -1,6 +1,6 @@
 # Web Sources for serverpro
 
-Date: 2026-10-22
+Date: 2026-10-30
 Scope: provider-agnostic serverpro references
 
 Prefer official provider/API docs. If guides conflict with API references, trust
@@ -54,7 +54,7 @@ days and fix no disclosed vulnerability. ripgrep, fd, and inspect have no newer 
 | ast-grep | 0.51.0 | 2026-10-15 15:10:15 | Normal age gate; fixes `GHSA-xx6h-xcfw-vf5j` and `GHSA-cmvf-x8f7-rvp6` |
 | sem | 0.27.0 | 2026-10-04 11:22:08 | Normal age gate |
 | Herdr | 0.9.5 | 2026-10-14 16:07:28 | Normal age gate |
-| cloudflared | 2026.9.3 | 2026-09-24 16:14:11 | Normal age gate |
+| cloudflared | 2026.10.2 | 2026-10-20 09:17:30 | Normal age gate; Go `1.27.3` build distrusts compromised eMudhra intermediate CAs |
 
 Primary selection and security evidence:
 
@@ -384,12 +384,18 @@ https://pkg.cloudflare.com/index.html
 https://pkg.cloudflare.com/cloudflare-main.gpg
 https://pkg.cloudflare.com/cloudflared/dists/noble/main/binary-amd64/Packages
 https://pkg.cloudflare.com/cloudflared/dists/noble/main/binary-arm64/Packages
-https://github.com/cloudflare/cloudflared/releases/tag/2026.9.3
+https://github.com/cloudflare/cloudflared/releases/tag/2026.10.2
+https://raw.githubusercontent.com/cloudflare/cloudflared/master/RELEASE_NOTES
+https://blog.cloudflare.com/emudhra-certificate-compromise/
 ```
 
-Use: connector install source, Ubuntu 24.04 package floor `2026.9.3`, and apt
-trust root. Package indexes and release reviewed 2026-10-01. Primary
-package-signing key fingerprint retrieved and verified 2026-07-23:
+Use: connector install source, Ubuntu 24.04 package floor `2026.10.2`, and apt
+trust root. Package indexes and release reviewed 2026-10-30. Earlier builds
+still trust eight eMudhra intermediate CAs whose private keys were compromised;
+Cloudflare's 2026-10-20 notice requires `2026.10.2` or later. The noble index
+then offered only `2026.10.6` (published 2026-10-29), so install and repair take
+that build while the reviewed floor stays at the age-gated `2026.10.2`. Primary
+package-signing key fingerprint retrieved 2026-07-23 and re-verified 2026-10-30:
 `CC94B39C77AE7342A68B89628A682D308D4E5E73`. Cloudflare announced a 2025 key
 rollover and removal of deprecated keys after 2026-04-30. On future rollover,
 verify the replacement primary fingerprint from the official endpoint before

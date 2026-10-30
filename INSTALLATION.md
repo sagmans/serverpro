@@ -69,7 +69,7 @@ reviewed pins, integrity checks, and replacement lifecycle.
 | sem | 0.27.0 | Exact release and architecture-specific asset digest. |
 | inspect | 0.1.1 | Exact architecture-specific binary digest. |
 | Herdr | 0.9.5 | Exact release and architecture-specific binary digest. |
-| cloudflared | 2026.9.3 | Minimum Cloudflare apt package version when ingress is enabled. |
+| cloudflared | 2026.10.2 | Minimum Cloudflare apt package version when ingress is enabled. |
 
 Pi `0.87.1` and upstream `1.0.0` contain vulnerable `brace-expansion@5.0.9`
 in their npm shrinkwraps. Serverpro repairs only the local managed Pi graph
@@ -110,7 +110,7 @@ connector serverpro did not install from `pkg.cloudflare.com`: install and
 | `docker-buildx-plugin` | `0.38.1-1~ubuntu.24.04~noble` |
 | `docker-compose-plugin` | `5.6.1-1~ubuntu.24.04~noble` |
 | `htop` | `3.3.0-4build1` |
-| `cloudflared` | `2026.9.3` |
+| `cloudflared` | `2026.10.2` |
 
 ## Requirements
 

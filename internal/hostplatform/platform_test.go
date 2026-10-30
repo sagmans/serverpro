@@ -40,7 +40,7 @@ func TestReviewedPackageBaselines(t *testing.T) {
 		"containerd.io":         "2.4.2-3~ubuntu.24.04~noble",
 		"docker-buildx-plugin":  "0.38.1-1~ubuntu.24.04~noble",
 		"docker-compose-plugin": "5.6.1-1~ubuntu.24.04~noble",
-		"cloudflared":           "2026.9.3",
+		"cloudflared":           "2026.10.2",
 	}
 	got := make(map[string]string)
 	for _, pkg := range append(BootstrapPackageBaselines(), CloudflaredPackageBaseline()) {
