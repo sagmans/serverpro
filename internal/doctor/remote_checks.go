@@ -20,7 +20,7 @@ func remoteChecksWithOptions(ctx context.Context, cfg config.Config, r remote.Ru
 func remoteChecksSequential(ctx context.Context, cfg config.Config, r remote.Runner, host string, opt Options) []Result {
 	var results []Result
 	tracker := newLiveCommandTracker(r)
-	for _, specification := range remoteCheckSpecifications(cfg) {
+	for _, specification := range remoteCheckSpecifications(cfg, opt) {
 		specificationOptions := opt
 		// A repair earlier in this run can change what a later check reads, and
 		// the batch baseline was captured before it ran; such checks re-read live.

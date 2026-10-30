@@ -12,7 +12,7 @@ import (
 func TestRemoteCheckSpecificationsIncludeDNSResolutionCanary(t *testing.T) {
 	cfg := config.Example("prod")
 	found := false
-	for _, specification := range remoteCheckSpecifications(cfg) {
+	for _, specification := range remoteCheckSpecifications(cfg, Options{}) {
 		for _, command := range specification.readCommands {
 			if strings.Contains(command, dnsCanaryName) {
 				found = true
@@ -27,7 +27,7 @@ func TestRemoteCheckSpecificationsIncludeDNSResolutionCanary(t *testing.T) {
 func TestRemoteDNSResolutionFailureCarriesGuidance(t *testing.T) {
 	cfg := config.Example("prod")
 	var specification remoteCheckSpecification
-	for _, candidate := range remoteCheckSpecifications(cfg) {
+	for _, candidate := range remoteCheckSpecifications(cfg, Options{}) {
 		for _, command := range candidate.readCommands {
 			if strings.Contains(command, dnsCanaryName) {
 				specification = candidate

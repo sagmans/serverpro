@@ -75,7 +75,7 @@ func TestRemoteChecksSequentialUnsupportedPlatformBlocksFixes(t *testing.T) {
 
 func TestRemoteChecksBatchUnsupportedPlatformBlocksFixes(t *testing.T) {
 	cfg := config.Example("prod")
-	plan := buildRemoteReadPlan(cfg)
+	plan := buildRemoteReadPlan(cfg, Options{})
 	results := make([]remote.BatchResult, len(plan.commands))
 	ufwCheck := "ufw status verbose | grep -Fx 'Status: active'"
 	for i, command := range plan.commands {

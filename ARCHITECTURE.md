@@ -221,6 +221,14 @@ access paths for app-owned deployment flows.
     the complete stdout report without disabling persistence. Retention keeps
     the newest 5 reports per server when cleanup succeeds. Storage failure
     falls back to the complete stdout report and a stderr warning.
+    Drift checks compare the live host with what config and provisioning
+    promised: restricted egress, pending reboot, privileged accounts,
+    metadata user-data password hash, Tailscale operator, Serve and Funnel,
+    and runtime sysctl.
+    Each probe prints `fail: ` or `warn: ` lines and exits 0 when it could read
+    the host, so a probe that never ran (non-zero exit) fails instead of
+    passing.
+    They have no repair, because each finding needs an operator decision.
 - Polling: `internal/poll`
   - Shared context-aware wait policy used by provider and lifecycle polling.
 - Mesh facade: `internal/mesh`

@@ -108,7 +108,7 @@ func TestGHTokenParityPrecedesToolApplyUngated(t *testing.T) {
 	if cfg.Git.Access == config.GitAccessAccountKey {
 		t.Fatal("fixture must not configure account-key access for the ungated assertion")
 	}
-	plan := buildRemoteReadPlan(cfg)
+	plan := buildRemoteReadPlan(cfg, Options{})
 	parityIndex, toolIndex := -1, -1
 	for i, command := range plan.commands {
 		switch {

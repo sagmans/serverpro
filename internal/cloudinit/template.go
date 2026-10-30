@@ -81,14 +81,10 @@ write_files:
     content: |
       [Journal]
       Storage=persistent
-  - path: /etc/sysctl.d/99-serverpro.conf
+  - path: ` + SysctlConfigPath + `
     permissions: '0644'
     content: |
-      net.ipv4.conf.all.rp_filter=1
-      net.ipv4.conf.default.rp_filter=1
-      net.ipv4.tcp_syncookies=1
-      net.ipv6.conf.all.accept_ra=0
-  - path: /root/.serverpro-tailscale-authkey
+` + sysctlWriteFileContent() + `  - path: /root/.serverpro-tailscale-authkey
     permissions: '0600'
     content: |
       {{ .TailscaleAuthKey }}

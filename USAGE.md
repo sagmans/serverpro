@@ -659,6 +659,51 @@ Herdr sessions; rerun managed bootstrap for package updates, then restart sessio
 only when the operator chooses. See `INSTALLATION.md` for the install-time
 toolset summary.
 
+### Drift checks
+
+These doctor checks compare the live host with what config and provisioning
+set up. They are read-only. `--fix` never changes what they find, because each
+finding needs an operator decision.
+
+| Check | Result | Finding |
+| --- | --- | --- |
+| `egress restricted` | fail | UFW's default outgoing policy is not `deny`/`reject`, or a TCP connect to `1.1.1.1:853` succeeds. Runs only with `network.egress.mode: restricted`. |
+| `reboot pending` | warn | `/var/run/reboot-required` exists, or an installed kernel is newer than the running one. |
+| `privileged accounts` | fail | An account other than the admin user is in `sudo`, `admin`, `lxd`, or `docker` (also as primary group), or a non-root account has uid 0. |
+| `metadata user-data` | fail or warn | The provider metadata user-data holds the admin's current password hash (fail), or another password hash or `passwd` key (warn). |
+| `tailscale operator` | fail | tailscaled has an `OperatorUser`. |
+| `tailscale serve` | fail or warn | Funnel publishes a port (fail), or a Serve entry forwards to a local port with no TCP listener (warn). |
+| `sysctl runtime` | warn | A running kernel value differs from `/etc/sysctl.d/99-serverpro.conf`, or the file lacks or changed a serverpro value. |
+
+A probe that cannot read the host fails with "the read-only probe could not
+run". Drift is then unknown, so doctor does not report a pass. The
+`metadata user-data` check reports presence only: doctor never prints the
+user-data, the hash, or the shadow entry. The compute provider adapter supplies
+the metadata path; with no path, the check is skipped.
+
+### Restricted egress
+
+With `network.egress.mode: restricted`, provisioning applies this UFW lockdown
+as root:
+
+```sh
+ufw default deny outgoing
+ufw allow out 53
+ufw allow out 123/udp
+ufw allow out 80/tcp
+ufw allow out 443/tcp
+ufw allow out 22/tcp
+ufw allow out 7844/tcp
+ufw allow out 7844/udp
+ufw allow out 41641/udp
+ufw --force reload
+```
+
+When `egress restricted` fails, find out first which workload needs other
+outbound ports (`sudo ufw status verbose`, `ss -tnp`). Then run the lockdown
+again with `sudo` and rerun doctor. An `ALLOW OUT Anywhere` rule also opens
+egress: delete it with `sudo ufw status numbered` and `sudo ufw delete N`.
+
 ## Optional ingress
 
 No public app ingress is created by default. Current Cloudflare Tunnel ingress

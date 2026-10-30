@@ -17,9 +17,9 @@ type remoteReadPlan struct {
 	liveCommands map[string]struct{}
 }
 
-func buildRemoteReadPlan(cfg config.Config) remoteReadPlan {
+func buildRemoteReadPlan(cfg config.Config, opt Options) remoteReadPlan {
 	var readScripts, liveScripts []string
-	for _, specification := range remoteCheckSpecifications(cfg) {
+	for _, specification := range remoteCheckSpecifications(cfg, opt) {
 		readScripts = append(readScripts, specification.readCommands...)
 		liveScripts = append(liveScripts, specification.liveCommands...)
 	}
@@ -53,7 +53,7 @@ func (p remoteReadPlan) allowsLive(command string) bool {
 }
 
 func remoteChecksBatched(ctx context.Context, cfg config.Config, source remote.Runner, batch remote.BatchRunner, host string, opt Options) []Result {
-	plan := buildRemoteReadPlan(cfg)
+	plan := buildRemoteReadPlan(cfg, opt)
 	results, err := batch.RunBatch(ctx, cfg.Admin.Username, host, plan.commands)
 	if err == nil && len(results) != len(plan.commands) {
 		err = fmt.Errorf("remote batch returned %d results; want %d", len(results), len(plan.commands))

@@ -104,7 +104,19 @@ default.
   with its default scheme (yescrypt). Doctor fails `admin password hash` when
   the stored hash uses SHA-crypt (`$6$`, written by older releases) or another
   legacy scheme, or when the password is unset; `doctor --fix` re-sets it the
-  same way.
+  same way. Hosts provisioned by older releases can still serve that hash from
+  metadata: the `metadata user-data` doctor check fails when user-data holds
+  the admin's current hash and warns on any other hash or `passwd` key. It
+  reports presence only and keeps the body, hash, and shadow entry out of
+  output and reports. The compute provider adapter declares the metadata path;
+  doctor never takes it from the host.
+- Doctor drift checks report, read-only, what weakens this model after
+  provisioning: restricted egress not in force (UFW policy and a real connect
+  to a port the lockdown never allows), a pending reboot, extra accounts in
+  `sudo`/`admin`/`lxd`/`docker` or with uid 0, a Tailscale `OperatorUser`,
+  Tailscale Funnel or Serve entries with no local listener, and runtime sysctl
+  values that differ from the serverpro drop-in. None of them has a repair,
+  because each finding needs an operator decision. See USAGE.md, Drift checks.
 - Tailnet DNS is part of the access path: with MagicDNS enabled, the tailnet
   must define global nameservers and enable Override DNS servers, or managed
   hosts can lose all public name resolution without any local change.

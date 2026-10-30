@@ -33,7 +33,7 @@ type remoteCheckSpecification struct {
 	run              func(context.Context, remote.Runner, string, string, Options) []Result
 }
 
-func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
+func remoteCheckSpecifications(cfg config.Config, opt Options) []remoteCheckSpecification {
 	user := cfg.Admin.Username
 	specifications := []remoteCheckSpecification{
 		remoteSupportedPlatformSpecification(),
@@ -89,6 +89,7 @@ func remoteCheckSpecifications(cfg config.Config) []remoteCheckSpecification {
 			remoteStaticSpecification(warn("remote", "egress precision", "restricted mode is port/protocol best-effort; global 22/80/443 and Cloudflare edge 7844 remain open for git/updates/connectors")),
 		)
 	}
+	specifications = append(specifications, remoteDriftSpecifications(cfg, opt)...)
 	if cfg.Git.Access == config.GitAccessAccountKey {
 		specifications = append(specifications, remoteGitIdentitySpecifications(cfg)...)
 	}

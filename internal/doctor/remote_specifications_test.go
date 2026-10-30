@@ -51,14 +51,14 @@ func TestRemoteSupportedPlatformCommandExecutableMatrix(t *testing.T) {
 
 func TestRemoteCheckSpecificationsStartWithBlockingPlatformGate(t *testing.T) {
 	cfg := config.Example("prod")
-	specifications := remoteCheckSpecifications(cfg)
+	specifications := remoteCheckSpecifications(cfg, Options{})
 	if len(specifications) == 0 || !specifications[0].blocksFixesOnFailure {
 		t.Fatal("supported-platform check must block every later fix")
 	}
 	if len(specifications[0].readCommands) != 1 || specifications[0].readCommands[0] != remoteSupportedPlatformCommand() {
 		t.Fatalf("first remote check is not the supported-platform command: %+v", specifications[0])
 	}
-	plan := buildRemoteReadPlan(cfg)
+	plan := buildRemoteReadPlan(cfg, Options{})
 	if len(plan.commands) == 0 || plan.commands[0].Script != remoteSupportedPlatformCommand() {
 		t.Fatal("batch plan must evaluate the supported platform first")
 	}
@@ -72,7 +72,7 @@ func TestRemoteCheckSpecificationsOwnSequentialAndBatchReadOrder(t *testing.T) {
 		cloudInitWaitCommand: {{out: "status: done", err: errors.New("exit status 2")}},
 	}}
 	_ = remoteChecksSequential(context.Background(), cfg, runner, "prod-01", Options{})
-	plan := buildRemoteReadPlan(cfg)
+	plan := buildRemoteReadPlan(cfg, Options{})
 	planned := make([]string, len(plan.commands))
 	for i, command := range plan.commands {
 		planned[i] = command.Script
@@ -93,7 +93,7 @@ func TestRemoteCheckSpecificationsVerifyCloudflaredPackageFloor(t *testing.T) {
 		t.Run(ingress, func(t *testing.T) {
 			cfg := config.Example("prod")
 			cfg.Network.Ingress = ingress
-			for _, specification := range remoteCheckSpecifications(cfg) {
+			for _, specification := range remoteCheckSpecifications(cfg, Options{}) {
 				if slices.Contains(specification.readCommands, want) {
 					return
 				}
@@ -105,8 +105,8 @@ func TestRemoteCheckSpecificationsVerifyCloudflaredPackageFloor(t *testing.T) {
 
 func TestRemoteCheckSpecificationsDeclareEveryLiveFix(t *testing.T) {
 	cfg := config.Example("prod")
-	plan := buildRemoteReadPlan(cfg)
-	for _, specification := range remoteCheckSpecifications(cfg) {
+	plan := buildRemoteReadPlan(cfg, Options{})
+	for _, specification := range remoteCheckSpecifications(cfg, Options{}) {
 		for _, command := range specification.liveCommands {
 			if !plan.allowsLive(command) {
 				t.Fatalf("live fix missing from batch authority: %q", command)

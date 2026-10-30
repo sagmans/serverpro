@@ -50,7 +50,7 @@ func TestBatchReplayRejectsUnplannedReadWithoutSourceFallback(t *testing.T) {
 func TestRemoteReadPlanDeclaresConditionalAndConfiguredReads(t *testing.T) {
 	cfg := config.Example("prod")
 	cfg.Network.Ingress = "none"
-	plan := buildRemoteReadPlan(cfg)
+	plan := buildRemoteReadPlan(cfg, Options{})
 	if !plan.hasRead(cloudInitWaitCommand) || !plan.hasRead(cloudInitLongCommand) {
 		t.Fatalf("cloud-init reads missing from plan: %+v", plan.commands)
 	}
@@ -62,7 +62,7 @@ func TestRemoteReadPlanDeclaresConditionalAndConfiguredReads(t *testing.T) {
 	}
 
 	cfg.Network.Ingress = "cloudflare-tunnel"
-	plan = buildRemoteReadPlan(cfg)
+	plan = buildRemoteReadPlan(cfg, Options{})
 	if !plan.hasRead(tunnel.CheckCommand()) || plan.hasRead(tunnel.UnmanagedCheckCommand()) {
 		t.Fatalf("want only the managed cloudflared read with ingress: %+v", plan.commands)
 	}

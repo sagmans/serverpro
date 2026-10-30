@@ -39,6 +39,10 @@ type Options struct {
 	// GitHubPAT reaches remote checks so parity can compare the locally
 	// stored copy with remote hosts.yml; only fingerprints ever enter evidence.
 	GitHubPAT string
+	// MetadataUserDataPath is the compute provider's metadata user-data path
+	// (compute.MetadataUserDataPath). Doctor cannot name providers, so the
+	// caller that resolved the provider passes it; empty skips that check.
+	MetadataUserDataPath string
 	// refreshBaseline makes a check skip its batch baseline and read live,
 	// because a repair earlier in the same run may have changed the host.
 	refreshBaseline bool

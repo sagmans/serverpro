@@ -194,13 +194,23 @@ func (r e2eDoctorRemote) Run(_ context.Context, user, _ string, script string) (
 			strings.Join(r.secrets, "\n") + "\n" + e2eDoctorRepairCause
 		return out, errors.New(e2eDoctorRepairErrorPrefix + out)
 	}
-	return e2eRemoteSuccessEvidence, nil
+	return e2eRemoteEvidence(script), nil
+}
+
+// e2eRemoteEvidence answers a read with generic success unless doctor parses
+// that read's output, in which case it gets what an idle host prints.
+func e2eRemoteEvidence(script string) string {
+	switch script {
+	case doctor.TailscaleServeCommand():
+		return doctor.TailscaleServeIdleOutput()
+	}
+	return e2eRemoteSuccessEvidence
 }
 
 func (r e2eDoctorRemote) RunBatch(_ context.Context, user, _ string, commands []remote.BatchCommand) ([]remote.BatchResult, error) {
 	results := make([]remote.BatchResult, len(commands))
-	for i := range results {
-		results[i].Output = e2eRemoteSuccessEvidence
+	for i, command := range commands {
+		results[i].Output = e2eRemoteEvidence(command.Script)
 	}
 	failure := os.Getenv(e2eDoctorPackageFailureEnv)
 	if failure != e2eDoctorPackageFailureShort && failure != e2eDoctorPackageFailureBoundary {

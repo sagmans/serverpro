@@ -134,7 +134,7 @@ func TestSSHDCommandsNeverUseSudo(t *testing.T) {
 	cfg.Network.Ingress = "cloudflare-tunnel"
 	sudo := regexp.MustCompile(`(^|[^[:alnum:]_-])sudo([^[:alnum:]_-]|$)`)
 	checked := 0
-	for _, specification := range remoteCheckSpecifications(cfg) {
+	for _, specification := range remoteCheckSpecifications(cfg, Options{}) {
 		for _, command := range append(append([]string(nil), specification.readCommands...), specification.liveCommands...) {
 			if !strings.Contains(command, "sshd ") && !strings.Contains(command, sshSocketUnit) && !strings.Contains(command, sshServiceUnit) {
 				continue
@@ -710,7 +710,7 @@ func TestRemoteChecksWireCloudflaredRepairWithLongTimeout(t *testing.T) {
 		t.Run(tc.ingress, func(t *testing.T) {
 			cfg := config.Example("prod")
 			cfg.Network.Ingress = tc.ingress
-			plan := buildRemoteReadPlan(cfg)
+			plan := buildRemoteReadPlan(cfg, Options{})
 			if !plan.allowsLive(tc.fix) {
 				t.Fatal("cloudflared repair is not an allowed live command")
 			}
