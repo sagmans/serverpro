@@ -2,6 +2,7 @@ package mesh
 
 import (
 	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 )
@@ -18,35 +19,55 @@ const (
 	// policyAllMembers selects the devices of every tailnet member, which for
 	// a reachable server is every person's device: as wide as "*" in practice.
 	policyAllMembers = "autogroup:member"
-	// policyAllIPv4 and policyAllIPv6 are the CIDR spellings of every address.
-	policyAllIPv4 = "0.0.0.0/0"
-	policyAllIPv6 = "::/0"
+	// policyAllTagged selects every tagged device. serverpro enrolls every
+	// server with a tag, so as a destination it reaches every server.
+	policyAllTagged = "autogroup:tagged"
+	// tailnetIPv4Range and tailnetIPv6Range hold every address Tailscale
+	// gives a tailnet device, so a CIDR that covers either one (0.0.0.0/0
+	// and ::/0 among them) selects every device.
+	tailnetIPv4Range = "100.64.0.0/10"
+	tailnetIPv6Range = "fd7a:115c:a1e0::/48"
 	// policyAllPortsFromZero and policyAllPortsFromOne are the range
 	// spellings of every port.
 	policyAllPortsFromZero = "0-65535"
 	policyAllPortsFromOne  = "1-65535"
 	// policyPortListSeparator splits an ACL destination's port list.
 	policyPortListSeparator = ","
+	// policyProtocolSeparator splits a grant ip entry of the form
+	// <proto>:<ports>.
+	policyProtocolSeparator = ":"
 )
 
 // A rule allows all when a selector is any spelling of "everything", not only
-// the literal wildcard; a policy that writes 0.0.0.0/0 or 1-65535 opens the
-// same ports as one that writes "*".
+// the literal wildcard; a policy that writes 100.64.0.0/10, tcp:*, or
+// 1-65535 opens the same ports as one that writes "*".
 var (
-	allSources = []string{policyWildcard, policyAllMembers, policyAllIPv4, policyAllIPv6}
-	allHosts   = []string{policyWildcard, policyAllIPv4, policyAllIPv6}
+	allSources = []string{policyWildcard, policyAllMembers}
+	allHosts   = []string{policyWildcard, policyAllTagged}
 	allPorts   = []string{policyWildcard, policyAllPortsFromZero, policyAllPortsFromOne}
+	// portProtocols are the grant ip protocols, by name and IANA number,
+	// whose ports a host's listeners use; every port of one of them is
+	// every port UFW guards for that protocol.
+	portProtocols = []string{"tcp", "udp", "6", "17"}
+	tailnetRanges = []netip.Prefix{netip.MustParsePrefix(tailnetIPv4Range), netip.MustParsePrefix(tailnetIPv6Range)}
 )
 
 // PacketPolicy is the network-layer part of a tailnet policy file: the
-// first-generation acls and the grants that replace them. The sections are
-// pointers because an absent section differs from an empty one: Tailscale
-// applies its default allow-all policy to a file with neither, while an empty
-// acls list denies everything.
+// first-generation acls and the grants that replace them, plus the hosts
+// aliases their selectors may name. The rule sections are pointers because an
+// absent section differs from an empty one: Tailscale applies its default
+// allow-all policy to a file with neither, while an empty acls list denies
+// everything.
 type PacketPolicy struct {
-	ACLs   *[]ACLRule `json:"acls"`
-	Grants *[]Grant   `json:"grants"`
+	ACLs   *[]ACLRule  `json:"acls"`
+	Grants *[]Grant    `json:"grants"`
+	Hosts  HostAliases `json:"hosts"`
 }
+
+// HostAliases is the policy file's hosts section: names that a rule's
+// sources and destinations use in place of an IP address or CIDR, so an
+// allow-all range can hide behind a friendly name.
+type HostAliases map[string]string
 
 // ACLRule is one first-generation acls entry. Users and Ports are the legacy
 // spellings of src and dst that old policy files still carry; JSON field
@@ -78,14 +99,14 @@ func (p PacketPolicy) AllowAllRules() []string {
 	var rules []string
 	if p.ACLs != nil {
 		for i, rule := range *p.ACLs {
-			if source, destination, ok := rule.allowsAll(); ok {
+			if source, destination, ok := rule.allowsAll(p.Hosts); ok {
 				rules = append(rules, fmt.Sprintf("acls[%d] accepts %s to %s", i, source, destination))
 			}
 		}
 	}
 	if p.Grants != nil {
 		for i, grant := range *p.Grants {
-			if source, destination, ports, ok := grant.allowsAll(); ok {
+			if source, destination, ports, ok := grant.allowsAll(p.Hosts); ok {
 				rules = append(rules, fmt.Sprintf("grants[%d] grants %s to %s on ip %s", i, source, destination, ports))
 			}
 		}
@@ -95,26 +116,26 @@ func (p PacketPolicy) AllowAllRules() []string {
 
 // allowsAll returns the matching source and destination, so the finding
 // names the spelling the policy file uses.
-func (r ACLRule) allowsAll() (string, string, bool) {
+func (r ACLRule) allowsAll(hosts HostAliases) (string, string, bool) {
 	if !strings.EqualFold(r.Action, policyActionAccept) {
 		return "", "", false
 	}
-	source, found := firstOf(append(append([]string(nil), r.Src...), r.Users...), allSources)
+	source, found := hosts.firstAll(append(append([]string(nil), r.Src...), r.Users...), allSources)
 	if !found {
 		return "", "", false
 	}
 	for _, destination := range append(append([]string(nil), r.Dst...), r.Ports...) {
-		if aclDestinationAllowsAll(destination) {
-			return source, destination, true
+		if spelling, ok := aclDestinationAllowsAll(destination, hosts); ok {
+			return source, spelling, true
 		}
 	}
 	return "", "", false
 }
 
-func (g Grant) allowsAll() (string, string, string, bool) {
-	source, sourceFound := firstOf(g.Src, allSources)
-	destination, destinationFound := firstOf(g.Dst, allHosts)
-	ports, portsFound := firstOf(g.IP, allPorts)
+func (g Grant) allowsAll(hosts HostAliases) (string, string, string, bool) {
+	source, sourceFound := hosts.firstAll(g.Src, allSources)
+	destination, destinationFound := hosts.firstAll(g.Dst, allHosts)
+	ports, portsFound := firstMatch(g.IP, grantIPAllowsAll)
 	return source, destination, ports, sourceFound && destinationFound && portsFound
 }
 
@@ -122,26 +143,93 @@ func (g Grant) allowsAll() (string, string, string, bool) {
 // destination. The ports follow the last colon, so an IPv6 host such as
 // ::/0 or [::/0] keeps its own colons, and one all-ports entry in a port
 // list opens every port.
-func aclDestinationAllowsAll(destination string) bool {
+func aclDestinationAllowsAll(destination string, hosts HostAliases) (string, bool) {
 	if destination == policyWildcardHostPort {
-		return true
+		return destination, true
 	}
 	separator := strings.LastIndex(destination, ":")
 	if separator < 0 {
-		return false
+		return "", false
 	}
 	host := strings.TrimSuffix(strings.TrimPrefix(destination[:separator], "["), "]")
-	if !slices.Contains(allHosts, host) {
-		return false
+	spelling, found := hosts.firstAll([]string{host}, allHosts)
+	if !found {
+		return "", false
 	}
-	_, found := firstOf(strings.Split(destination[separator+1:], policyPortListSeparator), allPorts)
-	return found
+	if _, found := firstMatch(strings.Split(destination[separator+1:], policyPortListSeparator), isAllPorts); !found {
+		return "", false
+	}
+	// Only an alias changes the spelling; otherwise quote the destination as
+	// written, brackets included.
+	if spelling != host {
+		return spelling + destination[separator:], true
+	}
+	return destination, true
 }
 
-func firstOf(selectors, everything []string) (string, bool) {
+// grantIPAllowsAll reads one grant ip entry: every port alone, which also
+// covers UDP and ICMP, or every port of TCP or UDP after the protocol.
+func grantIPAllowsAll(entry string) bool {
+	if isAllPorts(entry) {
+		return true
+	}
+	protocol, ports, found := strings.Cut(entry, policyProtocolSeparator)
+	if !found {
+		return false
+	}
+	return slices.ContainsFunc(portProtocols, func(name string) bool { return strings.EqualFold(name, protocol) }) && isAllPorts(ports)
+}
+
+func isAllPorts(ports string) bool {
+	return slices.Contains(allPorts, ports)
+}
+
+// firstAll returns the first selector that is one of the given spellings of
+// everything or a CIDR that covers a tailnet address range, after a hosts
+// alias is replaced by its value. A finding through an alias names both, so
+// the operator sees the name and the range behind it.
+func (hosts HostAliases) firstAll(selectors, everything []string) (string, bool) {
 	for _, selector := range selectors {
-		if slices.Contains(everything, strings.TrimSpace(selector)) {
-			return selector, true
+		name := strings.TrimSpace(selector)
+		value, isAlias := hosts[name]
+		resolved := name
+		if isAlias {
+			resolved = strings.TrimSpace(value)
+		}
+		if !slices.Contains(everything, resolved) && !coversTailnet(resolved) {
+			continue
+		}
+		if isAlias {
+			return fmt.Sprintf("%s (%s)", name, resolved), true
+		}
+		return selector, true
+	}
+	return "", false
+}
+
+// coversTailnet reports whether selector is a CIDR that contains a whole
+// tailnet address range. A bare address or a narrower range selects only
+// some devices, and anything that does not parse as a CIDR is a name.
+func coversTailnet(selector string) bool {
+	prefix, err := netip.ParsePrefix(selector)
+	if err != nil {
+		return false
+	}
+	prefix = prefix.Masked()
+	for _, tailnet := range tailnetRanges {
+		if prefix.Addr().Is4() == tailnet.Addr().Is4() && prefix.Bits() <= tailnet.Bits() && prefix.Contains(tailnet.Addr()) {
+			return true
+		}
+	}
+	return false
+}
+
+// firstMatch returns the first entry that allows everything, as the policy
+// file spells it, so the finding quotes it.
+func firstMatch(entries []string, allowsAll func(string) bool) (string, bool) {
+	for _, entry := range entries {
+		if allowsAll(strings.TrimSpace(entry)) {
+			return entry, true
 		}
 	}
 	return "", false

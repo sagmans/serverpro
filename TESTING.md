@@ -669,6 +669,25 @@ test unit was graded, since the container's own gettys are always gaps.
 Not covered: a real VM reboot, a real kernel update, and a real host
 (doctor `--fix` was not run against production).
 
+### Tailnet policy allow-all dogfood
+
+On 2026-10-30 a throwaway harness, never committed, ran the provider
+`tailnet policy` check through the real Tailscale client against a fake API
+(`httptest`) that served HuJSON policy files, with the old (before this
+change) and new code.
+
+- Old: only the literal default grant warned. A grant of `tcp:*` or `udp:*`
+  to every host, a source of `100.64.0.0/10` or `fd7a:115c:a1e0::/48`, a
+  destination of `autogroup:tagged` in a grant or an acl, and a `hosts`
+  alias for the tailnet range or for `0.0.0.0/0` all passed.
+- New: each of those warned and named the rule, with an alias shown as
+  `tailnet (100.64.0.0/10)`. A least-privilege policy (`tcp:22` and
+  `tcp:443` to the server tag), `100.64.0.0/11`, `icmp:*`, and an alias for
+  one address still passed.
+
+Not covered: the real tailnet policy file, and a custom IP pool narrower than
+`100.64.0.0/10`, which a CIDR could cover without covering the whole range.
+
 ### Tunnel SSH route preflight dogfood
 
 On 2026-10-30 two throwaway harnesses, never committed, ran the old (before
@@ -829,7 +848,7 @@ against production, and no dogfood server exists), and the provider consoles.
 | `internal/importsync` | Discover/import recovery from provider labels through a read-only consumer contract. | Managed/unmanaged filtering, provider-recovered typed access-policy persistence, valid provider-only mesh intent, legacy disabled-mesh repair, omitted-token credential merge, duplicate labels, dry-run, preserving force refresh, malformed-existing-artifact and concurrent-config-drift rejection, same-tunnel provenance retention without ownership transfer, context-cancellable canonical workflow locking and matching-tailnet serialization, stable tailnet persistence, filesystem errors fail closed, injected config/credential/state/registry failures, marker-based retry, state-without-registry discovery, Tailscale/Cloudflare enrichment matchers (`enrich_test.go`). |
 | `internal/ingress` | Generic ingress route model and Cloudflare Tunnel pending adapter. | Add/remove validation, pending status, no public route mutation claims. |
 | `internal/lifecycle` | Provision sequence and state checkpoints through a create-only compute contract. | Tunnel install run under the shared apt-sized connector deadline, image account removal after the admin password step (only for declaring providers, never the admin or root, in safe step order, typed `remote_image_users` failure), the OpenSSH-off script as the last remote create script, after a remote ingress read that finds only the catch-all rule (after the lockdown and the gated reboot install, which runs only with `reboot.enabled: true`), the egress lockdown after the tools in create and as the last step of `server bootstrap` (skipped only when config defers it), a create with no reachable host failing closed under restricted egress, Narrow compute fakes, typed phase/resource failures, device bind bounded by the bootstrap key time (bounded local-clock fallback) then pinned to the recorded device ID on rerun, leftover device records ignored on fresh compute, provider recorded before the first provider call, checkpoint save-failure matrix, field-preserving concurrent ingress/status checkpoints, persisted tailnet identity plus missing/token-relative migration and conflict rejection, auth-key compensation, Tailscale policy/auth key cleanup, Cloudflare tunnel exact-name adoption/ambiguity/created-vs-adopted provenance/fresh rollback, compute create reconciliation, state stat errors, wait loops, remote bootstrap, omitted-lockdown convergence, shared Ed25519 fresh/rerun/public-key repair, Git deploy access, exact managed deploy-to-account cleanup, PAT stdin isolation, partial failure state. |
-| `internal/mesh` | Provider-neutral mesh types, canonical device identity matching, and fail-closed device selection. | Short/FQDN/trailing-dot normalization, required-tag matching, stale same-name devices excluded by enrolment time, undated devices failing closed, ambiguity listing every candidate ID, recorded-device binding with missing/changed rejection and no name fallback, unknown SSH-rule field preservation through destination rewrites, and packet-policy allow-all detection (absent sections, empty acls, legacy users/ports, scoped and port-limited rules, and the equivalent spellings `autogroup:member`, `0.0.0.0/0`, `::/0`, `[::/0]`, `0-65535`, and `1-65535`, including inside an acl port list). |
+| `internal/mesh` | Provider-neutral mesh types, canonical device identity matching, and fail-closed device selection. | Short/FQDN/trailing-dot normalization, required-tag matching, stale same-name devices excluded by enrolment time, undated devices failing closed, ambiguity listing every candidate ID, recorded-device binding with missing/changed rejection and no name fallback, unknown SSH-rule field preservation through destination rewrites, and packet-policy allow-all detection (absent sections, empty acls, legacy users/ports, scoped and port-limited rules, and the equivalent spellings `autogroup:member`, `0.0.0.0/0`, `::/0`, `[::/0]`, `0-65535`, and `1-65535`, including inside an acl port list; `tcp:*`, `udp:*`, and numbered protocols with every port; CIDRs that cover a whole tailnet range; `autogroup:tagged` as a destination only; and `hosts` aliases, with a part of a range, a single address, and `icmp:*` not flagged). |
 | `internal/network` | Network policy primitives. | Egress modes and allow-list behavior; the restricted lockdown carries its own fail-closed proof (UFW default, blocked connect, allowed connect). |
 | `internal/ownership` | Provider ownership labels/tags. | Reversible encoding, cross-provider label equivalence, live ownership validation. |
 | `internal/lifecycle` admin password | Post-boot admin password set shared by create and `doctor --fix`. | Plain `chpasswd` over protected stdin (no `--encrypted`, no precomputed hash), first-boot grant removal with sudoers rollback, set before any other remote step; cloud-init renders no password material. |

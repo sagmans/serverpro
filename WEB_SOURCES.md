@@ -374,6 +374,7 @@ https://tailscale.com/docs/reference/syntax/policy-file
 https://tailscale.com/docs/reference/syntax/grants
 https://tailscale.com/docs/features/access-control/acls
 https://tailscale.com/docs/reference/examples/acls
+https://tailscale.com/docs/concepts/ip-and-dns-addresses
 ```
 
 Use: doctor `tailnet policy` allow-all detection and the recommended grants
@@ -385,7 +386,12 @@ The pages do not say whether the default allow-all still applies to a file
 with `grants` and no `acls`. `tests` cover grants and ACLs, take a user,
 group, or tag as `src` and `tag:name:port` destinations, and a failing test
 makes Tailscale reject the policy change; `autogroup:self` applies to a
-member's own untagged devices only.
+member's own untagged devices only. A grant `ip` entry is `*`, a port or
+range, `<proto>:*`, or `<proto>:<port>`, where the protocol is a name or an
+IANA number; `autogroup:tagged` selects every tagged device in `dst`; `src`
+and `dst` take CIDRs and `hosts` aliases, and a `hosts` value is an address
+or a CIDR. Tailscale gives devices IPv4 addresses from `100.64.0.0/10` and
+IPv6 addresses from `fd7a:115c:a1e0::/48`.
 
 ### Tailscale auth keys
 
