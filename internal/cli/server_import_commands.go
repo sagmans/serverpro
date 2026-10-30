@@ -96,6 +96,9 @@ func (a *app) runServerImport(ctx context.Context, name string, flags *importFla
 	if err := a.resolveImportAdminUser(flags); err != nil {
 		return err
 	}
+	if err := a.resolveImportCloudflare(flags); err != nil {
+		return err
+	}
 	options, err := a.buildImportOptions(candidates, providerToken, flags)
 	if err != nil {
 		return err
@@ -186,6 +189,36 @@ func (a *app) resolveImportAdminUser(flags *importFlags) error {
 	return nil
 }
 
+// resolveImportCloudflare asks whether the imported servers use a Cloudflare
+// Tunnel when the operator did not say so with --with-cloudflare. Provider
+// labels carry no tunnel evidence and listing tunnels already needs the token,
+// so only the operator can tell; asking keeps a tunnel host from being
+// imported as ingress "none" by omission. Non-interactive, --yes, and dry runs
+// never prompt: they are unattended, so the explicit flag stays the only
+// opt-in and scripted recovery keeps its current behaviour.
+func (a *app) resolveImportCloudflare(flags *importFlags) error {
+	if flags.withCloudflare || a.nonInteractive || a.yes || a.dryRun {
+		return nil
+	}
+	uses, err := a.confirmDefault("do the imported server(s) use a Cloudflare Tunnel", false)
+	if err != nil || !uses {
+		return err
+	}
+	flags.withCloudflare = true
+	if strings.TrimSpace(flags.cloudflareAccountID) != "" {
+		return nil
+	}
+	accountID, err := a.prompt("Cloudflare account ID")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(accountID) == "" {
+		return fmt.Errorf("cloudflare account ID required for tunnel import")
+	}
+	flags.cloudflareAccountID = strings.TrimSpace(accountID)
+	return nil
+}
+
 func (a *app) buildImportOptions(candidates []importsync.Candidate, providerToken string, flags *importFlags) (importsync.ImportOptions, error) {
 	opts := importsync.ImportOptions{
 		Candidates:       candidates,
@@ -214,7 +247,12 @@ func (a *app) buildImportOptions(candidates []importsync.Candidate, providerToke
 		opts.TailscaleToken = token
 	}
 	if flags.withCloudflare {
-		token, err := a.resolveOptionalServiceToken("Cloudflare API token", "SERVERPRO_CLOUDFLARE_TOKEN", "CLOUDFLARE_API_TOKEN", true)
+		// No generic CLOUDFLARE_API_TOKEN fallback: import saves this token
+		// into the server's credential file, and a shell-wide token set for
+		// other tools (often broader than tunnel scope) must never be
+		// persisted by accident. Only the serverpro-scoped variable or the
+		// prompt opts in.
+		token, err := a.resolveOptionalServiceToken("Cloudflare API token", "SERVERPRO_CLOUDFLARE_TOKEN", "", true)
 		if err != nil {
 			return importsync.ImportOptions{}, err
 		}
@@ -226,7 +264,8 @@ func (a *app) buildImportOptions(candidates []importsync.Candidate, providerToke
 
 func (a *app) resolveOptionalServiceToken(label, primaryEnv, fallbackEnv string, required bool) (string, error) {
 	token := os.Getenv(primaryEnv)
-	if token == "" {
+	// An empty fallbackEnv means the service accepts only its serverpro-scoped variable.
+	if token == "" && fallbackEnv != "" {
 		token = os.Getenv(fallbackEnv)
 	}
 	if token != "" {

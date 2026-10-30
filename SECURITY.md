@@ -597,7 +597,10 @@ attachments, inventory failure, or another match aborts before mutation. The
 `serverpro server import` command rebuilds local config, credentials, typed
 policy state, and registry from that inventory after the operator re-supplies
 tokens. Optional `--with-tailscale` and `--with-cloudflare` reattach mesh/tunnel
-metadata when those APIs are reachable. Provider-only recovery keeps mandatory
+metadata when those APIs are reachable. Import persists the Cloudflare token
+it receives, so it accepts only the serverpro-scoped `SERVERPRO_CLOUDFLARE_TOKEN`
+or an interactive prompt; a shell-wide `CLOUDFLARE_API_TOKEN` set for other
+tools is never read or saved. Provider-only recovery keeps mandatory
 Tailscale access enabled while storing an incomplete private credential set for
 later interactive completion. Forced import repairs the disabled-Tailscale
 config emitted by earlier releases and merges omitted service tokens from the

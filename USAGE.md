@@ -493,6 +493,13 @@ SERVERPRO_SERVER_PROVIDER_TOKEN='...' \
 serverpro server import --all -p vultr --dry-run
 ```
 
+Without `--with-cloudflare`, an interactive import asks whether the servers
+use a Cloudflare Tunnel; on yes it asks for the account ID and token. Runs with
+`--non-interactive`, `--yes`, or `--dry-run` never ask, so pass
+`--with-cloudflare --cloudflare-account-id ID` there. Import reads the token
+only from `SERVERPRO_CLOUDFLARE_TOKEN` or the prompt, never from a generic
+`CLOUDFLARE_API_TOKEN`, because import saves it in the server's credential file.
+
 Import claims only resources stamped with `managed-by=serverpro` ownership
 labels. It also restores the typed managed access-policy reference needed for
 safe cleanup. A provider-only import keeps mandatory Tailscale access enabled
