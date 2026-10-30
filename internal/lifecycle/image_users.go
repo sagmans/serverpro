@@ -40,6 +40,16 @@ const (
 	// aliases expanded. The empty config keeps a cvtsudoers.conf filter from
 	// hiding rules.
 	SudoersPolicyCommand = SudoersParserPath + " -c /dev/null -e -f json " + sudoersMainPath
+	// sudoersPolicyShape is a line cvtsudoers' JSON holds whenever it lists
+	// a rule, and every serverpro host has the admin's rule. Without it the
+	// removal cannot trust that the parse below says what it expects, so
+	// it stops before userdel.
+	sudoersPolicyShape = `"User_Specs": [`
+	// sudoersUserNameKey and sudoersUserIDKey are the JSON keys cvtsudoers
+	// writes for an account named by name or by #uid, in a rule's user or
+	// run-as list or in a Defaults binding.
+	sudoersUserNameKey = "username"
+	sudoersUserIDKey   = "userid"
 	// visudoParsedSuffix ends each line visudo -c prints for a file it read
 	// (under LC_ALL=C), which is how sudo itself lists every include.
 	visudoParsedSuffix = ": parsed OK"
@@ -85,7 +95,7 @@ var imageUserNamePattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 // match rules by name only. Last, before userdel, sudo's own parser must
 // find no rule or Defaults entry left that names the account or its uid, so
 // a form the line edits cannot see stops the removal instead of outliving
-// it. The script never touches root, the admin user, or a uid 0 account,
+// it; output it cannot read in full stops it too. The script never touches root, the admin user, or a uid 0 account,
 // and it is a no-op for an account that is already gone.
 func ImageUsersRemovalScript(admin string, users []string) (string, error) {
 	for _, user := range users {
@@ -150,16 +160,65 @@ read_sudoers_policy() {
   [ -x ` + SudoersParserPath + ` ] || stop "cannot check the sudoers rules: ` + SudoersParserPath + ` (sudo package) is missing"
   policy=$(` + SudoersPolicyCommand + ` 2>/dev/null) || stop "sudo's parser cannot read the sudoers rules; fix them with visudo -c first"
 }
-# policy_names_user and policy_names_uid succeed when $policy names account
-# $1 or uid $1. The match is on the parser's JSON, not on sudoers text, so a
-# user list, alias, or continued line cannot hide the name.
-policy_names_user() {
-  case $policy in (*"\"username\": \"$1\""*) return 0 ;; esac
-  return 1
-}
-policy_names_uid() {
-  case $policy in (*"\"userid\": $1"[!0-9]*) return 0 ;; esac
-  return 1
+# policy_names_account succeeds when $policy names account $1 or uid $2 (an
+# empty one is not checked), exits ` + noMatchStatus + ` when it names neither, and exits 2 when
+# the JSON is not in the shape it reads. The match is on the parser's JSON,
+# not on sudoers text, so a user list, alias, or continued line cannot hide
+# the name. It is the last gate before userdel, so it fails closed: every
+# account key in the JSON must also be one it read whole, and a change to
+# the format (other spacing, a quoted uid, an escaped name) stops the
+# removal instead of letting a live rule go unseen.
+policy_names_account() {
+  printf '%s\n' "$policy" | awk -v user="$1" -v uid="$2" -v shape=` + shell.Quote(sudoersPolicyShape) + ` \
+    -v name_key=` + shell.Quote(sudoersUserNameKey) + ` -v id_key=` + shell.Quote(sudoersUserIDKey) + ` '
+    # keys counts each "key" followed by a colon outside a string value.
+    function keys(text, key,    n, at, rest) {
+      n = 0
+      while ((at = index(text, key)) > 0) {
+        rest = substr(text, at + length(key))
+        if ((at == 1 || substr(text, at - 1, 1) != "\\") && rest ~ /^[ \t]*:/) n++
+        text = rest
+      }
+      return n
+    }
+    # names counts each "key": "value" with a plain value, and notes the
+    # account.
+    function names(text, prefix,    n, at, end, value) {
+      n = 0
+      while ((at = index(text, prefix)) > 0) {
+        text = substr(text, at + length(prefix))
+        end = index(text, "\"")
+        if (end == 0) continue
+        value = substr(text, 1, end - 1)
+        if (value ~ /\\/) continue
+        n++
+        if (user != "" && value == user) found = 1
+      }
+      return n
+    }
+    # ids counts each "key": digits, and notes the uid.
+    function ids(text, prefix,    n, at, value) {
+      n = 0
+      while ((at = index(text, prefix)) > 0) {
+        text = substr(text, at + length(prefix))
+        if (!match(text, /^[0-9]+/)) continue
+        value = substr(text, 1, RLENGTH)
+        n++
+        if (uid != "" && value == uid) found = 1
+      }
+      return n
+    }
+    index($0, shape) { shaped = 1 }
+    {
+      seen = keys($0, "\"" name_key "\"") + keys($0, "\"" id_key "\"")
+      read = names($0, "\"" name_key "\": \"") + ids($0, "\"" id_key "\": ")
+      if (seen != read) unread = 1
+    }
+    END {
+      if (!shaped || unread) exit 2
+      exit found ? 0 : 1
+    }
+  '
 }
 # names_user succeeds when a rule or directive in file $2 names account $1,
 # exits ` + noMatchStatus + ` when none does, and anything else when it cannot tell. The file
@@ -232,9 +291,11 @@ remove_image_user() {
     uid=$(printf '%s\n' "$entry" | cut -d: -f3)
     [ "$uid" != 0 ] || stop "$user has uid 0"
     read_sudoers_policy
-    if policy_names_uid "$uid"; then
-      stop "a sudoers rule names $user by uid #$uid, and serverpro removes rules by name only; take it out with visudo and rerun"
-    fi
+    case $(exit_status policy_names_account '' "$uid") in
+      (0) stop "a sudoers rule names $user by uid #$uid, and serverpro removes rules by name only; take it out with visudo and rerun" ;;
+      (` + noMatchStatus + `) ;;
+      (*) stop "sudo's parse of the sudoers rules is not in the form serverpro reads, so nothing was changed" ;;
+    esac
     login_shell=$(printf '%s\n' "$entry" | cut -d: -f7)
     # The undo command puts back what the lock changes: the expiry and shell
     # as they were (empty means none and the default shell), and the
@@ -315,9 +376,11 @@ remove_image_user() {
     printf 'removed the rules for %s from %s; the original is in %s\n' "$user" "$file" "$dest"
   done
   read_sudoers_policy
-  if policy_names_user "$user" || { [ -n "$uid" ] && policy_names_uid "$uid"; }; then
-    stop "sudo still reads a rule for $user after the sudoers edits; remove it with visudo and rerun${unlock:+, or undo the lock ($unlock)}"
-  fi
+  case $(exit_status policy_names_account "$user" "$uid") in
+    (0) stop "sudo still reads a rule for $user after the sudoers edits; remove it with visudo and rerun${unlock:+, or undo the lock ($unlock)}" ;;
+    (` + noMatchStatus + `) ;;
+    (*) stop "sudo's parse of the sudoers rules is not in the form serverpro reads, so $user stays${unlock:+; undo the lock ($unlock)}" ;;
+  esac
   if account_exists "$user"; then
     # userdel exits non-zero for a missing mail spool after it removed the
     # account, so the account's presence decides, not the exit status.

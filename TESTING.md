@@ -608,6 +608,21 @@ by `visudo -c` first. Doctor's own grader graded every probe output.
   `env_keep += "LANG LC_* TZ"`, `env_check += COLORTERM`, and a
   `secure_path` bound to one user.
 
+The removal's last check before `userdel` matched the parser's JSON text with
+shell patterns that expected one blank after each colon. A sixth run, in the
+same kind of container, put a wrapper in front of `cvtsudoers` that dropped
+those blanks. With a `#uid` rule for the account, the old script removed the
+account and left the rule live for the next account with that uid. The new
+check read the same output as unreadable, and the script stopped with nothing
+changed; it did the same with only a name rule. Without the wrapper, both
+scripts removed the account with only its own drop-in and stopped on a
+`#uid` rule and on a run-as list that names it. The new check, run under
+`mawk` on hand-made output, found a listed name and uid, did not match a
+longer or shorter uid or a key inside a command string, and read as
+unreadable: a missing blank after or an extra blank before a colon, a quoted
+uid, an escaped name, one-line JSON, and output without the `User_Specs`
+line.
+
 Not covered: a real Vultr host (doctor `--fix` was not run against
 production).
 

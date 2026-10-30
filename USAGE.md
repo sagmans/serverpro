@@ -877,7 +877,10 @@ from older hosts. For each account, the removal:
    account created later with the same name or uid gets no sudo from it.
 
 A read that fails, rather than finding nothing (the account database, the
-process list, a sudoers file, or sudo's parser), stops the removal too.
+process list, a sudoers file, or sudo's parser), stops the removal too. So
+does parser output that is not in the exact form the check reads, for
+example other spacing, a quoted uid, or an escaped name: the check must read
+every account name and uid in it, or it cannot tell that none is left.
 
 Any other account that `privileged accounts` lists is report-only, also
 with `--fix`, and doctor never suggests removing it. A CI deploy user that

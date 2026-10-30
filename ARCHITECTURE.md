@@ -435,7 +435,9 @@ flowchart LR
    before userdel when a shared file still names the account outside its own
    rules, and before userdel when sudo's own parser
    (`lifecycle.SudoersPolicyCommand`, `cvtsudoers` JSON) still finds the
-   name or uid in any rule or Defaults entry, and it never touches root, the
+   name or uid in any rule or Defaults entry, or prints an account key the
+   check cannot read whole (it requires the `"User_Specs": [` line and
+   reads every `username` and `userid` value), and it never touches root, the
    admin user, or uid 0. Then converge the managed host tools through the
    embedded bootstrap script and apply the egress lockdown. With
    `reboot.enabled: true`, install the gated reboot (`remote_reboot_gate`
