@@ -25,15 +25,15 @@ func TestSupportedRuntimeContract(t *testing.T) {
 
 func TestReviewedPackageBaselines(t *testing.T) {
 	want := map[string]string{
-		"ca-certificates":       "20260601~24.04.1",
-		"curl":                  "8.5.0-2ubuntu10.15",
+		"ca-certificates":       "20260816ubuntu0.24.04.1",
+		"curl":                  "8.5.0-2ubuntu10.16",
 		"gnupg":                 "2.4.4-2ubuntu17.6",
 		"ufw":                   "0.36.2-6",
 		"apparmor":              "4.0.1really4.0.1-0ubuntu0.24.04.8",
 		"unattended-upgrades":   "2.9.1+nmu4ubuntu1",
 		"jq":                    "1.7.1-3ubuntu0.24.04.2",
-		"git":                   "1:2.43.0-1ubuntu7.3",
-		"openssh-client":        "1:9.6p1-3ubuntu13.19",
+		"git":                   "1:2.43.0-1ubuntu7.4",
+		"openssh-client":        "1:9.6p1-3ubuntu13.20",
 		"htop":                  "3.3.0-4build1",
 		"docker-ce":             "5:29.9.2-1~ubuntu.24.04~noble",
 		"docker-ce-cli":         "5:29.9.2-1~ubuntu.24.04~noble",
@@ -62,8 +62,8 @@ func TestReviewedPackageBaselines(t *testing.T) {
 func TestTailscalePrerequisitesUseReviewedBaseBaselines(t *testing.T) {
 	got := TailscalePrerequisitePackageBaselines()
 	want := []PackageBaseline{
-		{Name: "ca-certificates", MinimumVersion: "20260601~24.04.1"},
-		{Name: "curl", MinimumVersion: "8.5.0-2ubuntu10.15"},
+		{Name: "ca-certificates", MinimumVersion: "20260816ubuntu0.24.04.1"},
+		{Name: "curl", MinimumVersion: "8.5.0-2ubuntu10.16"},
 		{Name: "jq", MinimumVersion: "1.7.1-3ubuntu0.24.04.2"},
 	}
 	if !slices.Equal(got, want) {

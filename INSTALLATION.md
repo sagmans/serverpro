@@ -48,8 +48,8 @@ reviewed pins, integrity checks, and replacement lifecycle.
 | Tool | Supported version | Enforcement |
 | --- | --- | --- |
 | Tailscale | 1.102.4 | Exact client/daemon release and architecture-specific archive digest. |
-| Git | 1:2.43.0-1ubuntu7.3 | Minimum Ubuntu package version. |
-| OpenSSH client | 1:9.6p1-3ubuntu13.19 | Minimum Ubuntu package version. |
+| Git | 1:2.43.0-1ubuntu7.4 | Minimum Ubuntu package version. |
+| OpenSSH client | 1:9.6p1-3ubuntu13.20 | Minimum Ubuntu package version. |
 | Docker Engine / CLI | 29.9.2 | Minimum vendor package version `5:29.9.2-1~ubuntu.24.04~noble`. |
 | containerd | 2.4.2 | Minimum vendor package version `2.4.2-3~ubuntu.24.04~noble`. |
 | Docker Buildx | 0.38.1 | Minimum vendor package `0.38.1-1~ubuntu.24.04~noble`, or exact checksum-verified official fallback. |
@@ -95,15 +95,15 @@ connector serverpro did not install from `pkg.cloudflare.com`: install and
 
 | Package | Minimum version |
 | --- | --- |
-| `ca-certificates` | `20260601~24.04.1` |
-| `curl` | `8.5.0-2ubuntu10.15` |
+| `ca-certificates` | `20260816ubuntu0.24.04.1` |
+| `curl` | `8.5.0-2ubuntu10.16` |
 | `gnupg` | `2.4.4-2ubuntu17.6` |
 | `ufw` | `0.36.2-6` |
 | `apparmor` | `4.0.1really4.0.1-0ubuntu0.24.04.8` |
 | `unattended-upgrades` | `2.9.1+nmu4ubuntu1` |
 | `jq` | `1.7.1-3ubuntu0.24.04.2` |
-| `git` | `1:2.43.0-1ubuntu7.3` |
-| `openssh-client` | `1:9.6p1-3ubuntu13.19` |
+| `git` | `1:2.43.0-1ubuntu7.4` |
+| `openssh-client` | `1:9.6p1-3ubuntu13.20` |
 | `docker-ce` | `5:29.9.2-1~ubuntu.24.04~noble` |
 | `docker-ce-cli` | `5:29.9.2-1~ubuntu.24.04~noble` |
 | `containerd.io` | `2.4.2-3~ubuntu.24.04~noble` |

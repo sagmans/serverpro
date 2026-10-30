@@ -417,17 +417,32 @@ https://packages.ubuntu.com/noble-updates/jq
 https://packages.ubuntu.com/noble-updates/git
 https://packages.ubuntu.com/noble-updates/openssh-client
 https://packages.ubuntu.com/noble/htop
+https://ubuntu.com/security/notices/USN-8932-1
+https://ubuntu.com/security/notices/USN-8928-1
+https://ubuntu.com/security/notices/USN-8944-1
+https://bugs.launchpad.net/bugs/2171054
 ```
 
 Use: Ubuntu 24.04 LTS (`noble`) managed-host support, host hardening, and direct
-package minimums. Reviewed 2026-10-01 for amd64 and arm64: `ca-certificates`
-`20260601~24.04.1`, `curl` `8.5.0-2ubuntu10.15`, `gnupg`
+package minimums. Reviewed 2026-10-30 for amd64 and arm64: `ca-certificates`
+`20260816ubuntu0.24.04.1`, `curl` `8.5.0-2ubuntu10.16`, `gnupg`
 `2.4.4-2ubuntu17.6`, `ufw` `0.36.2-6`, `apparmor`
 `4.0.1really4.0.1-0ubuntu0.24.04.8`, `unattended-upgrades`
 `2.9.1+nmu4ubuntu1`, `jq` `1.7.1-3ubuntu0.24.04.2`, `git`
-`1:2.43.0-1ubuntu7.3`, `openssh-client` `1:9.6p1-3ubuntu13.19`, and `htop`
+`1:2.43.0-1ubuntu7.4`, `openssh-client` `1:9.6p1-3ubuntu13.20`, and `htop`
 `3.3.0-4build1`. These are reviewed floors; signed newer candidates remain
-valid and must not be downgraded. `dpkg-query -W` can retain version data for a
+valid and must not be downgraded.
+The 2026-10-30 review raises four floors to security releases that already
+pass the seven-day age gate. curl `8.5.0-2ubuntu10.16` (USN-8932-1) and
+openssh-client `1:9.6p1-3ubuntu13.20` (USN-8928-1) were published
+2026-10-14. git `1:2.43.0-1ubuntu7.4`, published 2026-10-19, fixes the
+regression that curl update causes (LP#2171054), so both floors move together.
+ca-certificates `20260816ubuntu0.24.04.1` (USN-8944-1, 2026-10-20) removes
+emSign ECC Root CA - G3 (Mozilla 2.90). Its version format changed, but dpkg
+ordering still sorts it above `20260601~24.04.1`: the leading date
+`20260816` is greater than `20260601`. apparmor
+`4.0.1really4.0.1-0ubuntu0.24.04.9` exists only in `noble-updates` with no
+security fix, so its floor stays. `dpkg-query -W` can retain version data for a
 removed package in `config-files` state, so package-floor checks require
 `${db:Status-Status}` to be exactly `installed` before trusting `${Version}`.
 

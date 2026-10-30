@@ -16,24 +16,30 @@ const (
 	ManagedHostCodename    = "noble"
 
 	caCertificatesPackage = "ca-certificates"
-	caCertificatesVersion = "20260601~24.04.1"
+	// USN-8944-1 drops the distrusted emSign ECC Root CA - G3, so older
+	// bundles keep accepting chains Mozilla no longer trusts.
+	caCertificatesVersion = "20260816ubuntu0.24.04.1"
 	curlPackage           = "curl"
-	curlVersion           = "8.5.0-2ubuntu10.15"
-	gnupgPackage          = "gnupg"
-	gnupgVersion          = "2.4.4-2ubuntu17.6"
-	ufwPackage            = "ufw"
-	ufwVersion            = "0.36.2-6"
-	apparmorPackage       = "apparmor"
-	apparmorVersion       = "4.0.1really4.0.1-0ubuntu0.24.04.8"
-	unattendedPackage     = "unattended-upgrades"
-	unattendedVersion     = "2.9.1+nmu4ubuntu1"
-	jqPackage             = "jq"
-	jqVersion             = "1.7.1-3ubuntu0.24.04.2"
+	// USN-8932-1 security fix; git below its floor regresses against it.
+	curlVersion       = "8.5.0-2ubuntu10.16"
+	gnupgPackage      = "gnupg"
+	gnupgVersion      = "2.4.4-2ubuntu17.6"
+	ufwPackage        = "ufw"
+	ufwVersion        = "0.36.2-6"
+	apparmorPackage   = "apparmor"
+	apparmorVersion   = "4.0.1really4.0.1-0ubuntu0.24.04.8"
+	unattendedPackage = "unattended-upgrades"
+	unattendedVersion = "2.9.1+nmu4ubuntu1"
+	jqPackage         = "jq"
+	jqVersion         = "1.7.1-3ubuntu0.24.04.2"
 
-	gitPackage           = "git"
-	gitVersion           = "1:2.43.0-1ubuntu7.3"
+	gitPackage = "git"
+	// Repairs the LP#2171054 regression the curl security update causes, so
+	// both floors must move together.
+	gitVersion           = "1:2.43.0-1ubuntu7.4"
 	opensshClientPackage = "openssh-client"
-	opensshClientVersion = "1:9.6p1-3ubuntu13.19"
+	// USN-8928-1 security fix.
+	opensshClientVersion = "1:9.6p1-3ubuntu13.20"
 	htopPackage          = "htop"
 	htopVersion          = "3.3.0-4build1"
 	dockerCEPackage      = "docker-ce"
