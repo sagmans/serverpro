@@ -254,6 +254,15 @@ func rebootPendingCommand() string {
 // as a command list fails, because it may grant every command. So does a
 // listed command whose name is in rootEquivalentNames (rootEquivalentCommands,
 // passed in by the caller), because it reaches root by itself.
+//
+// sudoers lets one rule carry several "Host_List = Cmnd_Spec_List" parts
+// joined by ":", so ruleScope grades every part and the rule takes the worst
+// of them: grading only the first part would let a later ALL read as a
+// warning. Escaped characters belong to command arguments, a Runas spec can
+// hold a ":", and tags and digests end in one, so all of them go before the
+// split. An "=" still left in a part is an option such as CWD= or CHROOT=
+// that the program does not model, so the rule fails instead of passing as
+// limited. The program sticks to POSIX awk, because Ubuntu runs it with mawk.
 const sudoersGrantsProgram = `BEGIN {
   rootCount = split(rootEquivalentNames, rootName, " ")
   for (ri = 1; ri <= rootCount; ri++) rootEquivalent[rootName[ri]] = 1
@@ -293,6 +302,23 @@ function commandScope(list, depth,    n, i, j, entry, part, word, cmd, nested, i
   }
   return out
 }
+function ruleScope(rule,    spec, n, i, list, scope, word, m, j, seen, out) {
+  gsub(/\\(\\|:|=|,)/, "", rule)
+  gsub(/\([^)]*\)/, "", rule)
+  gsub(/(NO)?(PASSWD|EXEC|SETENV|LOG_INPUT|LOG_OUTPUT|MAIL|FOLLOW|INTERCEPT):/, "", rule)
+  gsub(/sha(224|256|384|512):[^ \t,]+/, "", rule)
+  n = split(rule, spec, ":")
+  out = ""
+  for (i = 1; i <= n; i++) {
+    list = spec[i]
+    if (!sub(/^[^=]*=/, "", list) || index(list, "=")) return ""
+    scope = commandScope(list, 0)
+    if (scope == "") return ""
+    m = split(scope, word, " ")
+    for (j = 1; j <= m; j++) if (!(word[j] in seen)) { seen[word[j]] = 1; out = out (out == "" ? "" : " ") word[j] }
+  }
+  return out
+}
 FNR == 1 { line = "" }
 { line = line $0 }
 /\\$/ { sub(/\\$/, "", line); next }
@@ -317,8 +343,7 @@ FNR == 1 { line = "" }
   }
   if (who ~ /^(Defaults|#include|@include|Host_Alias|Runas_Alias|User_Alias)/) next
   if (who == admin || who == "root" || who == "%sudo" || who == "%admin") next
-  commands = rule
-  scope = sub(/^[^=]*=/, "", commands) ? commandScope(commands, 0) : ""
+  scope = ruleScope(rule)
   if (scope == "") printf "` + driftFailPrefix + `%s grants sudo to %s without a command limit\n", FILENAME, who
   else if ((rooted = rootEquivalents(scope)) != "") printf "` + driftFailPrefix + `%s grants sudo to %s for root-equivalent commands: %s\n", FILENAME, who, rooted
   else printf "` + driftWarnPrefix + `%s grants sudo to %s for listed commands: %s\n", FILENAME, who, scope

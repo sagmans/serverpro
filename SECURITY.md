@@ -168,8 +168,8 @@ default.
   come back. Privileged accounts has a repair only for the accounts the
   compute adapter declares as its image accounts; every other account,
   sudoers rule, or group member is report-only, because it may run a
-  workload such as a CI deploy. A sudoers rule without a command limit
-  fails, and so does a rule that lists a root-equivalent command (a shell,
+  workload such as a CI deploy. A sudoers rule without a command limit in
+  any of its `:`-joined command lists fails, and so does a rule that lists a root-equivalent command (a shell,
   editor, pager, interpreter, file writer, or account, package, service, or
   container manager) by any path or arguments; a rule that lists only other
   absolute command paths warns and names them. Give such an account a

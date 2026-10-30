@@ -307,6 +307,8 @@ func TestPrivilegedAccountsCommandListsEveryRootPath(t *testing.T) {
 		"old.dpkg-dist":       "ghost ALL=(ALL) ALL\n",
 		"ops":                 "ops ALL=(ALL) NOPASSWD: ALL\n",
 		"wild":                "wild ALL=(root) /usr/bin/*\n",
+		"multi":               "multi ALL = /usr/bin/id : ALL = ALL\n",
+		"split":               "split ALL=(root) NOPASSWD: /usr/bin/id : web1=(root : adm) NOPASSWD: /usr/bin/whoami\n",
 	})
 	out, err := driftProbe{
 		command:      privilegedAccountsCommand("deploy", []string{"linuxuser", "absent"}),
@@ -330,6 +332,9 @@ func TestPrivilegedAccountsCommandListsEveryRootPath(t *testing.T) {
 		driftFailPrefix + sudoers + ".d/shells grants sudo to shells for root-equivalent commands: /usr/bin/systemctl /usr/bin/python3.12\n",
 		driftFailPrefix + sudoers + ".d/ops grants sudo to ops without a command limit\n",
 		driftFailPrefix + sudoers + ".d/wild grants sudo to wild without a command limit\n",
+		// Every ":"-joined part of a rule is graded, so a later ALL fails.
+		driftFailPrefix + sudoers + ".d/multi grants sudo to multi without a command limit\n",
+		driftWarnPrefix + sudoers + ".d/split grants sudo to split for listed commands: /usr/bin/id /usr/bin/whoami\n",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output %q lacks %q", out, want)
