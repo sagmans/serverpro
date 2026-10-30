@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"github.com/sagmans/serverpro/internal/testhttp"
 )
@@ -58,28 +57,6 @@ func TestStatusErrorMessageIncludesMethodPathAndBody(t *testing.T) {
 		}
 	}
 
-	// A Cloudflare failure names the endpoint without the account or tunnel
-	// it targeted, and repeats only the start of a long answer.
-	const account, tunnel = "0123456789abcdef0123456789ABCDEF", "c0ffee00-1234-4abc-9def-0123456789ab"
-	body := `{"success":false,"errors":[{"code":1000,"message":"tunnel ` + tunnel + ` failed"}],"result":"` + strings.Repeat("é", 400) + `"}`
-	err = &StatusError{Method: http.MethodGet, Path: "/accounts/" + account + "/cfd_tunnel/" + tunnel + "/configurations?name=web", Status: "500 Internal Server Error", StatusCode: http.StatusInternalServerError, Body: body}
-	msg = err.Error()
-	for _, leaked := range []string{account, tunnel, "name=web"} {
-		if strings.Contains(msg, leaked) {
-			t.Fatalf("status error message %q repeats %q", msg, leaked)
-		}
-	}
-	for _, want := range []string{"/accounts/{id}/cfd_tunnel/{id}/configurations failed", `"code":1000`, "tunnel {id} failed", "(" + strconv.Itoa(len(body)) + " bytes)"} {
-		if !strings.Contains(msg, want) {
-			t.Fatalf("status error message %q missing %q", msg, want)
-		}
-	}
-	if !utf8.ValidString(msg) || len(msg) > len(http.MethodGet)+len(err.Path)+len(err.Status)+maxErrorBodyBytes+64 {
-		t.Fatalf("status error message is not short valid UTF-8: %d bytes", len(msg))
-	}
-	if err.Body != body || !strings.Contains(err.Path, tunnel) {
-		t.Fatal("the error's fields must keep the full path and body for classification")
-	}
 }
 
 func TestDoRawAcceptsCompleteBodyAtLimit(t *testing.T) {

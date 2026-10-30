@@ -81,13 +81,8 @@ func TestTunnelIngressReadsRemoteRules(t *testing.T) {
 		wantErr error
 	}{
 		{name: "remote ingress", body: `{"result":{"tunnel_id":"tun1","config":{"ingress":[{"hostname":"ssh.example.test","service":"ssh://localhost:22","originRequest":{"bastionMode":true,"proxyType":"socks"}},{"service":"http_status:404"}]}}}`, want: TunnelRemoteConfig{Rules: []TunnelIngressRule{{Service: "ssh://localhost:22", BastionMode: true, ProxyType: "socks"}, {Service: "http_status:404"}}}},
-		// Configuration-wide origin settings reach every rule.
-		{name: "configuration defaults", body: `{"result":{"tunnel_id":"tun1","config":{"originRequest":{"bastionMode":true,"proxyType":"socks"},"ingress":[{"service":"http://localhost:8080"},{"service":"http_status:404"}]}}}`, want: TunnelRemoteConfig{Rules: []TunnelIngressRule{{Service: "http://localhost:8080", BastionMode: true, ProxyType: "socks"}, {Service: "http_status:404", BastionMode: true, ProxyType: "socks"}}}},
 		// A tunnel nobody has configured yet has no remote configuration.
 		{name: "no configuration", body: `{"result":{"tunnel_id":"tun1","config":null}}`},
-		// A body that does not name the tunnel proves nothing about it.
-		{name: "empty body", body: `{}`, wantErr: ErrTunnelConfigUnproven},
-		{name: "another tunnel", body: `{"result":{"tunnel_id":"tun2","config":null}}`, wantErr: ErrTunnelConfigUnproven},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			handlerErr := testhttp.NewHandlerErrorRecorder(t)

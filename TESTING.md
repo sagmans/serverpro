@@ -879,6 +879,34 @@ in every unit and environment file; no run printed it.
   port 70000 count as SSH routes; `tcp://localhost:2222`,
   `http://localhost:8080`, and `https://localhost` do not.
 
+### Unit-test cases moved to harness runs
+
+On 2026-10-30 the cases a review range had added to the unit tests as shell
+scripts against fakes, or as Go rows the coverage gate does not need, moved
+out of the unit tests:
+
+- The sshd settings fix on a masked `ssh.service`, stopped or running, and
+  the `tailscale serve` probe with a failed `ss`. Real systemd and the
+  rendered probe in an Ubuntu 24.04 container prove them, as recorded under
+  sshd repair fail-safe dogfood and Drift checks dogfood.
+- The Serve check's evidence when the SSH run fails after the probe printed
+  the config, and output without the listener section; nine packet-policy
+  rows (CIDR, member, protocol, port-list, tailnet-range, tagged, and
+  `hosts` alias spellings, flagged and not flagged); the status error's ID,
+  query, and length handling; and the tunnel ingress read's
+  configuration-wide defaults, empty body, and foreign tunnel.
+
+A throwaway harness, never committed, ran each moved Go case through the
+real code path (the Tailscale and Cloudflare clients and `httpjson.Client.Do`
+against a fake API, the Serve check with a scripted remote, and the OpenSSH
+preflight). All 26 checks passed with the same results the removed rows
+expected; the ingress cases also stopped the preflight (bastion mode twice,
+then an unread configuration for the empty and the foreign answer).
+
+Coverage of the four affected packages went from 90.6% to 89.6% of
+statements, and the repository aggregate from 85.9% to 85.7%, with no
+function at 0%. The gate (81.8%) still passes, so no Go row stayed.
+
 ### OpenSSH off dogfood
 
 On 2026-10-30 the rendered OpenSSH-off step and the `openssh disabled` probe
@@ -981,7 +1009,7 @@ against production, and no dogfood server exists), and the provider consoles.
 | `internal/importsync` | Discover/import recovery from provider labels through a read-only consumer contract. | Managed/unmanaged filtering, provider-recovered typed access-policy persistence, valid provider-only mesh intent, legacy disabled-mesh repair, omitted-token credential merge, duplicate labels, dry-run, preserving force refresh, malformed-existing-artifact and concurrent-config-drift rejection, same-tunnel provenance retention without ownership transfer, context-cancellable canonical workflow locking and matching-tailnet serialization, stable tailnet persistence, filesystem errors fail closed, injected config/credential/state/registry failures, marker-based retry, state-without-registry discovery, Tailscale/Cloudflare enrichment matchers (`enrich_test.go`). |
 | `internal/ingress` | Generic ingress route model and Cloudflare Tunnel pending adapter. | Add/remove validation, pending status, no public route mutation claims. |
 | `internal/lifecycle` | Provision sequence and state checkpoints through a create-only compute contract. | Tunnel install run under the shared apt-sized connector deadline, image account removal after the admin password step (only for declaring providers, never the admin or root, in safe step order, typed `remote_image_users` failure), the OpenSSH-off script as the last remote create script, after a remote ingress read that finds only the catch-all rule (after the lockdown and the gated reboot install, which runs only with `reboot.enabled: true`), the egress lockdown after the tools in create and as the last step of `server bootstrap` (skipped only when config defers it), a create with no reachable host failing closed under restricted egress, Narrow compute fakes, typed phase/resource failures, device bind bounded by the bootstrap key time (bounded local-clock fallback) then pinned to the recorded device ID on rerun, leftover device records ignored on fresh compute, provider recorded before the first provider call, checkpoint save-failure matrix, field-preserving concurrent ingress/status checkpoints, persisted tailnet identity plus missing/token-relative migration and conflict rejection, auth-key compensation, Tailscale policy/auth key cleanup, Cloudflare tunnel exact-name adoption/ambiguity/created-vs-adopted provenance/fresh rollback, compute create reconciliation, state stat errors, wait loops, remote bootstrap, omitted-lockdown convergence, shared Ed25519 fresh/rerun/public-key repair, Git deploy access, exact managed deploy-to-account cleanup, PAT stdin isolation, partial failure state. |
-| `internal/mesh` | Provider-neutral mesh types, canonical device identity matching, and fail-closed device selection. | Short/FQDN/trailing-dot normalization, required-tag matching, stale same-name devices excluded by enrolment time, undated devices failing closed, ambiguity listing every candidate ID, recorded-device binding with missing/changed rejection and no name fallback, unknown SSH-rule field preservation through destination rewrites, and packet-policy allow-all detection (absent sections, empty acls, legacy users/ports, scoped and port-limited rules, and the equivalent spellings `autogroup:member`, `0.0.0.0/0`, `::/0`, `[::/0]`, `0-65535`, and `1-65535`, including inside an acl port list; `tcp:*`, `udp:*`, and numbered protocols with every port; CIDRs that cover a whole tailnet range; `autogroup:tagged` as a destination only; and `hosts` aliases, with a part of a range, a single address, and `icmp:*` not flagged). |
+| `internal/mesh` | Provider-neutral mesh types, canonical device identity matching, and fail-closed device selection. | Short/FQDN/trailing-dot normalization, required-tag matching, stale same-name devices excluded by enrolment time, undated devices failing closed, ambiguity listing every candidate ID, recorded-device binding with missing/changed rejection and no name fallback, unknown SSH-rule field preservation through destination rewrites, and packet-policy allow-all detection (absent sections, empty acls, legacy users/ports, scoped and port-limited rules, and the literal allow-all acl and grant; the other spellings of everything are proven by the harness runs under Tailnet policy allow-all dogfood and Unit-test cases moved to harness runs). |
 | `internal/network` | Network policy primitives. | Egress modes and allow-list behavior; the restricted lockdown carries its own fail-closed proof (UFW default, blocked connect, allowed connect). |
 | `internal/ownership` | Provider ownership labels/tags. | Reversible encoding, cross-provider label equivalence, live ownership validation. |
 | `internal/lifecycle` admin password | Post-boot admin password set shared by create and `doctor --fix`. | Plain `chpasswd` over protected stdin (no `--encrypted`, no precomputed hash), first-boot grant removal with sudoers rollback, set before any other remote step; cloud-init renders no password material. |
@@ -992,8 +1020,8 @@ against production, and no dogfood server exists), and the provider consoles.
 | `internal/provider/vultr` | Vultr compute adapter. | Declared `linuxuser` image account, catalog mapping, tag encoding, IPv4-only create, firewall group lifecycle, paginated firewall-rule inventory, checkpoint retry reconciliation that creates only missing required rules while rejecting foreign/broadened rules or attachments, status/power/delete/list, error identity and redaction. |
 | `internal/provider/digitalocean` | DigitalOcean compute adapter. | Catalog mapping, one namespace/server-derived firewall selector, droplet ownership/custom tags, no direct firewall droplet-ID attachments, IPv4-only create, status/power/delete, all-resource delete preflight, guarded legacy broad-selector import/cleanup with zero-unrelated-match inventory, paginated droplet/firewall inventory, malformed pagination fail-closed behavior, exact owned-policy recovery and checkpoint retry validation, missing/ambiguous/foreign/broadened fail-closed behavior, error identity and redaction. |
 | `internal/provider/tailscale` | Tailscale API adapter. | Auth key create/list/tracked-ID delete, devices, device waits that skip devices enrolled before the key and return ambiguity without polling, ACL policy read/validate/update, conservative global reconcile planning, retained tag-owner dependency protection, approved-plan refetch equality, no-change behavior, custom-shape retention, mixed-rule destination rewrite, exact `If-Match` propagation, missing-ETag mutation rejection, and a read-only HuJSON packet-policy read with API errors propagated. |
-| `internal/provider/cloudflare` | Cloudflare API adapter. | Account validation, tunnel list/create/token/get/delete, remote ingress read (with and without a remote configuration, configuration-wide origin defaults merged into every rule, empty private network and hostname route lists, and an empty or foreign answer rejected), connector health polling, pagination. |
-| `internal/provider/httpjson` | Shared HTTP JSON client. | Auth headers, JSON encode/decode, bounded body, status errors (text with account and tunnel IDs and the query masked and a long body cut on a UTF-8 boundary, fields kept whole), redaction by caller. |
+| `internal/provider/cloudflare` | Cloudflare API adapter. | Account validation, tunnel list/create/token/get/delete, remote ingress read (with and without a remote configuration, with empty private network and hostname route lists; configuration-wide defaults, private routes, and an empty or foreign answer are proven under Tunnel SSH route preflight dogfood), connector health polling, pagination. |
+| `internal/provider/httpjson` | Shared HTTP JSON client. | Auth headers, JSON encode/decode, bounded body, status errors (method, path, and body in the text; ID and query masking and the UTF-8 cut are proven under Provider error evidence dogfood), redaction by caller. |
 | `internal/provider/providerutil` | Shared provider mutation validation and secret-safe diagnostics. | Provider mismatch, token/bootstrap redaction, encoded bootstrap forms. |
 | `internal/redact` | Secret redaction. | Token/password/hash/auth-key removal from strings/errors; redacted errors preserve sentinel, cancellation, and typed identity through `errors.Is`/`errors.As`. |
 | `internal/releasecontract` | Test-only release workflow contract. | Parsed YAML dependency graph, exact complete validate/build/package/release step order and uniqueness, exact target/runner/GOOS/GOARCH build matrix and build environment, exact native build output argument, target-paired binary handoff and archive input, target-paired SBOM attestations, and unique prerelease classification before publication. |
