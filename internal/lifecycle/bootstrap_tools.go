@@ -30,7 +30,8 @@ func BootstrapTools(ctx context.Context, r remote.Runner, cfg config.Config, st 
 // step follows) and last in server bootstrap. Bootstrap is the recovery after
 // a create whose tool phase failed, and that create never reached the
 // lockdown, so bootstrap must converge egress too or the host stays open with
-// only the tools' rules.
+// only the tools' rules. It checks the phase flag rather than LockdownDue so
+// that an open mode host also converges, to allowed outgoing traffic.
 func applyEgressLockdown(ctx context.Context, r remote.Runner, cfg config.Config, st state.State) error {
 	if !cfg.Network.Egress.PhaseLockdownAfterBootstrap {
 		return nil

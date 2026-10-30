@@ -53,10 +53,13 @@ type Egress struct {
 	PhaseLockdownAfterBootstrap bool   `yaml:"phase_lockdown_after_bootstrap" json:"phase_lockdown_after_bootstrap"`
 }
 
-// LockdownDue is the one rule for whether serverpro owns a restricted egress
-// lockdown on the host. Create, bootstrap, and doctor all ask it, so an
-// explicit phase_lockdown_after_bootstrap: false is never undone by a doctor
-// check or --fix that create itself would have skipped.
+// LockdownDue is the one rule for whether serverpro owes a restricted egress
+// lockdown on the host. Doctor asks it before it checks or repairs the
+// lockdown, and create asks it before it fails a run that has no remote host,
+// so an explicit phase_lockdown_after_bootstrap: false is never undone by a
+// doctor check or --fix. The egress phase of create and bootstrap reads the
+// phase flag directly, because in open mode that phase also resets outgoing
+// traffic to allow; for restricted mode both agree.
 func (e Egress) LockdownDue() bool {
 	return e.Mode == EgressModeRestricted && e.PhaseLockdownAfterBootstrap
 }
