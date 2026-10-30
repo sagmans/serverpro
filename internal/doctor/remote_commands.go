@@ -370,13 +370,16 @@ func sshdManagedDropin() string {
 //     signals, so the signal traps exit explicitly to run it, for example when
 //     the SSH session drops at the doctor deadline.
 //
-// It then reloads with try-reload-or-restart: that reloads a running
-// ssh.service (sshd supports reload, and reloads do not count towards the
-// start limit) and does nothing while a socket-activated ssh.service is
-// inactive, since the next socket-spawned sshd reads the new config. A
-// running daemon is reloaded even when the files already match, because an
-// earlier reload may have failed after its write and sshd -T only proves the
-// on-disk config. Last, it checks every managed value through sshd -T: a
+// It then reloads ssh.service only while it runs (sshd supports reload, and
+// reloads do not count towards the start limit). An inactive unit needs no
+// job: a socket-spawned sshd reads the new config when it starts, and the
+// masked unit OpenSSH off leaves behind may refuse any job but stop, which
+// would fail the repair after its write and skip the check below. A unit
+// masked while its sshd still runs takes no reload job either: systemd drops
+// it and reports success, so that sshd gets SIGHUP straight from systemctl
+// kill, which is what the unit's own reload sends. A running daemon is
+// reloaded even when the files already match, because an earlier reload may
+// have failed after its write and sshd -T only proves the on-disk config. Last, it checks every managed value through sshd -T: a
 // valid config can still hide the drop-in (a lower-numbered drop-in sets the
 // keyword first, or the Include sits inside a Match block), and reporting
 // success then would leave every sshd check failing with no explanation.
@@ -413,9 +416,7 @@ else
   main_changed=1
 fi
 cmp -s "$work/managed" "$dropin" || dropin_changed=1
-changed=0
 if [ "$main_changed" -eq 1 ] || [ "$dropin_changed" -eq 1 ]; then
-  changed=1
   mkdir "$work/d" || exit 1
   for conf in "$dropin_dir"/*.conf; do
     [ -e "$conf" ] || continue
@@ -466,8 +467,12 @@ if [ "$main_changed" -eq 1 ] || [ "$dropin_changed" -eq 1 ]; then
   fi
   sshd -t || abort 'live config failed sshd -t after the write'
 fi
-if [ "$changed" -eq 1 ] || systemctl is-active --quiet ` + sshServiceUnit + `; then
-  sshd -t && systemctl try-reload-or-restart ` + sshServiceUnit + ` || exit 1
+if systemctl is-active --quiet ` + sshServiceUnit + `; then
+  if [ "$(systemctl show -p LoadState --value ` + sshServiceUnit + `)" = masked ]; then
+    sshd -t && systemctl kill --kill-who=main --signal=HUP ` + sshServiceUnit + ` || exit 1
+  else
+    sshd -t && systemctl try-reload-or-restart ` + sshServiceUnit + ` || exit 1
+  fi
 else
   sshd -t || exit 1
 fi

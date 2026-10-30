@@ -228,6 +228,18 @@ and keys were deleted afterwards.
   new drop-in, and exited 1. When the restore `mv` also failed, the fix exited
   3 with the "restoring the previous files FAILED" message. No staging or
   restore temp files remained in either case.
+
+On 2026-10-30 the rendered sshd fix before and after the reload change ran as
+root in a disposable privileged `ubuntu:24.04` container booted with systemd
+255 and OpenSSH 9.6p1, with the serverpro drop-in removed before each run.
+Both wrote the drop-in and exited 0 with `ssh.service` masked and stopped (as
+OpenSSH off leaves it), running with the socket off (one reload, same main
+PID), and inactive behind `ssh.socket`. With `ssh.service` masked while its
+sshd still ran, systemd dropped the reload job and reported success, so the
+earlier fix left that sshd on its old config; the current fix sent SIGHUP and
+sshd logged its restart under the same main PID. On a masked, stopped unit
+`systemctl try-reload-or-restart` exits 0, and `reload-or-restart` fails with
+"Unit ssh.service is masked."
 - When the SSH client was killed during candidate validation with a TTY, the
   hangup trap removed the temp directory and left the live config unchanged.
   Without a TTY the repair received no signal and completed with a valid

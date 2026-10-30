@@ -173,26 +173,41 @@ func writeExecutable(t *testing.T, dir, name, body string) {
 // fakeSystemctl models the unit states the ssh repair has to handle. Unit
 // state lives in $STATE/<unit>.active (active, inactive, failed) and
 // $STATE/<unit>.enabled; $STATE/<unit>.startlimit makes start fail with
-// start-limit-hit until reset-failed clears it, as systemd does.
+// start-limit-hit until reset-failed clears it, as systemd does, and
+// $STATE/<unit>.masked makes it refuse start and reload jobs, while kill
+// still reaches a masked unit's processes.
 const fakeSystemctl = `cmd=$1; shift
 [ "${1:-}" = --quiet ] && shift
+property=
+if [ "$cmd" = show ]; then property=$2; shift 3; fi
+if [ "$cmd" = kill ]; then shift 2; fi
 unit=$1
 case "$unit" in *.*) ;; *) unit="$unit.service" ;; esac
 printf '%s %s\n' "$cmd" "$unit" >>"$STATE/log"
 state() { cat "$STATE/$unit.active" 2>/dev/null || echo inactive; }
+refuse_masked() {
+  [ -e "$STATE/$unit.masked" ] || return 0
+  echo "Failed to $cmd $unit: Unit $unit is masked." >&2
+  exit 1
+}
 case "$cmd" in
   is-failed) [ "$(state)" = failed ] ;;
   is-active) [ "$(state)" = active ] ;;
   is-enabled) [ "$(cat "$STATE/$unit.enabled" 2>/dev/null)" = yes ] ;;
   reset-failed) rm -f "$STATE/$unit.startlimit"; [ "$(state)" != failed ] || echo inactive >"$STATE/$unit.active" ;;
   start)
+    refuse_masked
     if [ -e "$STATE/$unit.startlimit" ]; then
       echo "Job for $unit failed. start-limit-hit" >&2
       echo failed >"$STATE/$unit.active"
       exit 1
     fi
     echo active >"$STATE/$unit.active" ;;
-  try-reload-or-restart) [ "$(state)" != active ] || echo "reload $unit" >>"$STATE/reloads" ;;
+  try-reload-or-restart) refuse_masked; [ "$(state)" != active ] || echo "reload $unit" >>"$STATE/reloads" ;;
+  show)
+    [ "$property" = LoadState ] || { echo "unexpected show $property" >&2; exit 2; }
+    if [ -e "$STATE/$unit.masked" ]; then echo masked; else echo loaded; fi ;;
+  kill) [ "$(state)" != active ] || echo "hup $unit" >>"$STATE/reloads" ;;
   *) echo "unexpected systemctl $cmd" >&2; exit 2 ;;
 esac`
 
@@ -500,6 +515,33 @@ func TestSSHDSettingsFixIdempotenceScript(t *testing.T) {
 		before := tree.read(t, "sshd_config")
 		if out, err := tree.run(t); err != nil || tree.read(t, "sshd_config") != before {
 			t.Fatalf("second run changed files or failed: %v\n%s", err, out)
+		}
+	})
+	t.Run("changed-masked-service-inactive", func(t *testing.T) {
+		// OpenSSH off leaves ssh.service masked and stopped: the write and
+		// the sshd -T check must still run, with no job for the unit.
+		tree := newSSHDFixTree(t, "Port 22\n", "PermitRootLogin yes\n", false)
+		writeFile(t, filepath.Join(tree.state, sshServiceUnit+".masked"), "")
+		if out, err := tree.run(t); err != nil {
+			t.Fatalf("fix on a masked unit failed: %v\n%s", err, out)
+		}
+		if tree.read(t, "sshd_config.d/99-serverpro.conf") != managedDropin(t) {
+			t.Fatal("drop-in not written")
+		}
+		if tree.stateFile("reloads") != "" || strings.Contains(tree.stateFile("log"), "try-reload-or-restart") {
+			t.Fatalf("inactive masked unit got a job: %q", tree.stateFile("log"))
+		}
+	})
+	t.Run("changed-masked-service-running", func(t *testing.T) {
+		// A unit masked while its sshd runs takes no reload job, so the
+		// running sshd gets SIGHUP instead and reads the new config.
+		tree := newSSHDFixTree(t, "Port 22\n", "PermitRootLogin yes\n", true)
+		writeFile(t, filepath.Join(tree.state, sshServiceUnit+".masked"), "")
+		if out, err := tree.run(t); err != nil {
+			t.Fatalf("fix on a masked running unit failed: %v\n%s", err, out)
+		}
+		if reloads := tree.stateFile("reloads"); reloads != "hup ssh.service\n" {
+			t.Fatalf("reloads = %q, want one SIGHUP", reloads)
 		}
 	})
 	t.Run("temp-file-failure", func(t *testing.T) {

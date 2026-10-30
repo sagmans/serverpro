@@ -217,10 +217,13 @@ access paths for app-owned deployment flows.
     traps run the cleanup that dash otherwise skips on a dropped session. The
     drop-in directory counts as included only before the first `Match`
     block, in absolute or `/etc/ssh`-relative form. It writes only when the
-    managed config differs and then uses `try-reload-or-restart`, which
-    reloads a running `ssh.service` and leaves an inactive, socket-activated
-    one alone; a running daemon is also reloaded when nothing changed, in case
-    an earlier reload failed. Last, it confirms every managed value through
+    managed config differs. It then reloads `ssh.service` only while it runs,
+    with `try-reload-or-restart`, and queues no job for an inactive unit: a
+    socket-activated sshd reads the new config when it starts, and the
+    masked unit OpenSSH off leaves takes no job but stop. A unit masked while
+    its sshd still runs gets SIGHUP through `systemctl kill`, because systemd
+    drops a reload job for it and reports success. A running daemon is also
+    reloaded when nothing changed, in case an earlier reload failed. Last, it confirms every managed value through
     `sshd -T` and fails, naming the values, when a lower-numbered drop-in or
     a `Match`-scoped `Include` hides them. Checks the repair can change (the
     later sshd settings, `sshd units`, and `listening ports`) declare it in
