@@ -444,10 +444,13 @@ https://developers.cloudflare.com/api/resources/zero_trust/subresources/tunnels/
 https://developers.cloudflare.com/tunnel/reference/origin-parameters/
 ```
 
-Use: the remotely managed ingress the OpenSSH-off preflight reads
-(`result.config.ingress[]` with `service` and `originRequest`), and the
-origin parameters (`bastionMode`, `proxyType`) that let a rule reach any
-destination.
+Use: the remotely managed configuration the OpenSSH-off preflight reads
+(`result.tunnel_id`, `result.config.ingress[]` with `service` and
+`originRequest`, the configuration-wide `originRequest`, and
+`warp-routing.enabled`), and the origin parameters (`bastionMode`,
+`proxyType`) that let a rule reach any destination. cloudflared applies the
+configuration-wide `originRequest` to every rule as defaults (upstream
+`ingress/config.go`, `setConfig`).
 
 ### Cloudflare Tunnel configuration file
 

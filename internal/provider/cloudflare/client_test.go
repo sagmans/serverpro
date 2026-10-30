@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"slices"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -75,13 +75,20 @@ func TestTunnelTokenReturnsConnectorToken(t *testing.T) {
 
 func TestTunnelIngressReadsRemoteRules(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		body string
-		want []TunnelIngressRule
+		name    string
+		body    string
+		want    TunnelRemoteConfig
+		wantErr error
 	}{
-		{name: "remote ingress", body: `{"result":{"config":{"ingress":[{"hostname":"ssh.example.test","service":"ssh://localhost:22","originRequest":{"bastionMode":true,"proxyType":"socks"}},{"service":"http_status:404"}]}}}`, want: []TunnelIngressRule{{Service: "ssh://localhost:22", BastionMode: true, ProxyType: "socks"}, {Service: "http_status:404"}}},
+		{name: "remote ingress", body: `{"result":{"tunnel_id":"tun1","config":{"ingress":[{"hostname":"ssh.example.test","service":"ssh://localhost:22","originRequest":{"bastionMode":true,"proxyType":"socks"}},{"service":"http_status:404"}]}}}`, want: TunnelRemoteConfig{Rules: []TunnelIngressRule{{Service: "ssh://localhost:22", BastionMode: true, ProxyType: "socks"}, {Service: "http_status:404"}}}},
+		// Configuration-wide origin settings reach every rule, and WARP
+		// routing is reported with the rules.
+		{name: "configuration defaults", body: `{"result":{"tunnel_id":"tun1","config":{"originRequest":{"bastionMode":true,"proxyType":"socks"},"warp-routing":{"enabled":true},"ingress":[{"service":"http://localhost:8080"},{"service":"http_status:404"}]}}}`, want: TunnelRemoteConfig{Rules: []TunnelIngressRule{{Service: "http://localhost:8080", BastionMode: true, ProxyType: "socks"}, {Service: "http_status:404", BastionMode: true, ProxyType: "socks"}}, WARPRouting: true}},
 		// A tunnel nobody has configured yet has no remote configuration.
-		{name: "no configuration", body: `{"result":{"config":null}}`},
+		{name: "no configuration", body: `{"result":{"tunnel_id":"tun1","config":null}}`},
+		// A body that does not name the tunnel proves nothing about it.
+		{name: "empty body", body: `{}`, wantErr: ErrTunnelConfigUnproven},
+		{name: "another tunnel", body: `{"result":{"tunnel_id":"tun2","config":null}}`, wantErr: ErrTunnelConfigUnproven},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			handlerErr := testhttp.NewHandlerErrorRecorder(t)
@@ -94,9 +101,9 @@ func TestTunnelIngressReadsRemoteRules(t *testing.T) {
 				_, _ = w.Write([]byte(tc.body))
 			}))
 			defer ts.Close()
-			rules, err := NewWithHTTP("token", "acc", ts.URL, ts.Client()).TunnelIngress(context.Background(), "tun1")
-			if err != nil || !slices.Equal(rules, tc.want) {
-				t.Fatalf("rules = %+v err = %v, want %+v", rules, err, tc.want)
+			remote, err := NewWithHTTP("token", "acc", ts.URL, ts.Client()).TunnelIngress(context.Background(), "tun1")
+			if !errors.Is(err, tc.wantErr) || !reflect.DeepEqual(remote, tc.want) {
+				t.Fatalf("remote = %+v err = %v, want %+v and %v", remote, err, tc.want, tc.wantErr)
 			}
 		})
 	}

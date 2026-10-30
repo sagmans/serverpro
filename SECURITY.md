@@ -66,8 +66,10 @@ default.
   under `/etc/cloudflared`, a `--url` or `TUNNEL_URL` origin in a cloudflared
   unit or `/etc/default/cloudflared`, and the tunnel's remotely managed
   ingress, which create and `doctor --fix` read from the Cloudflare API
-  before they change the host. A failed API read stops the step, so a route
-  the read could not see never loses its origin. The host grep prints no
+  before they change the host, with configuration-wide origin settings
+  applied to every rule and WARP routing counted as a route. A failed API
+  read, or an answer that does not name the tunnel, stops the step, so a
+  route the read could not see never loses its origin. The host grep prints no
   value, because those settings hold the tunnel token. It masks both ssh units
   and creates `/etc/ssh/sshd_not_to_be_run`, so neither a dependency nor a
   package upgrade starts sshd again. Login reports name the method and user,

@@ -36,3 +36,12 @@ type TunnelIngressRule struct {
 	BastionMode bool
 	ProxyType   string
 }
+
+// TunnelRemoteConfig is what a remotely managed tunnel's configuration can
+// reach on the host: its ingress rules, with the configuration-wide origin
+// defaults already applied, and whether WARP routing carries private network
+// traffic, sshd's port included, through the tunnel.
+type TunnelRemoteConfig struct {
+	Rules       []TunnelIngressRule
+	WARPRouting bool
+}

@@ -145,8 +145,8 @@ func (f *fakeCloudflare) TunnelToken(context.Context, string) (string, error) {
 
 // TunnelIngress reports only the catch-all rule that ends every remotely
 // managed ingress, so the OpenSSH preflight reads a rule and finds no route.
-func (f *fakeCloudflare) TunnelIngress(context.Context, string) ([]cloudflare.TunnelIngressRule, error) {
-	return []cloudflare.TunnelIngressRule{{Service: "http_status:404"}}, nil
+func (f *fakeCloudflare) TunnelIngress(context.Context, string) (cloudflare.TunnelRemoteConfig, error) {
+	return cloudflare.TunnelRemoteConfig{Rules: []cloudflare.TunnelIngressRule{{Service: "http_status:404"}}}, nil
 }
 
 type fakeRemote struct {

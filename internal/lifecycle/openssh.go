@@ -67,6 +67,9 @@ const (
 	// tunnelSOCKSProxyType is the originRequest proxy type that turns a rule
 	// into a SOCKS proxy, with the same reach as tunnelSOCKS5Service.
 	tunnelSOCKSProxyType = "socks"
+	// tunnelWARPRoutingRoute names WARP routing in a finding: it carries
+	// private network traffic to any port a route covers, sshd's included.
+	tunnelWARPRoutingRoute = "WARP routing"
 )
 
 var (
@@ -83,7 +86,7 @@ var (
 // cloudflare, so their routes live at Cloudflare and the host-side preflight
 // in OpenSSHDisableScript cannot see them.
 type TunnelIngressReader interface {
-	TunnelIngress(context.Context, string) ([]ingress.TunnelIngressRule, error)
+	TunnelIngress(context.Context, string) (ingress.TunnelRemoteConfig, error)
 }
 
 // CheckTunnelSSHIngress is the remote half of the OpenSSH preflight: it runs
@@ -99,11 +102,11 @@ func CheckTunnelSSHIngress(ctx context.Context, reader TunnelIngressReader, tunn
 	if reader == nil {
 		return fmt.Errorf("%s%w: no Cloudflare client", openSSHStoppedPrefix, ErrTunnelIngressUnread)
 	}
-	rules, err := reader.TunnelIngress(ctx, tunnelID)
+	remote, err := reader.TunnelIngress(ctx, tunnelID)
 	if err != nil {
 		return fmt.Errorf("%s%w: %w", openSSHStoppedPrefix, ErrTunnelIngressUnread, err)
 	}
-	if routes := TunnelSSHRoutes(rules); len(routes) > 0 {
+	if routes := TunnelSSHRoutes(remote); len(routes) > 0 {
 		return fmt.Errorf("%s%w: %s; remove or retarget them, then rerun", openSSHStoppedPrefix, ErrTunnelRoutesSSH, strings.Join(routes, ", "))
 	}
 	return nil
@@ -111,12 +114,15 @@ func CheckTunnelSSHIngress(ctx context.Context, reader TunnelIngressReader, tunn
 
 // TunnelSSHRoutes names the rules that can reach sshd: an ssh:// origin, any
 // origin on the OpenSSH port, and the rules that let a client pick its own
-// destination (bastion mode, a SOCKS proxy). Each name is the origin service
-// with any URL password masked, so a finding carries no credential and never
-// the route's public hostname.
-func TunnelSSHRoutes(rules []ingress.TunnelIngressRule) []string {
+// destination (bastion mode, a SOCKS proxy), plus WARP routing when it is on.
+// Each name is the origin service with any URL password masked, so a finding
+// carries no credential and never the route's public hostname.
+func TunnelSSHRoutes(remote ingress.TunnelRemoteConfig) []string {
 	var routes []string
-	for _, rule := range rules {
+	if remote.WARPRouting {
+		routes = append(routes, tunnelWARPRoutingRoute)
+	}
+	for _, rule := range remote.Rules {
 		switch {
 		case rule.BastionMode:
 			routes = append(routes, "bastion mode")

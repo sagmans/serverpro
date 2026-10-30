@@ -33,9 +33,25 @@ func NewWithHTTP(token, accountID, baseURL string, h *http.Client) Client {
 
 type Tunnel = ingress.Tunnel
 
-// TunnelIngressRule lets callers name the rule type through this package,
-// as they do Tunnel.
-type TunnelIngressRule = ingress.TunnelIngressRule
+// TunnelIngressRule and TunnelRemoteConfig let callers name the remote
+// configuration types through this package, as they do Tunnel.
+type (
+	TunnelIngressRule  = ingress.TunnelIngressRule
+	TunnelRemoteConfig = ingress.TunnelRemoteConfig
+)
+
+// ErrTunnelConfigUnproven means a configuration response did not name the
+// tunnel that was asked for. An empty or foreign body must not read as a
+// tunnel without routes, because the OpenSSH preflight would then pass.
+var ErrTunnelConfigUnproven = errors.New("cloudflare: the tunnel configuration response does not name the tunnel")
+
+// tunnelOriginRequest is the part of a tunnel's origin settings that lets a
+// client pick its own destination. It appears on each rule and once for the
+// whole configuration.
+type tunnelOriginRequest struct {
+	BastionMode bool   `json:"bastionMode"`
+	ProxyType   string `json:"proxyType"`
+}
 
 func (c Client) ValidateAccount(ctx context.Context) error {
 	var out struct {
@@ -95,35 +111,51 @@ func (c Client) GetTunnel(ctx context.Context, id string) (Tunnel, error) {
 	return out.Result, err
 }
 
-// TunnelIngress reads the ingress rules of a remotely managed tunnel. A route
-// added in the dashboard lives only at Cloudflare and never reaches the
-// host's disk, so the OpenSSH preflight has to ask the API for it. A tunnel
-// without a remote configuration has no rules.
-func (c Client) TunnelIngress(ctx context.Context, id string) ([]ingress.TunnelIngressRule, error) {
+// TunnelIngress reads the remote configuration of a remotely managed tunnel.
+// A route added in the dashboard lives only at Cloudflare and never reaches
+// the host's disk, so the OpenSSH preflight has to ask the API for it.
+//
+// Only a response that names the requested tunnel counts. A tunnel that has
+// never had a remote configuration, which is how serverpro creates one,
+// answers with a null config and has no routes. cloudflared applies the
+// configuration-wide originRequest to every rule as defaults and lets a
+// rule's own setting win; here a setting from either place counts, so a
+// difference from cloudflared can only make the preflight stricter.
+func (c Client) TunnelIngress(ctx context.Context, id string) (ingress.TunnelRemoteConfig, error) {
 	var out struct {
-		Result struct {
-			Config *struct {
+		Result *struct {
+			TunnelID string `json:"tunnel_id"`
+			Config   *struct {
+				OriginRequest tunnelOriginRequest `json:"originRequest"`
+				WARPRouting   struct {
+					Enabled bool `json:"enabled"`
+				} `json:"warp-routing"`
 				Ingress []struct {
-					Service       string `json:"service"`
-					OriginRequest struct {
-						BastionMode bool   `json:"bastionMode"`
-						ProxyType   string `json:"proxyType"`
-					} `json:"originRequest"`
+					Service       string              `json:"service"`
+					OriginRequest tunnelOriginRequest `json:"originRequest"`
 				} `json:"ingress"`
 			} `json:"config"`
 		} `json:"result"`
 	}
 	if err := c.api.Do(ctx, http.MethodGet, c.path("/cfd_tunnel/"+id+"/configurations"), nil, &out); err != nil {
-		return nil, err
+		return ingress.TunnelRemoteConfig{}, err
 	}
-	if out.Result.Config == nil {
-		return nil, nil
+	if out.Result == nil || out.Result.TunnelID != id {
+		return ingress.TunnelRemoteConfig{}, ErrTunnelConfigUnproven
 	}
-	rules := make([]ingress.TunnelIngressRule, 0, len(out.Result.Config.Ingress))
-	for _, rule := range out.Result.Config.Ingress {
-		rules = append(rules, ingress.TunnelIngressRule{Service: rule.Service, BastionMode: rule.OriginRequest.BastionMode, ProxyType: rule.OriginRequest.ProxyType})
+	config := out.Result.Config
+	if config == nil {
+		return ingress.TunnelRemoteConfig{}, nil
 	}
-	return rules, nil
+	remote := ingress.TunnelRemoteConfig{Rules: make([]ingress.TunnelIngressRule, 0, len(config.Ingress)), WARPRouting: config.WARPRouting.Enabled}
+	for _, rule := range config.Ingress {
+		proxyType := rule.OriginRequest.ProxyType
+		if proxyType == "" {
+			proxyType = config.OriginRequest.ProxyType
+		}
+		remote.Rules = append(remote.Rules, ingress.TunnelIngressRule{Service: rule.Service, BastionMode: rule.OriginRequest.BastionMode || config.OriginRequest.BastionMode, ProxyType: proxyType})
+	}
+	return remote, nil
 }
 
 func (c Client) DeleteTunnel(ctx context.Context, id string) error {

@@ -749,10 +749,14 @@ changes nothing:
   the `bastion` or `socks5` service, bastion mode, or a SOCKS proxy type.
   Serverpro creates remotely managed tunnels, so a route added in the
   Cloudflare dashboard never reaches the server's disk. Serverpro reads the
-  ingress with the Cloudflare API before it runs anything on the server. The
-  message names each rule's service with any URL password masked, never its
-  hostname. If the read fails, the step stops too: serverpro cannot tell that
-  no route needs sshd.
+  ingress with the Cloudflare API before it runs anything on the server.
+  Origin settings set for the whole configuration count for every rule, and
+  WARP routing turned on counts as a route, because it can carry private
+  network traffic to port 22. The message names each rule's service with any
+  URL password masked, never its hostname. If the read fails, or the answer
+  does not name the tunnel, the step stops too: serverpro cannot tell that no
+  route needs sshd. A tunnel that has never had a remote configuration, as
+  serverpro creates it, has no routes.
 
 Then it:
 
