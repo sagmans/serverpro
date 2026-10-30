@@ -86,7 +86,8 @@ access paths for app-owned deployment flows.
     status, the installed version below the floor, or the systemctl state.
     The repair never fetches a key and never writes the token or unit. It
     requires the provisioned unit and token, re-verifies the installed keyring
-    fingerprint and the exact apt source line, upgrades from that repository
+    fingerprint and the exact apt source line (migrating only the legacy
+    suite-`any` line to the codename suite), upgrades from that repository
     to at least the floor, then enables and restarts the service.
 - State: `internal/state`
   - Provider-neutral registry, per-server JSON state, and context-cancellable

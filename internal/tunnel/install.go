@@ -36,6 +36,10 @@ const (
 	cloudflareAPTComponent      = "main"
 	cloudflareKeyringPath       = "/usr/share/keyrings/cloudflare-main.gpg"
 	cloudflaredAPTSourcePath    = "/etc/apt/sources.list.d/cloudflared.list"
+	// cloudflareLegacyAPTSuite is the suite provisioning wrote before it
+	// pinned the host codename. Hosts provisioned then still carry it, so
+	// repair recognises exactly that one legacy line instead of refusing them.
+	cloudflareLegacyAPTSuite = "any"
 	// cloudflaredAPTPreferencesPath holds the origin pin rendered by
 	// cloudflaredAPTPreferences; install and repair both (re)write it.
 	cloudflaredAPTPreferencesPath = "/etc/apt/preferences.d/serverpro-cloudflared"
@@ -71,7 +75,20 @@ const (
 // repair compares against it so a hand-edited or signed-by-less source can
 // never be treated as the trusted repository.
 func cloudflaredAPTSource() string {
-	return "deb [signed-by=" + cloudflareKeyringPath + "] " + cloudflareAPTRepositoryURL + " " + hostplatform.ManagedHostCodename + " " + cloudflareAPTComponent
+	return cloudflaredAPTSourceForSuite(hostplatform.ManagedHostCodename)
+}
+
+// cloudflaredLegacyAPTSource is the exact line older provisioning wrote. It
+// names the same keyring, repository, and component as the current line, so
+// migrating it to the codename suite keeps the trust anchor unchanged.
+func cloudflaredLegacyAPTSource() string {
+	return cloudflaredAPTSourceForSuite(cloudflareLegacyAPTSuite)
+}
+
+// cloudflaredAPTSourceForSuite keeps the current and legacy lines on one
+// template, so they can differ only in the suite.
+func cloudflaredAPTSourceForSuite(suite string) string {
+	return "deb [signed-by=" + cloudflareKeyringPath + "] " + cloudflareAPTRepositoryURL + " " + suite + " " + cloudflareAPTComponent
 }
 
 // cloudflareAPTOrigin is the apt origin the pin names. apt takes a
@@ -339,6 +356,7 @@ CLOUDFLARE_KEY_URL=%s
 CLOUDFLARE_KEYRING=%s
 CLOUDFLARED_APT_SOURCE_PATH=%s
 CLOUDFLARED_APT_SOURCE=%s
+CLOUDFLARED_LEGACY_APT_SOURCE=%s
 CLOUDFLARED_APT_REPOSITORY_URL=%s
 CLOUDFLARED_APT_PREFERENCES_PATH=%s
 STAGING_SUFFIX=%s
@@ -362,6 +380,7 @@ CLOUDFLARED_RECEIPT=%s
 		cloudflareKeyringPath,
 		cloudflaredAPTSourcePath,
 		shell.Quote(cloudflaredAPTSource()),
+		shell.Quote(cloudflaredLegacyAPTSource()),
 		cloudflareAPTRepositoryURL,
 		cloudflaredAPTPreferencesPath,
 		stagingSuffix,
@@ -612,6 +631,16 @@ verify_trusted_cloudflare_apt_key() {
 
 verify_cloudflared_apt_source() {
   actual_source=$(cat "${CLOUDFLARED_APT_SOURCE_PATH}" 2>/dev/null) || actual_source=
+  # Only the exact legacy line is migrated: it trusts the same keyring and
+  # repository, so the rewrite cannot widen trust. Any other content still
+  # stops the repair.
+  if [ "${actual_source}" = "${CLOUDFLARED_LEGACY_APT_SOURCE}" ]; then
+    source_staging_path=${CLOUDFLARED_APT_SOURCE_PATH}${STAGING_SUFFIX}
+    printf '%s\n' "${CLOUDFLARED_APT_SOURCE}" > "${source_staging_path}"
+    chmod 0644 "${source_staging_path}"
+    mv -f "${source_staging_path}" "${CLOUDFLARED_APT_SOURCE_PATH}"
+    actual_source=$(cat "${CLOUDFLARED_APT_SOURCE_PATH}")
+  fi
   if [ "${actual_source}" != "${CLOUDFLARED_APT_SOURCE}" ]; then
     printf 'cloudflared apt source is missing or changed: %s; reprovision the server\n' "${CLOUDFLARED_APT_SOURCE_PATH}" >&2
     return 1

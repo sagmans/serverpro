@@ -565,6 +565,9 @@ type unmanagedHost struct {
 	pgrepStatus, queryStatus   string
 	unit, token, changedSource bool
 	enableOnInstall            bool
+	// legacySource writes the line older provisioning used, which repair
+	// must migrate rather than refuse.
+	legacySource bool
 }
 
 // unmanagedHarness is a scratch host for the unmanaged check and repair:
@@ -640,6 +643,9 @@ func newUnmanagedHarness(t *testing.T, host unmanagedHost) unmanagedHarness {
 	source := cloudflaredAPTSource()
 	if host.changedSource {
 		source = "deb " + testMirrorURL + " noble main"
+	}
+	if host.legacySource {
+		source = cloudflaredLegacyAPTSource()
 	}
 	writeTestFile(t, filepath.Join(dir, "cloudflared.list"), source+"\n")
 	writeTestFile(t, filepath.Join(dir, "cloudflare-main.gpg"), "scratch keyring")
@@ -845,6 +851,10 @@ func TestUnmanagedRepairScriptExecutableMatrix(t *testing.T) {
 	enabledByInstall.enableOnInstall = true
 	changedSource := dormantHost(belowFloor, receiptNone)
 	changedSource.changedSource = true
+	activeLegacySource := activeHost(belowFloor, receiptNone)
+	activeLegacySource.legacySource = true
+	dormantLegacySource := dormantHost(belowFloor, receiptNone)
+	dormantLegacySource.legacySource = true
 	halfInstalled := dormantHost(belowFloor, receiptNone)
 	halfInstalled.dpkgState = "half-installed"
 	runningOutside := dormantHost(belowFloor, receiptNone)
@@ -866,6 +876,8 @@ func TestUnmanagedRepairScriptExecutableMatrix(t *testing.T) {
 		{name: "dormant-foreign-receipt", host: dormantHost(baseline.MinimumVersion, receiptForeign), wantOK: true, wantInstall: true, wantRecheck: "dormant"},
 		{name: "dormant-enabled-by-install", host: enabledByInstall, wantInstall: true, wantOut: "no longer dormant"},
 		{name: "dormant-changed-source", host: changedSource, wantOut: "apt source is missing or changed"},
+		{name: "active-legacy-source", host: activeLegacySource, wantOK: true, wantInstall: true, wantStart: true, wantRecheck: baseline.MinimumVersion + " active"},
+		{name: "dormant-legacy-source", host: dormantLegacySource, wantOK: true, wantInstall: true, wantRecheck: "dormant"},
 		{name: "half-installed", host: halfInstalled, wantOut: "package status is half-installed"},
 		{name: "process-outside-service", host: runningOutside, wantOut: "running outside cloudflared.service"},
 	} {
@@ -894,6 +906,11 @@ func TestUnmanagedRepairScriptExecutableMatrix(t *testing.T) {
 			}
 			if !tc.wantOK {
 				return
+			}
+			// A repaired host must end on the current source line, whether it
+			// started there or on the migrated legacy line.
+			if source, err := os.ReadFile(filepath.Join(h.dir, "cloudflared.list")); tc.wantInstall && (err != nil || string(source) != cloudflaredAPTSource()+"\n") {
+				t.Fatalf("apt source after repair = %q, %v; want %q", source, err, cloudflaredAPTSource())
 			}
 			recheck, err := h.check(t)
 			if err != nil || !strings.Contains(recheck, tc.wantRecheck) {

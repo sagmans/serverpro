@@ -601,7 +601,10 @@ state (for example `half-installed`), a `cloudflared` on `PATH` that is not
 not found, and a dormant package while a `cloudflared` process runs outside
 the service. The repair trusts only the keyring and apt source line that
 provisioning writes, so a connector installed from another key or source
-fails with the "reprovision the server" message.
+fails with the "reprovision the server" message. The one exception is the
+exact line older provisioning wrote, with suite `any` in place of `noble`.
+It names the same keyring, repository, and component, so both repairs
+rewrite it to the `noble` line and continue.
 Provisioning, bootstrap, and `--fix` apt work waits up to 5 minutes for each
 apt lock that a concurrent apt run holds, such as apt-daily refreshing package
 lists or unattended upgrades installing packages, and prints a
