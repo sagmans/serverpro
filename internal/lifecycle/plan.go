@@ -34,6 +34,9 @@ func BuildPlan(cfg config.Config) Plan {
 		PlanAction{"install", "server tools", bootstraptools.DefaultToolsetDescription() + "; " + bootstraptools.AuthenticationBoundary},
 		PlanAction{"lockdown", "egress", cfg.Network.Egress.Mode + " best-effort policy"},
 	)
+	if cfg.Reboot.Enabled {
+		actions = append(actions, PlanAction{"install", "gated reboot", "reboot at " + cfg.Reboot.Window + " UTC only when updates need it and every running workload is declared to come back; check workloads after boot"})
+	}
 	if cfg.Access.OpenSSH != config.OpenSSHEnabled {
 		actions = append(actions, PlanAction{"disable", "openssh", "mask the ssh units once Tailscale SSH works; packages stay installed"})
 	}

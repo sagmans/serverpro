@@ -7,7 +7,9 @@ import (
 	"strings"
 
 	"github.com/sagmans/serverpro/internal/cloudinit"
+	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/network"
+	"github.com/sagmans/serverpro/internal/rebootgate"
 	"github.com/sagmans/serverpro/internal/shell"
 )
 
@@ -26,7 +28,7 @@ const (
 	egressRestrictedRemediation = "restricted egress is not in force: confirm no workload needs other outbound ports, then run serverpro server doctor --fix to re-apply the serverpro egress lockdown (USAGE.md, Restricted egress)"
 
 	rebootPendingCheckName = "reboot pending"
-	rebootRequiredPath     = "/var/run/reboot-required"
+	rebootRequiredPath     = rebootgate.RebootRequiredPath
 	rebootRequiredPkgsPath = rebootRequiredPath + ".pkgs"
 	// kernelImagePrefix is where Ubuntu installs one image per kernel
 	// package; the bare /boot/vmlinuz symlinks do not match the prefix.
@@ -36,6 +38,9 @@ const (
 	// host, not through serverpro server restart, because some providers'
 	// reboot API is a hard reset that can cut an apt or workload write.
 	rebootCommand = "sudo systemctl reboot"
+	// rebootPendingPrefix states that doctor itself never reboots, with or
+	// without the gate.
+	rebootPendingPrefix = "updates wait for a reboot, and doctor never reboots: "
 
 	unattendedUpgradesConfigCheckName   = "unattended upgrades config"
 	unattendedUpgradesConfigRemediation = "serverpro server doctor --fix restores " + cloudinit.UnattendedUpgradesConfigPath + " (serverpro owns that file; put local options in a later-sorting file); if a value stays wrong, a later apt.conf.d file overrides it: find it with apt-config dump and remove that line"
@@ -123,7 +128,21 @@ func egressAllowRulesCommand() string {
 // rebootPendingRemediation names the exact commands for this server, so the
 // operator does not have to work out how to reach it.
 func rebootPendingRemediation(namespace, server string) string {
-	return "updates wait for a reboot, and doctor never reboots: when the workload allows, run serverpro server ssh " + server + " -n " + namespace + ", then " + rebootCommand + "; rerun doctor after it is back"
+	return rebootPendingPrefix + "when the workload allows, " + manualRebootSteps(namespace, server)
+}
+
+// rebootPendingRemediationFor names the gated reboot first when config turns
+// it on, because the pending reboot then happens in the window without the
+// operator once reboot survivability shows no gap.
+func rebootPendingRemediationFor(cfg config.Config) string {
+	if !cfg.Reboot.Enabled {
+		return rebootPendingRemediation(cfg.Namespace, cfg.Server)
+	}
+	return rebootPendingPrefix + "the gated reboot runs at " + cfg.Reboot.Window + " UTC once " + rebootSurvivabilityCheckName + " passes; to reboot sooner, " + manualRebootSteps(cfg.Namespace, cfg.Server)
+}
+
+func manualRebootSteps(namespace, server string) string {
+	return "run serverpro server ssh " + server + " -n " + namespace + ", then " + rebootCommand + "; rerun doctor after it is back"
 }
 
 // unattendedUpgradesConfigCommand reads the effective value of every option

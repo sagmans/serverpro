@@ -686,6 +686,26 @@ in code but is commented out in the shipped file, and `Automatic-Reboot`
 defaults to false. Vultr documents an instance restart as a hard reboot, so
 doctor recommends a graceful host reboot. Reviewed 2026-10-30.
 
+### Gated reboot
+
+```text
+https://docs.docker.com/engine/containers/start-containers-automatically/
+https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html
+https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html
+https://www.freedesktop.org/software/systemd/man/latest/loginctl.html
+```
+
+Use: the gated reboot's rules and units. Docker restarts `always` and
+`unless-stopped` containers when the daemon starts, and documents that
+`on-failure` does not restart a container when the daemon restarts. With
+Docker 29.1.3 an `on-failure` container killed at shutdown came back and one
+that exited 0 did not, so the gate accepts only `always` and
+`unless-stopped`. `Persistent=false` keeps a timer from running a missed
+window at boot. `Type=exec` lets boot finish while the verify unit waits,
+and `RuntimeMaxSec=` stops it if its own deadlines fail. A lingering user's
+manager starts at boot; without linger it stops at the last logout.
+Reviewed 2026-10-30, and checked in a systemd 255 container.
+
 ### Provider image accounts
 
 ```text

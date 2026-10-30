@@ -193,6 +193,10 @@ hardening:
   apparmor: true
   ufw: true
   journald_persistent: true
+reboot:
+  enabled: true
+  window: "02:00"
+  verify_timeout: 10m
 git:
   identity:
     name: ""
@@ -210,6 +214,13 @@ SSH (22/tcp, for git-over-SSH), Cloudflare Tunnel, and Tailscale egress;
 OpenSSH off on the server, so Tailscale SSH is the only admin path.
 `enabled` keeps OpenSSH and skips the `openssh disabled` doctor check. See
 OpenSSH off.
+
+`reboot.enabled: true` (the default, also when the section is missing)
+installs the gated reboot: it reboots in the daily `reboot.window` (`HH:MM`,
+UTC, default `02:00`) only when updates need a reboot and every running
+workload is declared to come back. `reboot.verify_timeout` (a duration from
+`1m` to `1h`, default `10m`) bounds the check after boot. `false` installs
+nothing. See Gated reboot.
 
 The optional `git` section records durable GitHub setup intent chosen during
 interactive create/bootstrap: `access: none` leaves git untouched,
@@ -671,10 +682,11 @@ toolset summary.
 
 These doctor checks compare the live host with what config and provisioning
 set up. Most are read-only: `--fix` does not change what they find, because
-each finding needs an operator decision. Five checks have a repair, because
+each finding needs an operator decision. Six checks have a repair, because
 config, provisioning, or the compute provider already states the wanted
 result: `egress restricted` re-applies the restricted egress lockdown,
 `openssh disabled` turns OpenSSH off after its safety checks,
+`reboot survivability` installs the gated reboot's script and units,
 `unattended upgrades config` rewrites the serverpro unattended-upgrades
 drop-in, `privileged accounts` removes the provider's own image accounts, and
 `cloudflared apt pin` rewrites the pin (only with ingress
@@ -684,7 +696,8 @@ drop-in, `privileged accounts` removes the provider's own image accounts, and
 | --- | --- | --- |
 | `egress restricted` | fail | UFW's default outgoing policy is not `deny`/`reject`, a lockdown `ALLOW OUT` rule is missing, or a TCP connect to `1.1.1.1:853` succeeds. Runs only with `network.egress.mode: restricted`; `--fix` re-applies the lockdown. |
 | `openssh disabled` | fail or warn | `ssh.socket` or `ssh.service` is enabled or active, or a process listens on TCP port 22, or `sshd` listens on any port (fail). A unit is disabled but not masked, or `/etc/ssh/sshd_not_to_be_run` is missing (warn). Skipped with `access.openssh: enabled`; `--fix` runs the create step, safety checks included. See OpenSSH off. |
-| `reboot pending` | warn | `/var/run/reboot-required` exists, or an installed kernel is newer than the running one. Doctor never reboots, also with `--fix`; see Reboots and kernel cleanup. |
+| `reboot pending` | warn | `/var/run/reboot-required` exists, or an installed kernel is newer than the running one. Doctor never reboots, also with `--fix`. With `reboot.enabled: true` the gated reboot runs in the window once `reboot survivability` shows no gap; see Gated reboot. |
+| `reboot survivability` | fail or warn | Fail: with `reboot.enabled: true`, the gated reboot's script, timer, or units are missing, changed, or not enabled (`install:` findings). Warn: a running workload would not come back after any reboot (see Gated reboot for the rules), the post-reboot check in the current boot was not `ok` or did not finish, or the timer is enabled while `reboot.enabled: false`. `--fix` repairs only the `install:` findings: it never reboots and never changes a workload. |
 | `unattended upgrades config` | fail or warn | An option of `/etc/apt/apt.conf.d/52serverpro-unattended-upgrades` has another effective value in `apt-config` (fail), or is not set at all (warn: a host created before the drop-in). `--fix` rewrites the drop-in; a later apt.conf.d file that overrides it stays a finding. |
 | `privileged accounts` | fail or warn | Fail: an account other than the admin user is in `sudo`, `admin`, `lxd`, or `docker` (also as primary group), a rule in `/etc/sudoers` or `/etc/sudoers.d` grants sudo to another account or group without a command limit (`ALL`, a wildcard path, or an alias the probe cannot resolve to paths), a non-root account has uid 0, or a provider image account (Vultr: `linuxuser`) exists. Warn: such a rule lists only absolute command paths, directly or through a `Cmnd_Alias`; the finding names them. `--fix` removes only the provider image accounts; see Provider image accounts. |
 | `metadata user-data` | fail or warn | The provider metadata user-data holds the admin's current password hash (fail), or another password hash or `passwd` key (warn). |
@@ -805,17 +818,113 @@ update installs a new image, and without this cleanup old images fill
 `50unattended-upgrades`, so its value wins. Serverpro owns the file: put
 local options in a file that sorts later.
 
-Serverpro does not turn on automatic reboots. When `reboot pending` warns,
-reboot when the workload allows:
+The drop-in also sets `Unattended-Upgrade::Automatic-Reboot "false";`.
+unattended-upgrades does not check whether workloads come back, so the gated
+reboot below owns update reboots.
+
+To reboot before the window, or with `reboot.enabled: false`, run the
+preflight first, then reboot:
 
 ```sh
 serverpro server ssh NAME -n NAMESPACE
+sudo serverpro-reboot preflight
 sudo systemctl reboot
 ```
 
-Then rerun doctor. `serverpro server restart` uses the provider's reboot API,
-which is a hard reset on some providers, so it is not the recommended path
-for an update reboot.
+Then rerun doctor. A manual reboot has no post-boot check.
+`serverpro server restart` uses the provider's reboot API, which is a hard
+reset on some providers, so it is not the recommended path for an update
+reboot.
+
+### Gated reboot
+
+With `reboot.enabled: true`, `server create` installs
+`/usr/local/sbin/serverpro-reboot` and three units, after the egress lockdown
+and before OpenSSH goes off. On an older server, `serverpro server doctor NAME
+--fix` installs them. Doctor never installs them without `--fix`.
+
+| Unit | Role |
+| --- | --- |
+| `serverpro-reboot.timer` | Starts `serverpro-reboot.service` each day at `reboot.window` UTC. A window missed while the host was off is not run later. |
+| `serverpro-reboot.service` | Runs only when `/var/run/reboot-required` exists. It runs the preflight. With a gap, it logs each gap and skips the reboot; the next window tries again. With no gap, it writes the snapshot and runs `systemctl reboot`. |
+| `serverpro-reboot-verify.service` | Runs once at boot when a snapshot exists, after `docker.service`. It checks that the snapshot comes from the previous boot and is at most one hour old. It then waits up to `reboot.verify_timeout` for each unit, container, and TCP port in the snapshot. It restarts a missing unit or container at most once, never starts a workload that did not run before the reboot, and writes the result. |
+
+The preflight reports each running workload that a reboot would drop:
+
+- A running service that boot does not start again. A service comes back
+  when its unit file state is `enabled` or `generated`, an enabled or
+  static socket, timer, or path triggers it, or an active target, a device,
+  or a running service wants it. A `static` unit (no `[Install]` section)
+  comes back only that way, or through its D-Bus name; a static unit
+  started by hand is a gap.
+- A running container with a restart policy other than `always` or
+  `unless-stopped`. Docker does not start a `no` container when the daemon
+  starts. It starts an `on-failure` container only when the shutdown made it
+  exit with an error, so a container that stops cleanly stays down. Running
+  containers while `docker.service` is not enabled are a gap too.
+- Containers that keep running while `docker.service` is stopped.
+  Bootstrap turns on Docker's `live-restore`, so a container outlives its
+  daemon, but the gate cannot read its restart policy then.
+- A listening socket of a process in a login session, a tmux or screen
+  session, a `nohup` process, or a `systemd-run` scope.
+- A running service in the systemd user manager of a user without linger,
+  or a user manager whose services or account the gate cannot read.
+
+A logged-in user with no listener does not block a reboot. Known limit: the
+gate does not check the services of a user with linger. That user's
+manager starts at boot, but a user service in it that is not enabled does
+not come back. Run the preflight at any time:
+
+```sh
+serverpro server ssh NAME -n NAMESPACE
+sudo serverpro-reboot preflight
+```
+
+Exit status 0 means no gap, and 3 means gaps, one line each with the
+operator command. A user manager the gate cannot read is a gap too. Any
+other status means the preflight could not read the host; the window then
+skips the reboot. Doctor runs the same preflight as
+`reboot survivability`. Fix each gap yourself, for example with
+`docker update --restart unless-stopped NAME` or
+`sudo systemctl enable UNIT`, or move a process out of tmux into a service.
+Doctor never changes a workload.
+
+The gate keeps its files in `/var/lib/serverpro/`, mode `0600`, owner root:
+
+- `reboot-snapshot`: unit names, container names with image and health
+  status, and listening TCP addresses below the ephemeral port range. It has
+  no environment, command lines, or secrets. After the check it becomes
+  `reboot-snapshot.last`.
+  The snapshot also records the boot ID and the write time.
+- `reboot-verify.result`: `status=ok`, `status=degraded`, or `status=stale`,
+  with one `finding=` line for each problem. `degraded` means a workload did
+  not come back, or the check was stopped before it finished. `stale` means
+  the snapshot came from the running boot or was older than one hour, so
+  the check compared and started nothing. Doctor warns on a result that is
+  not `ok` while the host still runs the boot that was checked.
+
+Doctor also warns when a snapshot exists but neither the window nor the
+check runs, and when the check failed in the running boot before it wrote a
+result. Both mean the boot was never compared with the snapshot. If
+`systemctl reboot` fails, the window removes its snapshot, so a later,
+unrelated reboot does not drive a check.
+
+The gate logs to journald with the tag `serverpro-reboot` and the fields
+`SERVERPRO_EVENT` and `SERVERPRO_SUBJECT`:
+
+```sh
+journalctl -t serverpro-reboot
+journalctl SYSLOG_IDENTIFIER=serverpro-reboot SERVERPRO_EVENT=reboot-skipped
+```
+
+Events: `window-skip`, `gap`, `reboot-skipped`, `rebooting`, `verify-skip`,
+`verify-stale`, `restart`, `restart-result`, `finding`, `verify-ok`,
+`verify-degraded`, and `window-error` or `verify-error` when the gate cannot
+read the host, `systemctl reboot` fails, or the check is stopped.
+
+With `reboot.enabled: false`, doctor still runs the preflight and warns while
+the timer is enabled. Doctor does not remove the gate; turn the timer off
+with `sudo systemctl disable --now serverpro-reboot.timer`.
 
 ### Restricted egress
 

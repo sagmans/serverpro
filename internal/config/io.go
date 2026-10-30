@@ -55,6 +55,7 @@ func LoadPartialBytes(body []byte) (Config, error) {
 	file := configFile{Config: Config{
 		Network: Network{Egress: Egress{PhaseLockdownAfterBootstrap: d.Network.Egress.PhaseLockdownAfterBootstrap}},
 		Admin:   Admin{StoreConsolePassword: d.Admin.StoreConsolePassword},
+		Reboot:  Reboot{Enabled: d.Reboot.Enabled},
 	}}
 	dec := yaml.NewDecoder(bytes.NewReader(body))
 	dec.KnownFields(true)

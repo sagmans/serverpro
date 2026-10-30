@@ -8,6 +8,7 @@ func (c Config) Validate() error {
 		c.validateMVPConstraints,
 		c.validateAdminUsername,
 		c.validateGit,
+		c.validateReboot,
 	} {
 		if err := validate(); err != nil {
 			return err

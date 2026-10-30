@@ -104,6 +104,17 @@ access paths for app-owned deployment flows.
     workflow lock ordering.
 - Lifecycle: `internal/lifecycle`
   - Provision flow using generic compute and optional ingress.
+- Gated reboot: `internal/rebootgate`
+  - Embedded `serverpro-reboot` script and the timer, window, and verify
+    units, rendered from the `reboot` config section. Provisioning installs
+    them through `rebootgate.InstallScript`, and doctor `--fix` runs the same
+    script. Doctor runs `rebootgate.PreflightProbe`, the same script body in
+    `preflight` mode, so the host gate and the doctor check apply one set of
+    rules. The script reads systemd, Docker, `ss`, `/proc/PID/cgroup`, and
+    Docker's container scopes, fails closed when it cannot read them, and
+    never starts a workload that was not running before the reboot. The
+    snapshot records the boot ID and write time, so the boot check acts only
+    on a snapshot from the boot just before and at most one hour old.
 - Host platform baseline: `internal/hostplatform`
   - Single authority for controller support, managed-host support, direct apt
     package floors, architecture sets, and shell manifests shared by cloud-init,
@@ -112,7 +123,7 @@ access paths for app-owned deployment flows.
   - First-boot hardening user data with a defense-in-depth Ubuntu
     24.04/codename/architecture check, pre-install base-package candidate floors,
     post-install verification, an unattended-upgrades drop-in that turns on
-    unused-kernel removal, and architecture-scoped checksum-verified
+    unused-kernel removal and keeps automatic reboots off, and architecture-scoped checksum-verified
     Tailscale static binaries. Live provider image validation remains the
     authoritative pre-mutation host gate because cloud-init module failures do
     not globally cancel later modules.
@@ -230,20 +241,23 @@ access paths for app-owned deployment flows.
     the newest 5 reports per server when cleanup succeeds. Storage failure
     falls back to the complete stdout report and a stderr warning.
     Drift checks compare the live host with what config and provisioning
-    promised: restricted egress, OpenSSH off, pending reboot, unattended-upgrades
+    promised: restricted egress, OpenSSH off, pending reboot, reboot
+    survivability, unattended-upgrades
     options, privileged accounts, metadata user-data password hash, Tailscale operator, Serve and Funnel,
     runtime sysctl, and a live cloudflared connector while ingress is `none`.
     Each probe prints `fail: ` or `warn: ` lines and exits 0 when it could read
     the host, so a probe that never ran (non-zero exit) fails instead of
     passing.
-    Four have a repair: restricted egress re-runs the provisioning lockdown,
+    Five have a repair: restricted egress re-runs the provisioning lockdown,
     OpenSSH off re-runs the create step (`lifecycle.OpenSSHDisableScript`,
     safety checks included, and a repair's warnings stay in the result),
-    the unattended-upgrades drop-in is rewritten from the function that
+    reboot survivability re-runs `rebootgate.InstallScript` for `install:`
+    findings only, the unattended-upgrades drop-in is rewritten from the function that
     renders it for cloud-init, and privileged accounts removes the accounts
     the compute adapter declares as image accounts. Every other finding needs
-    an operator decision; a pending reboot names the operator's commands, and
-    doctor never reboots. The
+    an operator decision; a pending reboot names the gated reboot window or
+    the operator's commands, a workload that a reboot would drop names the
+    operator's command, and doctor never reboots. The
     provider `tailnet policy` check reads the policy file through the mesh
     snapshot and warns on allow-all packet rules.
 - Polling: `internal/poll`
@@ -395,7 +409,9 @@ flowchart LR
    `/root/serverpro-removed-accounts`, checks `visudo -c`, and then runs
    `userdel -r`. It stops on running processes and never touches root, the
    admin user, or uid 0. Then converge the managed host tools through the
-   embedded bootstrap script and apply the egress lockdown. Last, unless
+   embedded bootstrap script and apply the egress lockdown. With
+   `reboot.enabled: true`, install the gated reboot (`remote_reboot_gate`
+   phase); a create with no reachable host fails rather than skip it. Last, unless
    `access.openssh: enabled`, turn OpenSSH off (`remote_openssh` phase):
    `lifecycle.OpenSSHDisableScript` stops before any change when Tailscale
    SSH is not proven or OpenSSH is in use, records the original unit states

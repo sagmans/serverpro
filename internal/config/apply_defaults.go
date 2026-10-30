@@ -19,6 +19,7 @@ func applyDefaults(c *Config) {
 	applyAccessDefaults(c, d)
 	applyCloudflareDefaults(c)
 	applyHardeningDefaults(c, d)
+	applyRebootDefaults(c, d)
 }
 
 func applyServerDefaults(c *Config, d Config) {
@@ -85,5 +86,17 @@ func applyCloudflareDefaults(c *Config) {
 func applyHardeningDefaults(c *Config, d Config) {
 	if c.Hardening.Profile == "" {
 		c.Hardening = d.Hardening
+	}
+}
+
+// applyRebootDefaults fills each value on its own, so a config that sets only
+// the window keeps the default verify timeout. Enabled is not touched: its
+// default comes from decoding, where an omitted field and false differ.
+func applyRebootDefaults(c *Config, d Config) {
+	if c.Reboot.Window == "" {
+		c.Reboot.Window = d.Reboot.Window
+	}
+	if c.Reboot.VerifyTimeout == "" {
+		c.Reboot.VerifyTimeout = d.Reboot.VerifyTimeout
 	}
 }

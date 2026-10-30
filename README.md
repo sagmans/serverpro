@@ -89,6 +89,8 @@ for provider catalog choices such as location, size, and image.
 - Public SSH disabled.
 - OpenSSH off by default; Tailscale SSH is the only admin path.
 - Public app ingress defaults to `none`.
+- Update reboots are gated: a nightly window (02:00 UTC) reboots only when
+  every running workload is declared to come back, then checks that it did.
 - Host tools install through a checksum- and GPG-verified bootstrap script, not
   `curl|sh`.
 - Server credentials stored per server with private file permissions.

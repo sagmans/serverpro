@@ -13,6 +13,8 @@ import (
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/lifecycle"
 	"github.com/sagmans/serverpro/internal/network"
+	"github.com/sagmans/serverpro/internal/rebootgate"
+	"github.com/sagmans/serverpro/internal/shell"
 )
 
 // driftProbe runs a drift command under sh with fake host tools first on
@@ -90,17 +92,29 @@ func TestRemoteDriftSpecificationsProbeEgressOnlyWhenRestricted(t *testing.T) {
 		}
 	}
 	openSSHRepair := lifecycle.OpenSSHDisableScript(cfg.Admin.Username, nil)
-	assertRepairs(map[string]string{egressRestrictedCommand(): network.LockdownScript(cfg), openSSHDisabledCommand(): openSSHRepair, unattendedUpgradesConfigCommand(): unattendedUpgradesConfigFixCommand()})
+	rebootRead, err := rebootSurvivabilityCommand(cfg.Reboot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rebootRepair, err := rebootgate.InstallScript(cfg.Reboot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRepairs(map[string]string{egressRestrictedCommand(): network.LockdownScript(cfg), openSSHDisabledCommand(): openSSHRepair, unattendedUpgradesConfigCommand(): unattendedUpgradesConfigFixCommand(), rebootRead: rebootRepair})
 	cfg.Network.Egress.Mode = "open"
 	if specificationsRead(remoteDriftSpecifications(cfg, Options{}), egressRestrictedCommand()) {
 		t.Fatal("open egress is probed as restricted")
 	}
-	assertRepairs(map[string]string{openSSHDisabledCommand(): openSSHRepair, unattendedUpgradesConfigCommand(): unattendedUpgradesConfigFixCommand()})
+	assertRepairs(map[string]string{openSSHDisabledCommand(): openSSHRepair, unattendedUpgradesConfigCommand(): unattendedUpgradesConfigFixCommand(), rebootRead: rebootRepair})
 	// A config that opts back in to OpenSSH is neither probed nor repaired.
 	cfg.Access.OpenSSH = config.OpenSSHEnabled
 	if specificationsRead(remoteDriftSpecifications(cfg, Options{}), openSSHDisabledCommand()) {
 		t.Fatal("enabled OpenSSH is probed as disabled")
 	}
+	assertRepairs(map[string]string{unattendedUpgradesConfigCommand(): unattendedUpgradesConfigFixCommand(), rebootRead: rebootRepair})
+	// With the gated reboot off, doctor still runs its preflight but never
+	// installs the gate.
+	cfg.Reboot.Enabled = false
 	assertRepairs(map[string]string{unattendedUpgradesConfigCommand(): unattendedUpgradesConfigFixCommand()})
 }
 
@@ -500,7 +514,7 @@ func TestUnattendedUpgradesConfigCommandReadsEffectiveValues(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			out, err := driftProbe{
 				command: unattendedUpgradesConfigCommand(),
-				tools:   map[string]string{"apt-config": `[ "$1 $2 $3" = "shell value $FAKE_KEY/b" ] || exit 2; [ -z "$FAKE_VALUE" ] || printf '%s\n' "$FAKE_VALUE"`},
+				tools:   map[string]string{"apt-config": unattendedAptConfigFake()},
 				env:     []string{"FAKE_KEY=" + first.Key, "FAKE_VALUE=" + tc.value},
 			}.run(t)
 			result := driftResult(unattendedUpgradesConfigCheckName, out, err, unattendedUpgradesConfigRemediation)
@@ -509,6 +523,16 @@ func TestUnattendedUpgradesConfigCommandReadsEffectiveValues(t *testing.T) {
 			}
 		})
 	}
+}
+
+// unattendedAptConfigFake answers the first setting from the test case and
+// every other setting with its wanted value, so each case varies one option.
+func unattendedAptConfigFake() string {
+	fake := "case \"$1 $2 $3\" in\n  \"shell value $FAKE_KEY/b\") [ -z \"$FAKE_VALUE\" ] || printf '%s\\n' \"$FAKE_VALUE\" ;;\n"
+	for _, other := range cloudinit.UnattendedUpgradesSettings()[1:] {
+		fake += "  " + shell.Quote("shell value "+other.Key+"/b") + ") printf '%s\\n' " + shell.Quote("value='"+cloudinit.AptBool(other.Value)+"'") + " ;;\n"
+	}
+	return fake + "  *) exit 2 ;;\nesac"
 }
 
 func TestSysctlRuntimeCommandComparesFileWithKernel(t *testing.T) {

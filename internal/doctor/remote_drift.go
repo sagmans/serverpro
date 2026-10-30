@@ -20,10 +20,11 @@ const (
 // remoteDriftSpecifications are checks for host drift that the hardening
 // checks cannot see: each compares the live host with what config or
 // provisioning promised. Most are read-only, because the finding needs an
-// operator decision (an unknown account, a reboot window). Restricted
-// egress, OpenSSH off, the unattended-upgrades drop-in, and provider image
-// accounts have a repair, because config, provisioning, or the provider
-// adapter already states the wanted result.
+// operator decision (an unknown account, a workload a reboot would drop).
+// Restricted egress, OpenSSH off, the unattended-upgrades drop-in, the gated
+// reboot's own units, and provider image accounts have a repair, because
+// config, provisioning, or the provider adapter already states the wanted
+// result.
 func remoteDriftSpecifications(cfg config.Config, opt Options) []remoteCheckSpecification {
 	user := cfg.Admin.Username
 	var specifications []remoteCheckSpecification
@@ -32,7 +33,8 @@ func remoteDriftSpecifications(cfg config.Config, opt Options) []remoteCheckSpec
 	}
 	return append(specifications,
 		remoteOpenSSHSpecification(cfg, opt.SSHConsoleAgents),
-		remoteDriftSpecification(rebootPendingCheckName, rebootPendingCommand(), rebootPendingRemediation(cfg.Namespace, cfg.Server)),
+		remoteDriftSpecification(rebootPendingCheckName, rebootPendingCommand(), rebootPendingRemediationFor(cfg)),
+		remoteRebootSurvivabilitySpecification(cfg.Reboot),
 		remoteFixableDriftSpecification(unattendedUpgradesConfigCheckName, unattendedUpgradesConfigCommand(), unattendedUpgradesConfigRemediation, unattendedUpgradesConfigFixCommand()),
 		remotePrivilegedAccountsSpecification(user, opt.ImageDefaultUsers),
 		remoteMetadataUserDataSpecification(user, opt.MetadataUserDataPath),

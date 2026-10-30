@@ -122,12 +122,30 @@ default.
   reports presence only and keeps the body, hash, and shadow entry out of
   output and reports. The compute provider adapter declares the metadata path;
   doctor never takes it from the host.
+- The gated reboot (`reboot.enabled`, on by default) applies kernel and
+  library updates without a blind reboot. It runs as root, so it is a
+  root-owned `0755` script with a fixed `PATH` and `LC_ALL=C`, bounds each
+  systemctl, Docker, and `ss` call with a timeout, and fails closed: a host
+  state it cannot read skips the reboot, including containers that run
+  while `docker.service` is stopped. Its snapshot and result in
+  `/var/lib/serverpro/` are root-only `0600` files and hold unit and
+  container names, images, health, listening addresses, and the boot ID
+  only, never environment variables, command lines, or secrets. After boot
+  it restarts only a workload from the snapshot, at most once, and only
+  when the snapshot comes from the previous boot and is at most one hour
+  old: a stale snapshot never starts a workload that the operator stopped
+  since. A stopped or failed check never reads as a checked boot. Doctor
+  compares the installed script and units with the rendered copy by SHA-256,
+  mode, and owner.
 - Doctor drift checks report what weakens this model after provisioning:
   restricted egress not in force (UFW policy, every lockdown rule, and a real
   connect to a port the lockdown never allows), OpenSSH running or able to
-  start while config wants it off, a pending reboot,
+  start while config wants it off, a pending reboot, a running workload that
+  a reboot would drop, a gated reboot whose files or units differ from the
+  rendered copy,
   unattended-upgrades options that differ from the serverpro drop-in (which
-  turns on unused-kernel removal so `/boot` cannot block a kernel update),
+  turns on unused-kernel removal so `/boot` cannot block a kernel update,
+  and keeps unattended-upgrades from rebooting on its own),
   extra accounts in
   `sudo`/`admin`/`lxd`/`docker`, with a sudoers rule, or with uid 0, provider
   image accounts, a Tailscale `OperatorUser`,
@@ -136,8 +154,10 @@ default.
   is enabled or running on a host whose config ingress is `none`. Restricted
   egress has a repair (the provisioning lockdown), because config states the
   wanted policy, and so do OpenSSH off (the create step, safety checks
-  included) and the unattended-upgrades drop-in. Doctor never
-  reboots: a reboot needs a workload window only the operator knows. Privileged accounts has a repair only for the accounts the
+  included), the unattended-upgrades drop-in, and the gated reboot's own
+  script and units. Doctor never reboots and never changes a workload's
+  restart policy or unit: only the operator knows whether a workload must
+  come back. Privileged accounts has a repair only for the accounts the
   compute adapter declares as its image accounts; every other account,
   sudoers rule, or group member is report-only, because it may run a
   workload such as a CI deploy. A sudoers rule without a command limit

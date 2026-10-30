@@ -13,6 +13,7 @@ type Config struct {
 	Access        Access      `yaml:"access" json:"access"`
 	Cloudflare    Cloudflare  `yaml:"cloudflare" json:"cloudflare"`
 	Hardening     Hardening   `yaml:"hardening" json:"hardening"`
+	Reboot        Reboot      `yaml:"reboot" json:"reboot"`
 	// Git is optional: an omitted section keeps git/GitHub untouched on the host.
 	Git Git `yaml:"git,omitempty" json:"git,omitempty"`
 }

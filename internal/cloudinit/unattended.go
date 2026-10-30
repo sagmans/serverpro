@@ -27,6 +27,10 @@ func UnattendedUpgradesSettings() []UnattendedUpgradesSetting {
 		// that its shipped file leaves commented out; stating it keeps /boot
 		// from filling until a later kernel update fails to install.
 		{Key: "Unattended-Upgrade::Remove-Unused-Kernel-Packages", Value: true},
+		// unattended-upgrades reboots without checking whether workloads come
+		// back. serverpro's gated reboot owns reboots instead, so an image or
+		// operator file that turns this on must not race it.
+		{Key: "Unattended-Upgrade::Automatic-Reboot", Value: false},
 	}
 }
 
