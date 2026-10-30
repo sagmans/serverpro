@@ -854,9 +854,13 @@ The preflight reports each running workload that a reboot would drop:
 - A running service that boot does not start again. A service comes back
   when its unit file state is `enabled` or `generated`, an enabled or
   static socket, timer, or path triggers it, or an active target, a device,
-  or a running service wants it. A `static` unit (no `[Install]` section)
-  comes back only that way, or through its D-Bus name; a static unit
-  started by hand is a gap.
+  or a running service wants it. A service whose D-Bus name has a system
+  bus activation file (`<name>.service` under
+  `/usr/share/dbus-1/system-services`, `/usr/local/share/dbus-1/system-services`,
+  or `/lib/dbus-1/system-services`) comes back on demand, such as
+  `upower.service`, which is `disabled`. A `static` or `disabled` unit that
+  none of these starts, such as one started by hand, is a gap. The bus
+  rule does not apply to a `masked` unit.
 - A running container with a restart policy other than `always` or
   `unless-stopped`. Docker does not start a `no` container when the daemon
   starts. It starts an `on-failure` container only when the shutdown made it

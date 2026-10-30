@@ -39,6 +39,10 @@ BOOT_ID_PATH=/proc/sys/kernel/random/boot_id
 # drivers. Bootstrap turns on live-restore, so containers keep running
 # while dockerd is stopped, and docker cannot list them then.
 DOCKER_SCOPE_PROCS_GLOBS='/sys/fs/cgroup/system.slice/docker-*.scope/cgroup.procs /sys/fs/cgroup/docker/*/cgroup.procs'
+# The system bus's standard activation directories (dbus-daemon's
+# <standard_system_servicedirs/>). The system bus loads only a file named
+# after the bus name, so one test per directory finds the name's file.
+DBUS_SYSTEM_SERVICE_DIRS='/usr/local/share/dbus-1/system-services /usr/share/dbus-1/system-services /lib/dbus-1/system-services'
 # Records use the ASCII unit separator: read treats a tab as IFS
 # whitespace and merges an empty field, such as a service with no
 # TriggeredBy, into its neighbour, which would shift every later field.
@@ -179,12 +183,27 @@ generator_wants() {
   return 1
 }
 
+# bus_activated tells whether the system bus starts the unit that owns a
+# D-Bus name when a client asks for it. A BusName with no activation file
+# only says what the unit claims once it runs, not that anything starts it.
+bus_activated() {
+  case "$1" in
+    '' | */* | .*) return 1 ;;
+  esac
+  for dir in $DBUS_SYSTEM_SERVICE_DIRS; do
+    grep -Fqsx -- "Name=$1" "$dir/$1.service" && return 0
+  done
+  return 1
+}
+
 # service_comes_back decides whether boot, or the demand that started it,
 # starts a running service again: its own enabled unit file, an enabled or
 # static socket, timer, or path that triggers it, a target that starts at
-# boot, a device, or a running service that wants it, or for a static unit
-# the D-Bus name that activates it. A static unit has no [Install] section,
-# so its state alone says nothing: one started by hand does not come back.
+# boot, a device, or a running service that wants it, or a D-Bus activation
+# file for its bus name. Neither static (no [Install] section) nor disabled
+# (an [Install] section nobody enabled) says how a unit started: a D-Bus
+# activated one, such as upower, comes back on demand; one started by hand
+# does not. The bus rule skips a masked unit, which no client can start.
 service_comes_back() {
   case "$2" in
     enabled | generated) return 0 ;;
@@ -192,7 +211,8 @@ service_comes_back() {
       generator_wants "$1"
       return
       ;;
-    static) [ -n "$5" ] && return 0 ;;
+    masked) ;;
+    *) bus_activated "$5" && return 0 ;;
   esac
   for trigger in $3; do
     case "$(trigger_state "$trigger")" in
