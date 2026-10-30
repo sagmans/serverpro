@@ -138,18 +138,28 @@ func localServeBackend(entry, target string) (serveBackend, bool) {
 		return serveBackend{}, false
 	}
 	hostPort := target
+	shown := target
 	if strings.Contains(target, "://") {
 		parsed, err := url.Parse(target)
 		if err != nil || parsed.Port() == "" {
 			return serveBackend{}, false
 		}
 		hostPort = parsed.Host
+		shown = serveTargetEvidence(parsed)
 	}
 	host, port, err := net.SplitHostPort(hostPort)
 	if err != nil || !isLoopbackServeHost(host) {
 		return serveBackend{}, false
 	}
-	return serveBackend{entry: entry, target: target, port: port}, true
+	return serveBackend{entry: entry, target: shown, port: port}, true
+}
+
+// serveTargetEvidence keeps only the scheme, host, port, and path of a proxy
+// URL. Evidence is printed and can be shared, while userinfo, a query, or a
+// fragment can carry a backend credential; the finding needs only the port.
+func serveTargetEvidence(target *url.URL) string {
+	shown := url.URL{Scheme: target.Scheme, Host: target.Host, Path: target.Path, RawPath: target.RawPath}
+	return shown.String()
 }
 
 func isLoopbackServeHost(host string) bool {
