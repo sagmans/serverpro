@@ -283,7 +283,8 @@ IDs (32-hex account and zone IDs, UUID tunnel IDs) shown as `{id}` and no
 query string, in both the status and the transport error, and repeats at
 most the first 256 bytes of the response, with IDs masked, so evidence does
 not carry the account or tunnel a call targeted or the provider's whole
-answer.
+answer. Delete's tunnel ownership check masks both tunnel IDs the same way
+when the live tunnel is not the one in state.
 
 Server doctor and create save the complete redacted report in the system
 temporary directory, including when `--full` is selected. Check evidence

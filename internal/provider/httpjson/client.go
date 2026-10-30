@@ -100,18 +100,25 @@ func (e *StatusError) Error() string {
 	return fmt.Sprintf("%s %s failed: %s: %s", e.Method, redactPath(e.Path), e.Status, shortenBody(e.Body))
 }
 
+// RedactIDs masks the account, zone, and tunnel IDs in text. It is exported
+// so callers that build their own error text about a provider resource keep
+// the IDs out of it the same way failed calls do.
+func RedactIDs(text string) string {
+	return opaqueIDPattern.ReplaceAllString(text, redactedID)
+}
+
 // redactPath drops the query and masks opaque IDs, so the text still names
 // the endpoint that failed.
 func redactPath(path string) string {
 	path, _, _ = strings.Cut(path, querySeparator)
-	return opaqueIDPattern.ReplaceAllString(path, redactedID)
+	return RedactIDs(path)
 }
 
 // shortenBody masks opaque IDs, folds whitespace so an HTML error page stays
 // on one line, and keeps at most maxErrorBodyBytes on a UTF-8 boundary,
 // saying how long the whole answer was.
 func shortenBody(body string) string {
-	text := strings.Join(strings.Fields(opaqueIDPattern.ReplaceAllString(body, redactedID)), " ")
+	text := strings.Join(strings.Fields(RedactIDs(body)), " ")
 	if len(text) <= maxErrorBodyBytes {
 		return text
 	}

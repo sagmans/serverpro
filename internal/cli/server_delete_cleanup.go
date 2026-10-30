@@ -299,8 +299,10 @@ func validateTrackedTunnel(ctx context.Context, cfg config.Config, st state.Stat
 	if err != nil {
 		return false, err
 	}
+	// The IDs are masked like a failed call's, since this text reaches the
+	// same output and logs; the mismatch itself is what the operator needs.
 	if tunnel.ID != "" && tunnel.ID != st.Cloudflare.TunnelID {
-		return false, fmt.Errorf("cloudflare ownership mismatch: live tunnel id %q state %q", tunnel.ID, st.Cloudflare.TunnelID)
+		return false, fmt.Errorf("cloudflare ownership mismatch: live tunnel id %q state %q", httpjson.RedactIDs(tunnel.ID), httpjson.RedactIDs(st.Cloudflare.TunnelID))
 	}
 	expectedName := st.Cloudflare.Name
 	if expectedName == "" {

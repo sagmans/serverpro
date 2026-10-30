@@ -726,6 +726,12 @@ kept the error code and message, and ended with the body's full length. With
 the API unreachable, the old transport error repeated both IDs in the URL;
 the new one masked them and kept the connection error.
 
+A second harness ran delete's tunnel ownership check
+(`validateTrackedTunnel`) through the real Cloudflare client against a fake
+API that answered with another tunnel's UUID. The old error printed the
+live and the state tunnel IDs; the new one printed
+`live tunnel id "{id}" state "{id}"`.
+
 ### Tailnet policy allow-all dogfood
 
 On 2026-10-30 a throwaway harness, never committed, ran the provider
