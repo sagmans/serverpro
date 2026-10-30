@@ -836,6 +836,9 @@ from older hosts. For each account, the removal:
 6. Runs `userdel -r`. No sudoers rule for the name stays, so an account
    created later with the same name gets no sudo from it.
 
+A read that fails, rather than finding nothing (the account database, the
+process list, or a sudoers file), stops the removal too.
+
 Any other account that `privileged accounts` lists is report-only, also
 with `--fix`, and doctor never suggests removing it. A CI deploy user that
 logs in through Tailscale SSH is the usual case: its sudoers.d rule should

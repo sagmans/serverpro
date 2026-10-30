@@ -29,6 +29,14 @@ const (
 	// visudoParsedSuffix ends each line visudo -c prints for a file it read
 	// (under LC_ALL=C), which is how sudo itself lists every include.
 	visudoParsedSuffix = ": parsed OK"
+	// noMatchStatus is the exit grep, pgrep, and cmp use for "no match" or
+	// "differ", and getentNotFoundStatus is getent's "no such entry". Any
+	// other non-zero exit is a failed read, which must stop the removal:
+	// read as "no match", it would delete an account with running
+	// processes, skip a drop-in that grants it sudo, or archive a shared
+	// drop-in as if every rule in it were the account's.
+	noMatchStatus        = "1"
+	getentNotFoundStatus = "2"
 )
 
 // imageUserNamePattern is the portable account-name set useradd accepts. The
@@ -100,9 +108,30 @@ without_user_rules() {
 without_comments() {
   sed -e '/^[[:space:]]*#include/b' -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d'
 }
-# names_user succeeds when a rule or directive in file $2 names account $1.
+# names_user succeeds when a rule or directive in file $2 names account $1,
+# exits ` + noMatchStatus + ` when none does, and anything else when it cannot tell. The file
+# is read before the pipe, because a failed read inside it would reach grep
+# as an empty file.
 names_user() {
-  without_comments <"$2" | grep -Eq "(^|[^a-z0-9_-])$1([^a-z0-9_-]|\$)"
+  content=$(without_comments <"$2") || return 2
+  printf '%s\n' "$content" | grep -Eq "(^|[^a-z0-9_-])$1([^a-z0-9_-]|\$)"
+}
+# exit_status runs a command and prints only its exit status, so a caller
+# can tell a no-match exit from a failed read without set -e ending the
+# script.
+exit_status() {
+  status=0
+  "$@" >/dev/null || status=$?
+  printf '%s' "$status"
+}
+# account_exists succeeds when account $1 exists and stops when the account
+# database cannot be read, so a failed read cannot pass for a removal.
+account_exists() {
+  case $(exit_status getent passwd "$1") in
+    (0) return 0 ;;
+    (` + getentNotFoundStatus + `) return 1 ;;
+    (*) stop "cannot read the account database" ;;
+  esac
 }
 # A candidate left by an early exit would keep a copy of sudoers rules.
 candidate=
@@ -119,11 +148,9 @@ outside_sudoers_d() {
   for sudoers_file in $files; do
     [ "$sudoers_file" != ` + shell.Quote(sudoersMainPath) + ` ] || seen_main=1
     case $sudoers_file in (` + sudoersDropInGlob + `) continue ;; esac
-    status=0
-    names_user "$1" "$sudoers_file" || status=$?
-    case $status in
+    case $(exit_status names_user "$1" "$sudoers_file") in
       (0) stop "$sudoers_file names $1, and serverpro does not edit that file; take $1 out of it with visudo -f $sudoers_file and rerun" ;;
-      (1) ;;
+      (` + noMatchStatus + `) ;;
       (*) stop "cannot read $sudoers_file" ;;
     esac
   done
@@ -135,14 +162,23 @@ remove_image_user() {
   user=$1
   dest="$archive_root/$user-$stamp"
   outside_sudoers_d "$user"
-  if entry=$(getent passwd "$user"); then
+  status=0
+  entry=$(getent passwd "$user") || status=$?
+  case $status in
+    (0|` + getentNotFoundStatus + `) ;;
+    (*) stop "cannot read the account database (getent exit $status)" ;;
+  esac
+  if [ "$status" = 0 ]; then
     uid=$(printf '%s\n' "$entry" | cut -d: -f3)
     [ "$uid" != 0 ] || stop "$user has uid 0"
     login_shell=$(printf '%s\n' "$entry" | cut -d: -f7)
     usermod -L -e 1 -s /usr/sbin/nologin "$user"
-    if pgrep -u "$user" >/dev/null 2>&1; then
-      stop "$user has running processes and is now locked; end them (loginctl terminate-user $user) and rerun, or undo the lock (usermod -U -e '' -s $login_shell $user)"
-    fi
+    unlock="usermod -U -e '' -s $login_shell $user"
+    case $(exit_status pgrep -u "$user") in
+      (0) stop "$user has running processes and is now locked; end them (loginctl terminate-user $user) and rerun, or undo the lock ($unlock)" ;;
+      (` + noMatchStatus + `) ;;
+      (*) stop "cannot list the processes of $user, which is now locked; rerun, or undo the lock ($unlock)" ;;
+    esac
     install -d -m 0700 "$archive_root" "$dest"
     home=$(printf '%s\n' "$entry" | cut -d: -f6)
     if [ -d "$home" ] && [ "$home" != / ]; then
@@ -154,9 +190,15 @@ remove_image_user() {
   fi
   for file in ` + sudoersDropInGlob + `; do
     [ -f "$file" ] || continue
-    grep -Eq "(^|[^a-z0-9_-])$user([^a-z0-9_-]|\$)" "$file" || continue
+    case $(exit_status names_user "$user" "$file") in
+      (0) ;;
+      (` + noMatchStatus + `) continue ;;
+      (*) stop "cannot read $file" ;;
+    esac
     name=$(basename "$file")
-    if [ -z "$(without_user_rules "$user" "$file" | without_comments)" ]; then
+    others=$(without_user_rules "$user" "$file") || stop "cannot read the other rules in $file"
+    others=$(printf '%s' "$others" | without_comments) || stop "cannot read the other rules in $file"
+    if [ -z "$others" ]; then
       install -d -m 0700 "$archive_root" "$dest"
       mv "$file" "$dest/"
       if ! visudo -c >/dev/null 2>&1; then
@@ -168,16 +210,22 @@ remove_image_user() {
     fi
     # The candidate's name has a dot, so sudo skips it while it is checked.
     candidate=$(mktemp "$file.serverpro.XXXXXX") || stop "cannot create a candidate next to $file"
-    without_user_rules "$user" "$file" >"$candidate"
-    if names_user "$user" "$candidate"; then
-      stop "$file still names $user outside its own rules (an alias or a rule for several accounts); remove $user there with visudo -f $file and rerun"
-    fi
+    without_user_rules "$user" "$file" >"$candidate" || stop "cannot write the candidate for $file"
+    case $(exit_status names_user "$user" "$candidate") in
+      (0) stop "$file still names $user outside its own rules (an alias or a rule for several accounts); remove $user there with visudo -f $file and rerun" ;;
+      (` + noMatchStatus + `) ;;
+      (*) stop "cannot read the candidate for $file" ;;
+    esac
     # Only a comment named the account, so the file grants it nothing.
-    if cmp -s "$candidate" "$file"; then
-      rm -f "$candidate"
-      candidate=
-      continue
-    fi
+    case $(exit_status cmp -s "$candidate" "$file") in
+      (0)
+        rm -f "$candidate"
+        candidate=
+        continue
+        ;;
+      (` + noMatchStatus + `) ;;
+      (*) stop "cannot compare the candidate for $file" ;;
+    esac
     visudo -cf "$candidate" >/dev/null 2>&1 || stop "$file without the rules for $user fails visudo -c; remove them with visudo -f $file and rerun"
     install -d -m 0700 "$archive_root" "$dest"
     cp -p "$file" "$dest/$name"
@@ -191,11 +239,11 @@ remove_image_user() {
     fi
     printf 'removed the rules for %s from %s; the original is in %s\n' "$user" "$file" "$dest"
   done
-  if getent passwd "$user" >/dev/null; then
+  if account_exists "$user"; then
     # userdel exits non-zero for a missing mail spool after it removed the
     # account, so the account's presence decides, not the exit status.
     if ! userdel_out=$(userdel -r "$user" 2>&1); then
-      if getent passwd "$user" >/dev/null; then
+      if account_exists "$user"; then
         stop "userdel $user failed: $userdel_out"
       fi
     fi

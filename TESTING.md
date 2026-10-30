@@ -498,6 +498,15 @@ and its sudoers.d file stayed. With a broken drop-in it stopped before any
 change too, where the earlier script had locked the account first. With
 only its own drop-in, both removed the account.
 
+A fourth run made one tool fail at a time with an exit other than "no
+match" (`pgrep` 3, `grep` 2 on the drop-ins, `awk` 2, `getent passwd` 3).
+The earlier script read each failure as "nothing found": it removed an
+account whose processes it could not list, left a `NOPASSWD: ALL` drop-in
+for a later account with the same name, archived a shared drop-in with
+another account's rule, and removed drop-in rules for an account it then
+called absent. The current script stopped on each one, before `userdel`,
+and the other account kept its sudo rule.
+
 Not covered: a real Vultr host (doctor `--fix` was not run against
 production).
 
