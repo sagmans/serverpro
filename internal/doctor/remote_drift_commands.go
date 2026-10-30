@@ -33,7 +33,11 @@ const (
 	rebootPendingRemediation = "security updates wait for a reboot: schedule one (sudo systemctl reboot) when the workload allows, then rerun doctor"
 
 	privilegedAccountsCheckName   = "privileged accounts"
-	privilegedAccountsRemediation = "remove each listed account from the group (gpasswd -d USER GROUP), or delete an unused provider image account (userdel -r USER), after confirming nothing runs as it"
+	privilegedAccountsRemediation = "serverpro server doctor --fix removes only the compute provider's own image accounts; for any other listed account, confirm what runs as it, then remove it from the group (gpasswd -d USER GROUP) or move its sudoers.d file out and run visudo -c"
+	// sudoersPath and sudoersDropInDir are where sudo reads rules; doctor
+	// reads the same files so a grant outside the sudo group is reported.
+	sudoersPath      = "/etc/sudoers"
+	sudoersDropInDir = "/etc/sudoers.d"
 
 	metadataUserDataCheckName = "metadata user-data"
 	// metadataServiceURL is the link-local metadata service every supported
@@ -126,14 +130,54 @@ func rebootPendingCommand() string {
 		"printf 'running kernel %s\\n' \"$running\""
 }
 
+// sudoersGrantsProgram prints one finding per sudoers rule for a principal
+// other than root, the admin user, or the sudo and admin groups (whose
+// members the group scan reports). It joins continued lines first, so a
+// wrapped command list cannot look like a rule, and skips Defaults, alias
+// definitions, and include directives, which grant nothing by themselves.
+const sudoersGrantsProgram = `FNR == 1 { line = "" }
+{ line = line $0 }
+/\\$/ { sub(/\\$/, "", line); next }
+{
+  rule = line; line = ""
+  sub(/^[ \t]+/, "", rule)
+  if (rule == "" || (rule ~ /^#/ && rule !~ /^#include/)) next
+  split(rule, field, /[ \t]+/)
+  who = field[1]
+  if (who ~ /^(Defaults|#include|@include|Cmnd_Alias|Host_Alias|Runas_Alias|User_Alias)/) next
+  if (who == admin || who == "root" || who == "%sudo" || who == "%admin") next
+  printf "` + driftFailPrefix + `%s grants sudo to %s\n", FILENAME, who
+}`
+
 // privilegedAccountsCommand lists every account other than the admin user
-// that holds root through a group or uid 0. It counts primary-group members
-// too, because getent group lists only supplementary ones, and provider
-// images add their default user (for example linuxuser) this way or the other.
-func privilegedAccountsCommand(admin string) string {
+// that holds root through a group, a sudoers rule, or uid 0. It counts
+// primary-group members too, because getent group lists only supplementary
+// ones, and provider images add their default user (for example linuxuser)
+// this way or the other. It also lists each provider image account that still
+// exists, privileged or not, because it is a second login path with its own
+// keys that serverpro does not manage.
+func privilegedAccountsCommand(admin string, imageUsers []string) string {
+	imageAccounts := ""
+	if len(imageUsers) > 0 {
+		quoted := make([]string, len(imageUsers))
+		for i, user := range imageUsers {
+			quoted[i] = shell.Quote(user)
+		}
+		imageAccounts = "for user in " + strings.Join(quoted, " ") + "; do\n" +
+			"  if getent passwd \"$user\" >/dev/null; then printf '" + driftFailPrefix + "provider image account %s exists\\n' \"$user\"; fi\n" +
+			"done\n"
+	}
 	return "export LC_ALL=C\n" +
 		"admin=" + shell.Quote(admin) + "\n" +
 		"{\n" +
+		// sudo skips drop-in names with a dot or a trailing ~, so doctor does too.
+		"set -- " + sudoersPath + "\n" +
+		"for file in " + sudoersDropInDir + "/*; do\n" +
+		"  case \"${file##*/}\" in *.*|*~) continue ;; esac\n" +
+		"  [ -f \"$file\" ] && set -- \"$@\" \"$file\"\n" +
+		"done\n" +
+		"awk -v admin=\"$admin\" " + shell.Quote(sudoersGrantsProgram) + " \"$@\"\n" +
+		imageAccounts +
 		"for group in " + strings.Join(privilegedGroups, " ") + "; do\n" +
 		"  entry=$(getent group \"$group\") || continue\n" +
 		"  gid=$(printf '%s\\n' \"$entry\" | cut -d: -f3)\n" +

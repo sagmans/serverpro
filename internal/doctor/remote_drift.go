@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/lifecycle"
 	"github.com/sagmans/serverpro/internal/network"
 	"github.com/sagmans/serverpro/internal/remote"
 )
@@ -20,7 +21,8 @@ const (
 // checks cannot see: each compares the live host with what config or
 // provisioning promised. Most are read-only, because the finding needs an
 // operator decision (an unknown account, a reboot window). Restricted egress
-// has a repair, because config already states the wanted policy.
+// and provider image accounts have a repair, because config or the provider
+// adapter already states the wanted result.
 func remoteDriftSpecifications(cfg config.Config, opt Options) []remoteCheckSpecification {
 	user := cfg.Admin.Username
 	var specifications []remoteCheckSpecification
@@ -29,7 +31,7 @@ func remoteDriftSpecifications(cfg config.Config, opt Options) []remoteCheckSpec
 	}
 	return append(specifications,
 		remoteDriftSpecification(rebootPendingCheckName, rebootPendingCommand(), rebootPendingRemediation),
-		remoteDriftSpecification(privilegedAccountsCheckName, privilegedAccountsCommand(user), privilegedAccountsRemediation),
+		remotePrivilegedAccountsSpecification(user, opt.ImageDefaultUsers),
 		remoteMetadataUserDataSpecification(user, opt.MetadataUserDataPath),
 		remoteDriftSpecification(tailscaleOperatorCheckName, tailscaleOperatorCommand(), tailscaleOperatorRemediation),
 		remoteTailscaleServeSpecification(),
@@ -56,6 +58,42 @@ func remoteDriftSpecification(name, command, remediation string) remoteCheckSpec
 	}
 }
 
+// remotePrivilegedAccountsSpecification repairs only what the compute
+// provider declared as its own image accounts. Any other extra account
+// (a deploy user, a contractor's login) may run a workload, so it stays
+// report-only even with --fix. With no declared accounts, or a declaration
+// the removal script refuses, the check has no repair at all.
+func remotePrivilegedAccountsSpecification(admin string, imageUsers []string) remoteCheckSpecification {
+	command := privilegedAccountsCommand(admin, imageUsers)
+	removal, err := lifecycle.ImageUsersRemovalScript(admin, imageUsers)
+	if len(imageUsers) == 0 || err != nil {
+		return remoteDriftSpecification(privilegedAccountsCheckName, command, privilegedAccountsRemediation)
+	}
+	return remoteFixableDriftSpecificationWhen(privilegedAccountsCheckName, command, privilegedAccountsRemediation, removal, func(result Result) bool {
+		return namesAnyAccount(result.Evidence, imageUsers)
+	})
+}
+
+// namesAnyAccount reports whether evidence names one of the accounts as a
+// whole word, so "linuxuser2" does not count as "linuxuser".
+func namesAnyAccount(evidence string, accounts []string) bool {
+	words := strings.FieldsFunc(evidence, func(r rune) bool { return !isAccountNameRune(r) })
+	for _, word := range words {
+		for _, account := range accounts {
+			if word == account {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isAccountNameRune matches the characters the image account names may use
+// (lifecycle's portable account-name set), so the split keeps names whole.
+func isAccountNameRune(r rune) bool {
+	return r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_' || r == '-'
+}
+
 // remoteFixableDriftSpecification gives a drift check a repair that
 // converges the host back to config. The repair runs only on a finding the
 // probe could read: a probe that never ran leaves the host state unknown, and
@@ -63,6 +101,13 @@ func remoteDriftSpecification(name, command, remediation string) remoteCheckSpec
 // The check re-reads live after another check ran the same repair, so a
 // shared repair settles every check that depends on it.
 func remoteFixableDriftSpecification(name, command, remediation, fixCommand string) remoteCheckSpecification {
+	return remoteFixableDriftSpecificationWhen(name, command, remediation, fixCommand, nil)
+}
+
+// remoteFixableDriftSpecificationWhen adds a gate for checks whose repair
+// covers only some findings: fixable sees the drift result and decides
+// whether the repair can change it. A nil gate repairs any drift.
+func remoteFixableDriftSpecificationWhen(name, command, remediation, fixCommand string, fixable func(Result) bool) remoteCheckSpecification {
 	return remoteCheckSpecification{
 		readCommands:     []string{command},
 		liveCommands:     []string{fixCommand},
@@ -74,7 +119,7 @@ func remoteFixableDriftSpecification(name, command, remediation, fixCommand stri
 			}
 			out, err := runner.Run(ctx, user, host, command)
 			result := driftResult(name, out, err, remediation)
-			if err != nil || result.Status == Pass || !opt.Fix {
+			if err != nil || result.Status == Pass || !opt.Fix || (fixable != nil && !fixable(result)) {
 				return []Result{result}
 			}
 			if opt.fixRan != nil && opt.fixRan(fixCommand) {

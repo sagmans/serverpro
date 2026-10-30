@@ -650,6 +650,19 @@ instance reboots after an update. Reviewed 2026-10-30; the DigitalOcean and
 Vultr paths were also read live on managed hosts. No Hetzner host was
 available, so its path rests on the Ignition provider source.
 
+### Provider image accounts
+
+```text
+https://docs.vultr.com/support/platform/ssh-keys/how-do-i-use-an-ssh-key-with-a-non-root-user-on-a-vultr-instance
+https://docs.digitalocean.com/products/droplets/getting-started/recommended-droplet-setup/
+https://community.hetzner.com/tutorials/basic-cloud-config
+```
+
+Use: the image accounts each compute adapter declares for removal. Vultr's
+limited login account is `linuxuser` with sudo; managed Vultr hosts also had
+it. DigitalOcean and Hetzner Ubuntu images log in as root only, so their
+adapters declare none. Reviewed 2026-10-30.
+
 ### Vultr firewall groups
 
 ```text

@@ -22,6 +22,7 @@ const (
 	ProvisionPhaseTailscaleDevice           ProvisionPhase = "tailscale_device"
 	ProvisionPhaseRemoteReady               ProvisionPhase = "remote_ready"
 	ProvisionPhaseRemoteAdminPassword       ProvisionPhase = "remote_admin_password"
+	ProvisionPhaseRemoteImageUsers          ProvisionPhase = "remote_image_users"
 	ProvisionPhaseRemoteBootstrap           ProvisionPhase = "remote_bootstrap"
 	ProvisionPhaseComplete                  ProvisionPhase = "complete"
 )

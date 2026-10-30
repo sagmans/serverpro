@@ -43,6 +43,10 @@ type Options struct {
 	// (compute.MetadataUserDataPath). Doctor cannot name providers, so the
 	// caller that resolved the provider passes it; empty skips that check.
 	MetadataUserDataPath string
+	// ImageDefaultUsers are the login accounts the compute provider's stock
+	// image creates (compute.ImageDefaultUsers), passed by the caller for the
+	// same reason. Only these accounts are ever removed by --fix.
+	ImageDefaultUsers []string
 	// refreshBaseline makes a check skip its batch baseline and read live,
 	// because a repair earlier in the same run may have changed the host.
 	refreshBaseline bool

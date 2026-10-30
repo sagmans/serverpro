@@ -87,3 +87,21 @@ func TestMetadataUserDataPathIsOptional(t *testing.T) {
 		t.Fatalf("metadata path = %q", got)
 	}
 }
+
+type fakeImageUsersProvider struct {
+	fakeProvider
+	users []string
+}
+
+func (p fakeImageUsersProvider) ImageDefaultUsers() []string { return p.users }
+
+// TestImageDefaultUsersIsOptional keeps removal opt-in: a provider that
+// declares nothing yields nil, so doctor and create remove no account.
+func TestImageDefaultUsersIsOptional(t *testing.T) {
+	if got := ImageDefaultUsers(fakeProvider{name: "plain"}); got != nil {
+		t.Fatalf("provider without image accounts = %v", got)
+	}
+	if got := ImageDefaultUsers(fakeImageUsersProvider{fakeProvider: fakeProvider{name: "cloud"}, users: []string{"clouduser"}}); len(got) != 1 || got[0] != "clouduser" {
+		t.Fatalf("image accounts = %v", got)
+	}
+}

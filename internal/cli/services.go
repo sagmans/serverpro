@@ -239,24 +239,27 @@ func (a *app) retryDoctorSudoReport(ctx context.Context, cfg config.Config, st s
 	if a.services.retryDoctorSudoReport != nil {
 		return a.services.retryDoctorSudoReport(ctx, cfg, st, creds, existing, sudoPassword)
 	}
-	return doctor.RetryRemote(ctx, cfg, st, existing, remote.TailscaleSSH{SudoPassword: sudoPassword}, doctor.Options{SudoPassword: sudoPassword, GitHubPAT: creds.GitHubPAT, MetadataUserDataPath: a.doctorMetadataUserDataPath(st)}).Redact(a.redactionSecrets(creds)...)
+	return doctor.RetryRemote(ctx, cfg, st, existing, remote.TailscaleSSH{SudoPassword: sudoPassword}, a.withDoctorProviderFacts(st, doctor.Options{SudoPassword: sudoPassword, GitHubPAT: creds.GitHubPAT})).Redact(a.redactionSecrets(creds)...)
 }
 
-// doctorMetadataUserDataPath names the server's compute provider metadata
-// path for doctor, which may not name providers itself. The first run and the
-// sudo retry both use it, because the retry is the run that reaches the host
-// when no sudo password was supplied up front. An unresolved provider leaves
-// it empty, and doctor then reports the check as skipped, not clean.
-func (a *app) doctorMetadataUserDataPath(st state.State) string {
+// withDoctorProviderFacts adds what the server's compute provider declares
+// (its metadata user-data path and its image accounts) to doctor options,
+// because doctor may not name providers itself. The first run and the sudo
+// retry both use it, because the retry is the run that reaches the host when
+// no sudo password was supplied up front. An unresolved provider leaves both
+// empty: doctor then skips the metadata check and repairs no account.
+func (a *app) withDoctorProviderFacts(st state.State, opt doctor.Options) doctor.Options {
 	name := a.provider
 	if name == "" {
 		name = st.Compute.Provider
 	}
 	provider, err := a.resolveProvider(name)
 	if err != nil {
-		return ""
+		return opt
 	}
-	return compute.MetadataUserDataPath(provider)
+	opt.MetadataUserDataPath = compute.MetadataUserDataPath(provider)
+	opt.ImageDefaultUsers = compute.ImageDefaultUsers(provider)
+	return opt
 }
 
 func (a *app) doctorReport(ctx context.Context, cfg config.Config, st state.State, creds credentials.Set, sudoPassword string) doctor.Report {
@@ -277,5 +280,5 @@ func (a *app) doctorReport(ctx context.Context, cfg config.Config, st state.Stat
 	if err != nil {
 		return doctor.Report{Results: []doctor.Result{{Status: doctor.Fail, Scope: "provider", Name: "compute provider", Evidence: err.Error()}}}
 	}
-	return doctor.RunWithOptions(ctx, cfg, st, creds, clients, doctor.Options{Fix: a.doctorFix, SudoPassword: sudoPassword, ComputeAccount: accountRef, MetadataUserDataPath: a.doctorMetadataUserDataPath(st)}).Redact(a.redactionSecrets(creds)...)
+	return doctor.RunWithOptions(ctx, cfg, st, creds, clients, a.withDoctorProviderFacts(st, doctor.Options{Fix: a.doctorFix, SudoPassword: sudoPassword, ComputeAccount: accountRef})).Redact(a.redactionSecrets(creds)...)
 }

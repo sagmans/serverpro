@@ -663,16 +663,18 @@ toolset summary.
 
 These doctor checks compare the live host with what config and provisioning
 set up. Most are read-only: `--fix` does not change what they find, because
-each finding needs an operator decision. Two checks have a repair, because
-config already states the wanted result: `egress restricted` re-applies the
-restricted egress lockdown, and `cloudflared apt pin` rewrites the pin (only
-with ingress `cloudflare-tunnel`).
+each finding needs an operator decision. Three checks have a repair, because
+config or the compute provider already states the wanted result:
+`egress restricted` re-applies the restricted egress lockdown,
+`privileged accounts` removes the provider's own image accounts, and
+`cloudflared apt pin` rewrites the pin (only with ingress
+`cloudflare-tunnel`).
 
 | Check | Result | Finding |
 | --- | --- | --- |
 | `egress restricted` | fail | UFW's default outgoing policy is not `deny`/`reject`, a lockdown `ALLOW OUT` rule is missing, or a TCP connect to `1.1.1.1:853` succeeds. Runs only with `network.egress.mode: restricted`; `--fix` re-applies the lockdown. |
 | `reboot pending` | warn | `/var/run/reboot-required` exists, or an installed kernel is newer than the running one. |
-| `privileged accounts` | fail | An account other than the admin user is in `sudo`, `admin`, `lxd`, or `docker` (also as primary group), or a non-root account has uid 0. |
+| `privileged accounts` | fail | An account other than the admin user is in `sudo`, `admin`, `lxd`, or `docker` (also as primary group), a rule in `/etc/sudoers` or `/etc/sudoers.d` grants sudo to another account or group, a non-root account has uid 0, or a provider image account (Vultr: `linuxuser`) exists. `--fix` removes only the provider image accounts; see Provider image accounts. |
 | `metadata user-data` | fail or warn | The provider metadata user-data holds the admin's current password hash (fail), or another password hash or `passwd` key (warn). |
 | `tailscale operator` | fail | tailscaled has an `OperatorUser`. |
 | `tailscale serve` | fail or warn | Funnel publishes a port (fail), or a Serve entry forwards to a local port with no TCP listener (warn). |
@@ -691,6 +693,28 @@ the `cloudflared` check above audits and repairs the connector itself;
 and it reads the same host state as that audit. The `tailnet policy` check
 needs an API token that can read the policy file; serverpro never edits
 tailnet packet rules.
+
+### Provider image accounts
+
+Some stock images create a login account next to root (Vultr:
+`linuxuser`, with sudo). Serverpro manages one admin user, so `server create`
+removes these accounts after the admin password step proves that the admin
+user works through sudo. `serverpro server doctor NAME --fix` removes them
+from older hosts. For each account, the removal:
+
+1. Stops if the account has running processes. End them first, for example
+   with `sudo loginctl terminate-user linuxuser`.
+2. Locks the account and expires it, so no new session starts.
+3. Archives its home and crontab under
+   `/root/serverpro-removed-accounts/<account>-<UTC time>/`.
+4. Moves each `/etc/sudoers.d` file whose rules are all for that account into
+   the same archive, then runs `visudo -c`. If that fails, it moves the file
+   back and stops. A file with rules for other accounts stays.
+5. Runs `userdel -r`.
+
+Any other account that `privileged accounts` lists (for example a `deploy`
+user with its own sudoers.d file) is report-only, also with `--fix`. Confirm
+what runs as it, then remove it yourself.
 
 ### Restricted egress
 

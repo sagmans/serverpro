@@ -26,6 +26,9 @@ func TestComputeProviderNameAndCapabilities(t *testing.T) {
 	if got := compute.MetadataUserDataPath(p); got != metadataUserDataPath || got == "" {
 		t.Fatalf("metadata user-data path = %q", got)
 	}
+	if got := compute.ImageDefaultUsers(p); len(got) != 1 || got[0] != imageDefaultUser {
+		t.Fatalf("image accounts = %v", got)
+	}
 }
 
 func TestComputeProviderMapsCatalogToGenericTerms(t *testing.T) {

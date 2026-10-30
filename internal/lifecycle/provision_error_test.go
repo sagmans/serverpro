@@ -132,6 +132,10 @@ func TestRunClassifiesLifecycleFailuresByPhase(t *testing.T) {
 		{name: "remote admin password", phase: ProvisionPhaseRemoteAdminPassword, alter: func(opt *Options) {
 			opt.Clients.Remote = &sequenceRemote{errors: []error{nil, cause}}
 		}},
+		{name: "remote image users", phase: ProvisionPhaseRemoteImageUsers, alter: func(opt *Options) {
+			opt.Clients.Compute = &imageUserCompute{fakeHetzner: &fakeHetzner{}, users: []string{"linuxuser"}}
+			opt.Clients.Remote = &sequenceRemote{errors: []error{nil, nil, cause}}
+		}},
 		{name: "remote bootstrap", phase: ProvisionPhaseRemoteBootstrap, alter: func(opt *Options) {
 			opt.Config.Cloudflare.Tunnel.Enabled = false
 			opt.Clients.Remote = &sequenceRemote{errors: []error{nil, nil, cause}}

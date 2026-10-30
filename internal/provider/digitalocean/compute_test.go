@@ -26,6 +26,10 @@ func TestComputeProviderNameAndCapabilities(t *testing.T) {
 	if got := compute.MetadataUserDataPath(p); got != metadataUserDataPath || got == "" {
 		t.Fatalf("metadata user-data path = %q", got)
 	}
+	// Stock images log in as root only, so there is no account to remove.
+	if got := compute.ImageDefaultUsers(p); got != nil {
+		t.Fatalf("image accounts = %v", got)
+	}
 }
 
 func TestComputeProviderDoctorRedactsAndPreservesProviderError(t *testing.T) {

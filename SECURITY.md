@@ -116,13 +116,16 @@ default.
 - Doctor drift checks report what weakens this model after provisioning:
   restricted egress not in force (UFW policy, every lockdown rule, and a real
   connect to a port the lockdown never allows), a pending reboot, extra accounts in
-  `sudo`/`admin`/`lxd`/`docker` or with uid 0, a Tailscale `OperatorUser`,
+  `sudo`/`admin`/`lxd`/`docker`, with a sudoers rule, or with uid 0, provider
+  image accounts, a Tailscale `OperatorUser`,
   Tailscale Funnel or Serve entries with no local listener, runtime sysctl
   values that differ from the serverpro drop-in, and a cloudflared service that
-  is enabled or running on a host whose config ingress is `none`. Only
-  restricted egress has a repair (the provisioning lockdown), because config
-  states the wanted policy; the others need an operator decision. See
-  USAGE.md, Drift checks.
+  is enabled or running on a host whose config ingress is `none`. Restricted
+  egress has a repair (the provisioning lockdown), because config states the
+  wanted policy. Privileged accounts has a repair only for the accounts the
+  compute adapter declares as its image accounts; every other account,
+  sudoers rule, or group member is report-only, because it may run a
+  workload. See USAGE.md, Drift checks and Provider image accounts.
 - Tailnet packet rules are outside serverpro's ownership: serverpro edits only
   its tag owners and SSH rule. Doctor warns when the tailnet policy lets every
   source reach every port, since UFW is then the only barrier between any

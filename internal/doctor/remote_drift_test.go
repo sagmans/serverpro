@@ -3,6 +3,7 @@ package doctor
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -231,8 +232,8 @@ func TestRebootPendingCommandReportsFlagAndNewerKernel(t *testing.T) {
 
 // fakeGetent answers from files under $FAKE_ETC like the libc databases do,
 // exiting non-zero for a missing key so callers see getent's own contract.
-const fakeGetent = `case "$1" in
-passwd) cat "$FAKE_ETC/passwd" ;;
+const fakeGetent = `case "$1:$#" in
+passwd:1) cat "$FAKE_ETC/passwd" ;;
 *) grep "^$2:" "$FAKE_ETC/$1" ;;
 esac`
 
@@ -254,22 +255,85 @@ func TestPrivilegedAccountsCommandListsEveryRootPath(t *testing.T) {
 			"builder:x:1002:110::/home/builder:/bin/bash\n" +
 			"toor:x:0:0::/root:/bin/sh\n",
 	})
+	sudoers := fakeSudoers(t, "Defaults env_reset\nroot ALL=(ALL:ALL) ALL\n%sudo ALL=(ALL:ALL) ALL\n@includedir /etc/sudoers.d\n", map[string]string{
+		"90-cloud-init-users": "# Created by cloud-init\ndeploy ALL=(ALL) ALL\n",
+		"README":              "# Files in this directory are read by sudo.\n#\n",
+		"ci":                  "Cmnd_Alias DEPLOY = /usr/bin/systemctl restart app, \\\n    /usr/bin/systemctl status app\nci ALL=(root) NOPASSWD: DEPLOY\n",
+		"old.dpkg-dist":       "ghost ALL=(ALL) ALL\n",
+	})
 	out, err := driftProbe{
-		command: privilegedAccountsCommand("deploy"),
-		tools:   map[string]string{"getent": fakeGetent},
-		env:     []string{"FAKE_ETC=" + etc},
+		command:      privilegedAccountsCommand("deploy", []string{"linuxuser", "absent"}),
+		replacements: map[string]string{sudoersPath: sudoers},
+		tools:        map[string]string{"getent": fakeGetent},
+		env:          []string{"FAKE_ETC=" + etc},
 	}.run(t)
 	result := driftResult(privilegedAccountsCheckName, out, err, privilegedAccountsRemediation)
 	if result.Status != Fail {
 		t.Fatalf("result = %+v, want fail", result)
 	}
-	for _, want := range []string{"linuxuser is in privileged group sudo", "builder is in privileged group lxd", "toor has uid 0"} {
+	for _, want := range []string{"linuxuser is in privileged group sudo", "builder is in privileged group lxd", "toor has uid 0", "sudoers.d/ci grants sudo to ci", "provider image account linuxuser exists"} {
 		if !strings.Contains(result.Evidence, want) {
 			t.Fatalf("evidence %q lacks %q", result.Evidence, want)
 		}
 	}
-	if strings.Contains(result.Evidence, "deploy is") || strings.Contains(result.Evidence, "root has") {
-		t.Fatalf("admin or root reported: %q", result.Evidence)
+	// The admin, root, the sudo group, a continued command list, a drop-in
+	// sudo itself skips, and an image account that is gone are not drift.
+	for _, unwanted := range []string{"deploy is", "root has", "to deploy", "to %sudo", "/usr/bin", "ghost", "absent"} {
+		if strings.Contains(result.Evidence, unwanted) {
+			t.Fatalf("evidence %q reports %q", result.Evidence, unwanted)
+		}
+	}
+}
+
+// fakeSudoers writes a sudoers file and its drop-in directory side by side,
+// so replacing the sudoers path also redirects the drop-in directory.
+func fakeSudoers(t *testing.T, main string, dropIns map[string]string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "sudoers")
+	if err := os.WriteFile(path, []byte(main), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path+".d", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range dropIns {
+		if err := os.WriteFile(filepath.Join(path+".d", name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return path
+}
+
+func TestPrivilegedAccountsSpecificationRepairsOnlyImageAccounts(t *testing.T) {
+	if specification := remotePrivilegedAccountsSpecification("deploy", nil); len(specification.liveCommands) != 0 {
+		t.Fatal("a provider without image accounts got a repair")
+	}
+	if specification := remotePrivilegedAccountsSpecification("deploy", []string{"deploy"}); len(specification.liveCommands) != 0 {
+		t.Fatal("a declaration naming the admin user got a repair")
+	}
+	specification := remotePrivilegedAccountsSpecification("deploy", []string{"linuxuser"})
+	if len(specification.liveCommands) != 1 || !strings.Contains(specification.liveCommands[0], "userdel -r") {
+		t.Fatalf("live commands = %v, want the image account removal", specification.liveCommands)
+	}
+	command, removal := specification.readCommands[0], specification.liveCommands[0]
+	for _, tc := range []struct {
+		name, finding string
+		wantFix       bool
+	}{
+		{name: "unknown account stays report-only", finding: "fail: /etc/sudoers.d/ci grants sudo to ci\nfail: linuxuser2 is in privileged group sudo"},
+		{name: "image account is removed", finding: "fail: provider image account linuxuser exists", wantFix: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &scriptedRemote{responses: map[string][]remoteCall{command: {{out: tc.finding}, {out: "checked groups: sudo"}}}}
+			results := specification.run(context.Background(), runner, "deploy", "prod-01", Options{Fix: true})
+			ran := false
+			for _, script := range runner.commands {
+				ran = ran || script == removal
+			}
+			if ran != tc.wantFix || (tc.wantFix && results[0].Status != Pass) || (!tc.wantFix && results[0].Status != Fail) {
+				t.Fatalf("removal ran = %v, results = %+v", ran, results)
+			}
+		})
 	}
 }
 
@@ -279,9 +343,10 @@ func TestPrivilegedAccountsCommandPassesAdminOnlyHost(t *testing.T) {
 		"passwd": "root:x:0:0::/root:/bin/bash\ndeploy:x:1000:1000::/home/deploy:/bin/bash\n",
 	})
 	out, err := driftProbe{
-		command: privilegedAccountsCommand("deploy"),
-		tools:   map[string]string{"getent": fakeGetent},
-		env:     []string{"FAKE_ETC=" + etc},
+		command:      privilegedAccountsCommand("deploy", nil),
+		replacements: map[string]string{sudoersPath: fakeSudoers(t, "root ALL=(ALL:ALL) ALL\n", nil)},
+		tools:        map[string]string{"getent": fakeGetent},
+		env:          []string{"FAKE_ETC=" + etc},
 	}.run(t)
 	if result := driftResult(privilegedAccountsCheckName, out, err, privilegedAccountsRemediation); result.Status != Pass {
 		t.Fatalf("result = %+v, want pass", result)

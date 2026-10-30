@@ -64,6 +64,9 @@ access paths for app-owned deployment flows.
   - Optional `InstanceMetadataProvider`: an adapter declares the metadata
     user-data path its provider serves. The CLI passes it to doctor, because
     doctor and other generic packages must not name providers.
+  - Optional `ImageDefaultUsersProvider`: an adapter declares the login
+    accounts its stock image creates next to root (Vultr: `linuxuser`).
+    Create removes them, and doctor `--fix` removes only these accounts.
 - Import recovery: `internal/importsync`
   - Discover labeled provider inventory and rebuild local config/state/registry.
 - Credentials: `internal/credentials`
@@ -232,7 +235,9 @@ access paths for app-owned deployment flows.
     Each probe prints `fail: ` or `warn: ` lines and exits 0 when it could read
     the host, so a probe that never ran (non-zero exit) fails instead of
     passing.
-    They have no repair, because each finding needs an operator decision. The
+    Two have a repair: restricted egress re-runs the provisioning lockdown,
+    and privileged accounts removes the accounts the compute adapter declares
+    as image accounts. Every other finding needs an operator decision. The
     provider `tailnet policy` check reads the policy file through the mesh
     snapshot and warns on allow-all packet rules.
 - Polling: `internal/poll`
@@ -377,8 +382,14 @@ flowchart LR
    hashes it with its PAM default (yescrypt on Ubuntu 24.04), removes the
    first-boot grant and any cloud-init `NOPASSWD:ALL` rule, and validates
    password sudo, restoring the sudoers files on failure. `doctor --fix` runs
-   the same script. Then converge the managed host tools through the embedded
-   bootstrap script.
+   the same script. Then remove the compute provider's image accounts
+   (`remote_image_users` phase), because the admin user now works through
+   sudo: `lifecycle.ImageUsersRemovalScript` locks each account, archives its
+   home, crontab, and single-account sudoers.d files under
+   `/root/serverpro-removed-accounts`, checks `visudo -c`, and then runs
+   `userdel -r`. It stops on running processes and never touches root, the
+   admin user, or uid 0. Then converge the managed host tools through the
+   embedded bootstrap script.
 10. During interactive GitHub setup, persist the selected non-secret access
     intent before remote mutation. Full development requires a PAT; deploy-key
     intent includes its normalized repository scope. Switching from deploy-key

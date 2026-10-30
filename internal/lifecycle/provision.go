@@ -109,6 +109,9 @@ func Run(ctx context.Context, opt Options) (state.State, error) {
 	if err := setRemoteAdminPassword(ctx, opt.Clients.Remote, cfg, st, opt.AdminPassword); err != nil {
 		return st, newProvisionError(ProvisionPhaseRemoteAdminPassword, st, err)
 	}
+	if err := removeImageUsers(ctx, opt.Clients.Remote, opt.Clients.Compute, cfg, st); err != nil {
+		return st, newProvisionError(ProvisionPhaseRemoteImageUsers, st, err)
+	}
 	if err := bootstrapRemoteNetwork(ctx, opt.Clients.Remote, opt.Clients.Cloudflare, cfg, st); err != nil {
 		return st, newProvisionError(ProvisionPhaseRemoteBootstrap, st, err)
 	}

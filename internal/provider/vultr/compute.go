@@ -12,6 +12,10 @@ import (
 // user-data until the instance reboots after an update.
 const metadataUserDataPath = "/latest/user-data"
 
+// imageDefaultUser is the limited login account Vultr's Ubuntu images create
+// next to root, with sudo rights and the deploy SSH keys.
+const imageDefaultUser = "linuxuser"
+
 type ClientFactory func(token string) Client
 
 type ComputeProvider struct {
@@ -30,6 +34,10 @@ func (p ComputeProvider) Name() compute.ProviderName { return compute.ProviderNa
 // MetadataUserDataPath lets doctor check what this provider's metadata
 // service still serves to every local process on the server.
 func (p ComputeProvider) MetadataUserDataPath() string { return metadataUserDataPath }
+
+// ImageDefaultUsers declares the account Vultr's Ubuntu images create next
+// to root, so create and doctor --fix can remove it.
+func (p ComputeProvider) ImageDefaultUsers() []string { return []string{imageDefaultUser} }
 
 func (p ComputeProvider) Capabilities(context.Context) compute.Capabilities {
 	return compute.Capabilities{CreateServer: true, DeleteServer: true, PowerServer: true, Catalog: true, ListServers: true}

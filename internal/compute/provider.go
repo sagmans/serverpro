@@ -40,6 +40,25 @@ func MetadataUserDataPath(provider Provider) string {
 	return source.MetadataUserDataPath()
 }
 
+// ImageDefaultUsersProvider is implemented by providers whose stock images
+// create a login account next to root. Serverpro manages one admin user, so
+// such an account is an unmanaged sudo path: create removes it once the admin
+// user works, and doctor --fix removes it again. Only accounts a provider
+// declares here are ever removed; any other extra account is report-only.
+type ImageDefaultUsersProvider interface {
+	ImageDefaultUsers() []string
+}
+
+// ImageDefaultUsers returns the provider's image accounts, or nil when it
+// declares none, so callers need no type assertion.
+func ImageDefaultUsers(provider Provider) []string {
+	source, ok := provider.(ImageDefaultUsersProvider)
+	if !ok {
+		return nil
+	}
+	return source.ImageDefaultUsers()
+}
+
 type Account struct {
 	Name     string
 	Provider ProviderName
