@@ -174,17 +174,28 @@ default.
   come back. Privileged accounts has a repair only for the accounts the
   compute adapter declares as its image accounts; every other account,
   sudoers rule, or group member is report-only, because it may run a
-  workload such as a CI deploy. A sudoers rule without a command limit in
-  any of its `:`-joined command lists fails, and so does a rule that lists a root-equivalent command (a shell,
-  editor, pager, interpreter, file writer, or account, package, service, or
-  container manager) by any path or arguments; a rule that lists only other
-  absolute command paths warns and names them. On the server, each listed
-  path must resolve to a root-owned file that no group or other user can
-  write, below directories that are the same, and not to a root-equivalent
-  command; otherwise the rule fails, because a symlink or a writable script
-  runs anything as root behind a narrow-looking path. Give such an account a
-  root-owned wrapper script that it cannot write and that runs one fixed
-  action. See USAGE.md, Drift checks and Provider image accounts.
+  workload such as a CI deploy. Doctor reads the rules with sudo's own
+  parser (`cvtsudoers`: JSON, aliases expanded, every include followed),
+  never with line patterns that a continued line, a user list, a `#uid`, or
+  `!!` can get past, and the check fails closed when the parser is missing,
+  fails, or prints output doctor cannot read. A sudoers rule without a
+  command limit fails, and so does a rule that lists a root-equivalent
+  command (a shell, editor, pager, interpreter, file writer, loader, or
+  account, package, service, module, capability, or container manager) by
+  any path or arguments, a rule with `SETENV` or an option doctor does not
+  grade as safe, and a `Defaults` entry, whatever it binds to, that turns
+  on `setenv`, turns off `env_reset`, or keeps a loader variable such as
+  `LD_PRELOAD` or `PYTHONPATH`. A rule that lists only other absolute
+  command paths warns and names them. On the server, every hop of each
+  listed path, each symlink and the directory it sits in included, must be
+  root-owned and not writable by group or others, and the last hop must be
+  a regular file that is not a root-equivalent command; otherwise the rule
+  fails, because a symlink or a writable script runs anything as root
+  behind a narrow-looking path. A listed path also fails when a file with
+  the same name plus a space exists, since the parser's output cannot tell
+  an escaped space from arguments. Give such an account a root-owned
+  wrapper script that it cannot write and that runs one fixed action. See
+  USAGE.md, Drift checks and Provider image accounts.
 - Tailnet packet rules are outside serverpro's ownership: serverpro edits only
   its tag owners and SSH rule. Doctor warns when the tailnet policy lets every
   source reach every port, since UFW is then the only barrier between any

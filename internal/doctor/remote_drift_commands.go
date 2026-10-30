@@ -8,6 +8,7 @@ import (
 
 	"github.com/sagmans/serverpro/internal/cloudinit"
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/lifecycle"
 	"github.com/sagmans/serverpro/internal/network"
 	"github.com/sagmans/serverpro/internal/rebootgate"
 	"github.com/sagmans/serverpro/internal/shell"
@@ -47,14 +48,12 @@ const (
 
 	privilegedAccountsCheckName   = "privileged accounts"
 	privilegedAccountsRemediation = "serverpro server doctor --fix removes only the compute provider's own image accounts and never changes any other account; keep any other listed account (it may be a CI deploy user) and confirm what runs as it: limit a rule that grants sudo without a command limit to the absolute command paths it needs, replace a root-equivalent command (a shell, editor, pager, interpreter, file writer, package, service, or container manager) with a root-owned wrapper script that the account cannot write and that runs one fixed action, take the account out of a privileged group it does not need (gpasswd -d USER GROUP), and run visudo -c after each sudoers change"
-	// sudoersPath and sudoersDropInDir are where sudo reads rules; doctor
-	// reads the same files so a grant outside the sudo group is reported.
-	sudoersPath      = "/etc/sudoers"
-	sudoersDropInDir = "/etc/sudoers.d"
-	// sudoersListedSeparator ends the part of a listed-commands finding
-	// before the command paths. The host step after the sudoers program
-	// splits on it to check each path, so both sides use this one value.
+	// sudoersListedSeparator introduces the paths in a listed-commands
+	// finding.
 	sudoersListedSeparator = " for listed commands: "
+	// sudoCommandMaxHops is the symlink limit the Linux kernel applies
+	// (MAXSYMLINKS), so the path walk gives up where sudo's exec would.
+	sudoCommandMaxHops = 40
 
 	metadataUserDataCheckName = "metadata user-data"
 	// metadataServiceURL is the link-local metadata service every supported
@@ -136,29 +135,32 @@ var rootEquivalentCommands = []string{
 	"snap", "pip", "npm", "gem", "make", "git", "systemctl", "systemd-run",
 	"systemd-nspawn", "busctl", "loginctl", "service", "docker", "podman",
 	"ctr", "nerdctl", "kubectl", "lxc",
+	// Commands that read or write any file, load kernel code or file
+	// capabilities, open a network shell, trace or load a program, run a
+	// job later, or take a config path; ld is the dynamic loader (ld.so)
+	// and the linker, both of which run or write chosen code.
+	"sort", "uniq", "shuf", "gpg", "setcap", "insmod", "modprobe", "kmod",
+	"ssh-keygen", "nc", "ncat", "ltrace", "valgrind", "at",
+	"systemd-tmpfiles", "logrotate", "ld", "vimdiff", "rview", "mksh",
 }
+
+// rootEquivalentPrefixes match normalized names whose suffix names a CPU
+// architecture: the dynamic loader is ld-linux-x86-64.so.2 or
+// ld-linux-aarch64.so.1, which normalize to different names.
+var rootEquivalentPrefixes = []string{"ld-linux"}
 
 // commandNamePatterns turn a command's base name into the name
 // rootEquivalentCommands holds, in order: a GNU target prefix
 // (x86_64-linux-gnu-gcc-13 is what /usr/bin/gcc resolves to), a dotted
 // suffix (vim.basic, python3.12), trailing version digits (sqlite3), and a
-// dash those digits leave (gcc-13). The sudoers program applies them with
-// awk and the resolved-command step with sed, so each pattern only uses
-// syntax that POSIX basic and extended regular expressions read the same
-// way, and none holds a "/".
+// dash those digits leave (gcc-13). Go applies them to a listed path and
+// the host's sed to the path it resolves to, so each pattern only uses
+// syntax that RE2 and POSIX basic regular expressions read the same way,
+// and none holds a "/".
 var commandNamePatterns = []string{`^[a-z0-9_]*-linux-gnu[a-z]*-`, `[.].*$`, `[0-9]*$`, `-$`}
 
-// commandNameAwk is the awk statements that normalize base, built from
-// commandNamePatterns so awk and sed cannot disagree.
-func commandNameAwk() string {
-	var statements strings.Builder
-	for _, pattern := range commandNamePatterns {
-		statements.WriteString("    sub(/" + pattern + "/, \"\", base)\n")
-	}
-	return statements.String()
-}
-
-// commandNameSed is the sed expression arguments for the same normalization.
+// commandNameSed is the sed expression arguments for the normalization Go
+// applies with commandNameExpressions.
 func commandNameSed() string {
 	var expressions strings.Builder
 	for _, pattern := range commandNamePatterns {
@@ -285,114 +287,6 @@ func rebootPendingCommand() string {
 		"printf 'running kernel %s\\n' \"$running\""
 }
 
-// sudoersGrantsProgram prints one finding per sudoers rule for a principal
-// other than root, the admin user, or the sudo and admin groups (whose
-// members the group scan reports). It joins continued lines first, so a
-// wrapped command list cannot look like a rule, and skips Defaults, alias
-// definitions, and include directives, which grant nothing by themselves.
-//
-// A rule's severity follows its command scope. A rule limited to absolute
-// command paths, directly or through a Cmnd_Alias, is how a CI deploy user
-// gets the few commands it needs, so it only warns and names the commands.
-// ALL, a wildcard path, a nested alias, or anything the program cannot read
-// as a command list fails, because it may grant every command. So does a
-// listed command whose name is in rootEquivalentNames (rootEquivalentCommands,
-// passed in by the caller), because it reaches root by itself. What a listed
-// path really runs is only known on the host, so privilegedAccountsCommand
-// resolves each one after this program.
-//
-// sudoers lets one rule carry several "Host_List = Cmnd_Spec_List" parts
-// joined by ":", so ruleScope grades every part and the rule takes the worst
-// of them: grading only the first part would let a later ALL read as a
-// warning. Escaped characters belong to command arguments, a Runas spec can
-// hold a ":", and tags and digests end in one, so all of them go before the
-// split. An "=" still left in a part is an option such as CWD= or CHROOT=
-// that the program does not model, so the rule fails instead of passing as
-// limited. The program sticks to POSIX awk, because Ubuntu runs it with mawk.
-var sudoersGrantsProgram = `BEGIN {
-  rootCount = split(rootEquivalentNames, rootName, " ")
-  for (ri = 1; ri <= rootCount; ri++) rootEquivalent[rootName[ri]] = 1
-}
-function rootEquivalents(scope,    n, i, cmd, base, out) {
-  n = split(scope, cmd, " ")
-  out = ""
-  for (i = 1; i <= n; i++) {
-    base = cmd[i]
-    sub(/.*\//, "", base)
-` + commandNameAwk() + `    if (base in rootEquivalent) out = out (out == "" ? "" : " ") cmd[i]
-  }
-  return out
-}
-function commandScope(list, depth,    n, i, j, entry, part, word, cmd, nested, inner, seen, out) {
-  gsub(/\([^)]*\)/, "", list)
-  n = split(list, part, ",")
-  out = ""
-  for (i = 1; i <= n; i++) {
-    entry = part[i]
-    sub(/^[ \t]+/, "", entry)
-    while (match(entry, /^[A-Z_]+:[ \t]*/)) entry = substr(entry, RLENGTH + 1)
-    if (entry == "" || entry ~ /^!/) continue
-    split(entry, word, /[ \t]+/)
-    cmd = word[1]
-    if (depth == 0 && (cmd in alias)) {
-      nested = commandScope(alias[cmd], 1)
-      if (nested == "") return ""
-      split(nested, inner, " ")
-      for (j in inner) if (!(inner[j] in seen)) { seen[inner[j]] = 1; out = out (out == "" ? "" : " ") inner[j] }
-      continue
-    }
-    if (cmd !~ /^\// || index(cmd, "*") || index(cmd, "?") || index(cmd, "[")) return ""
-    if (!(cmd in seen)) { seen[cmd] = 1; out = out (out == "" ? "" : " ") cmd }
-  }
-  return out
-}
-function ruleScope(rule,    spec, n, i, list, scope, word, m, j, seen, out) {
-  gsub(/\\(\\|:|=|,)/, "", rule)
-  gsub(/\([^)]*\)/, "", rule)
-  gsub(/(NO)?(PASSWD|EXEC|SETENV|LOG_INPUT|LOG_OUTPUT|MAIL|FOLLOW|INTERCEPT):/, "", rule)
-  gsub(/sha(224|256|384|512):[^ \t,]+/, "", rule)
-  n = split(rule, spec, ":")
-  out = ""
-  for (i = 1; i <= n; i++) {
-    list = spec[i]
-    if (!sub(/^[^=]*=/, "", list) || index(list, "=")) return ""
-    scope = commandScope(list, 0)
-    if (scope == "") return ""
-    m = split(scope, word, " ")
-    for (j = 1; j <= m; j++) if (!(word[j] in seen)) { seen[word[j]] = 1; out = out (out == "" ? "" : " ") word[j] }
-  }
-  return out
-}
-FNR == 1 { line = "" }
-{ line = line $0 }
-/\\$/ { sub(/\\$/, "", line); next }
-{
-  rule = line; line = ""
-  sub(/^[ \t]+/, "", rule)
-  if (rule == "" || (rule ~ /^#/ && rule !~ /^#include/)) next
-  split(rule, field, /[ \t]+/)
-  who = field[1]
-  if (who == "Cmnd_Alias") {
-    defs = rule
-    sub(/^Cmnd_Alias[ \t]+/, "", defs)
-    count = split(defs, def, ":")
-    for (k = 1; k <= count; k++) {
-      name = def[k]; body = def[k]
-      if (!sub(/[ \t]*=.*/, "", name)) continue
-      sub(/^[ \t]+/, "", name)
-      sub(/^[^=]*=/, "", body)
-      alias[name] = body
-    }
-    next
-  }
-  if (who ~ /^(Defaults|#include|@include|Host_Alias|Runas_Alias|User_Alias)/) next
-  if (who == admin || who == "root" || who == "%sudo" || who == "%admin") next
-  scope = ruleScope(rule)
-  if (scope == "") printf "` + driftFailPrefix + `%s grants sudo to %s without a command limit\n", FILENAME, who
-  else if ((rooted = rootEquivalents(scope)) != "") printf "` + driftFailPrefix + `%s grants sudo to %s for root-equivalent commands: %s\n", FILENAME, who, rooted
-  else printf "` + driftWarnPrefix + `%s grants sudo to %s` + sudoersListedSeparator + `%s\n", FILENAME, who, scope
-}`
-
 // privilegedAccountsCommand lists every account other than the admin user
 // that holds root through a group, a sudoers rule, or uid 0. It counts
 // primary-group members too, because getent group lists only supplementary
@@ -401,12 +295,18 @@ FNR == 1 { line = "" }
 // exists, privileged or not, because it is a second login path with its own
 // keys that serverpro does not manage.
 //
-// A listed command passes only when its real path is a root-owned file that
-// no group or other user can write, below directories that are the same,
-// and its real name is not root-equivalent: a symlink such as
-// /usr/local/bin/deploy pointing at bash, or a script the account can
-// rewrite, runs anything as root while its listed path looks narrow.
-// realpath and ls -ln are the portable way to read this on the host.
+// sudo's own parser (cvtsudoers) reads the rules and gradePrivilegedAccounts
+// grades its JSON in Go. The host only answers what Go cannot: for each
+// absolute path the JSON lists, whether only root can change what it runs.
+// The walk starts at / and checks every component and every symlink hop,
+// and each link's directory, as the kernel resolves them: a symlink such as
+// /usr/local/bin/deploy pointing at bash, a link in a directory the account
+// can write, or a script the account can rewrite runs anything as root
+// while its listed path looks narrow. A file named like the path plus a
+// space would be what sudo runs if the path held an escaped space, which
+// the JSON cannot show, so it fails too. The paths come out of the JSON
+// with sed; a path with an escaped character does not match, gets no
+// verdict, and Go fails it.
 //
 // Each scan is captured and its status checked on its own, and the account
 // database is read once: in a pipeline without pipefail a scan that failed
@@ -439,56 +339,78 @@ func privilegedAccountsCommand(admin string, imageUsers []string) string {
 		"  exit 1\n" +
 		"}\n" +
 		"root_equivalent_names=" + shell.Quote(strings.Join(rootEquivalentCommands, " ")) + "\n" +
-		// path_gap prints why $1 or a directory above it is not root-only.
-		"path_gap() {\n" +
-		"  path=$1\n" +
-		"  while :; do\n" +
-		"    entry=$(ls -ldn -- \"$path\") || return 1\n" +
-		"    set -f; set -- $entry; set +f\n" +
-		"    case $1 in\n" +
-		"      (*+) printf '%s has an ACL' \"$path\"; return 0 ;;\n" +
-		"      (?????w*|????????w*) printf '%s is writable by group or others' \"$path\"; return 0 ;;\n" +
-		"    esac\n" +
-		"    [ \"$3\" = 0 ] || { printf '%s is not owned by root' \"$path\"; return 0; }\n" +
-		"    [ \"$path\" != / ] || return 0\n" +
-		"    path=${path%/*}\n" +
-		"    [ -n \"$path\" ] || path=/\n" +
-		"  done\n" +
+		"root_equivalent_prefixes=" + shell.Quote(strings.Join(rootEquivalentPrefixes, " ")) + "\n" +
+		// entry_gap prints why ls -ldn entry $2 of path $1 lets someone other
+		// than root change it. A symlink's own mode bits mean nothing, so
+		// only its owner counts.
+		"entry_gap() {\n" +
+		"  set -f; set -- \"$1\" $2; set +f\n" +
+		"  case $2 in\n" +
+		"    (l*) ;;\n" +
+		"    (*+) printf '%s has an ACL' \"$1\"; return 0 ;;\n" +
+		"    (?????w*|????????w*) printf '%s is writable by group or others' \"$1\"; return 0 ;;\n" +
+		"  esac\n" +
+		"  [ \"$4\" = 0 ] || printf '%s is not owned by root' \"$1\"\n" +
 		"}\n" +
-		// command_gap prints why listed sudo command $1 is not safe to grant.
+		// command_gap prints why listed sudo command path $1 is not safe to
+		// grant, or nothing. dir holds the resolved directory so far, with
+		// \"\" for /.
 		"command_gap() {\n" +
-		"  real=$(realpath -- \"$1\" 2>/dev/null) && entry=$(ls -ldn -- \"$real\" 2>/dev/null) || { printf 'which does not resolve to a file'; return 0; }\n" +
+		"  for twin in \"$1 \"*; do\n" +
+		"    if [ -e \"$twin\" ] || [ -L \"$twin\" ]; then printf 'whose path is ambiguous: %s also exists' \"$twin\"; return 0; fi\n" +
+		"  done\n" +
+		"  entry=$(ls -ldn -- /) || return 1\n" +
+		"  gap=$(entry_gap / \"$entry\")\n" +
+		"  [ -z \"$gap\" ] || { printf 'whose path %s' \"$gap\"; return 0; }\n" +
+		"  rest=$1 dir= hops=0\n" +
+		"  while :; do\n" +
+		"    while :; do case $rest in (/*) rest=${rest#/} ;; (*) break ;; esac; done\n" +
+		"    [ -n \"$rest\" ] || break\n" +
+		"    name=${rest%%/*}\n" +
+		"    rest=${rest#\"$name\"}\n" +
+		"    case $name in\n" +
+		"      (.) continue ;;\n" +
+		"      (..) dir=${dir%/*}; continue ;;\n" +
+		"    esac\n" +
+		"    next=$dir/$name\n" +
+		"    entry=$(ls -ldn -- \"$next\" 2>/dev/null) || { printf 'which does not resolve to a file'; return 0; }\n" +
+		"    gap=$(entry_gap \"$next\" \"$entry\")\n" +
+		"    [ -z \"$gap\" ] || { printf 'whose path %s' \"$gap\"; return 0; }\n" +
+		"    case $entry in\n" +
+		"      (l*)\n" +
+		"        hops=$((hops + 1))\n" +
+		"        [ \"$hops\" -le " + strconv.Itoa(sudoCommandMaxHops) + " ] || { printf 'whose symlinks do not end'; return 0; }\n" +
+		"        target=$(readlink -- \"$next\") || return 1\n" +
+		"        case $target in (/*) dir= ;; esac\n" +
+		"        rest=$target$rest\n" +
+		"        ;;\n" +
+		"      (*) dir=$next ;;\n" +
+		"    esac\n" +
+		"  done\n" +
+		"  real=${dir:-/}\n" +
+		"  entry=$(ls -ldn -- \"$real\") || return 1\n" +
 		"  case $entry in (-*) ;; (*) printf 'which does not resolve to a file'; return 0 ;; esac\n" +
 		"  base=$(printf '%s\\n' \"${real##*/}\" | sed" + commandNameSed() + ") || return 1\n" +
 		"  case \" $root_equivalent_names \" in (*\" $base \"*) printf 'which resolves to root-equivalent %s' \"$real\"; return 0 ;; esac\n" +
-		"  gap=$(path_gap \"$real\") || return 1\n" +
-		"  [ -z \"$gap\" ] || { printf 'whose path %s' \"$gap\"; return 0; }\n" +
-		"  dir=${1%/*}\n" +
-		"  dir=$(realpath -- \"${dir:-/}\") || return 1\n" +
-		"  gap=$(path_gap \"$dir\") || return 1\n" +
-		"  [ -z \"$gap\" ] || printf 'whose path %s' \"$gap\"\n" +
+		"  for prefix in $root_equivalent_prefixes; do\n" +
+		"    case $base in (\"$prefix\"*) printf 'which resolves to root-equivalent %s' \"$real\"; return 0 ;; esac\n" +
+		"  done\n" +
 		"}\n" +
 		"accounts=$(getent passwd) || unreadable 'the account database'\n" +
-		// sudo skips drop-in names with a dot or a trailing ~, so doctor does too.
-		"set -- " + sudoersPath + "\n" +
-		"for file in " + sudoersDropInDir + "/*; do\n" +
-		"  case \"${file##*/}\" in *.*|*~) continue ;; esac\n" +
-		"  [ -f \"$file\" ] && set -- \"$@\" \"$file\"\n" +
-		"done\n" +
-		"sudoers=$(awk -v admin=\"$admin\" -v rootEquivalentNames=\"$root_equivalent_names\" " + shell.Quote(sudoersGrantsProgram) + " \"$@\") || unreadable 'the sudoers rules'\n" +
-		// The awk program rejects wildcards, so the unquoted list splits
-		// into plain absolute paths.
-		"listed=$(\n" +
-		"printf '%s\\n' \"$sudoers\" | while IFS= read -r finding; do\n" +
-		"  case $finding in (" + shell.Quote(driftWarnPrefix) + "*" + shell.Quote(sudoersListedSeparator) + "*) ;; (*) continue ;; esac\n" +
-		"  rule=${finding%%" + shell.Quote(sudoersListedSeparator) + "*}\n" +
-		"  rule=${rule#" + shell.Quote(driftWarnPrefix) + "}\n" +
-		"  for cmd in ${finding##*" + shell.Quote(sudoersListedSeparator) + "}; do\n" +
-		"    gap=$(command_gap \"$cmd\") || exit 1\n" +
-		"    [ -z \"$gap\" ] || printf '" + driftFailPrefix + "%s for %s, %s\\n' \"$rule\" \"$cmd\" \"$gap\"\n" +
-		"  done\n" +
+		"[ -x " + lifecycle.SudoersParserPath + " ] || unreadable 'the sudoers rules: " + lifecycle.SudoersParserPath + " (sudo package) is missing'\n" +
+		"sudoers=$(" + lifecycle.SudoersPolicyCommand + ") || unreadable 'the sudoers rules: cvtsudoers failed'\n" +
+		// Only plain absolute paths are checked; Go fails every other
+		// command without asking the host.
+		"commands=$(\n" +
+		"printf '%s\\n' \"$sudoers\" | sed -n " + shell.Quote(`s/^.*"command": "\([^"\\]*\)".*$/\1/p`) + " | while IFS= read -r cmd; do\n" +
+		"  path=${cmd%% *}\n" +
+		"  case $path in (/*) ;; (*) continue ;; esac\n" +
+		"  case $path in (*[*?[]*) continue ;; esac\n" +
+		"  gap=$(command_gap \"$path\") || exit 1\n" +
+		"  printf '%s\\t%s\\n' \"$path\" \"${gap:-" + sudoCommandSafe + "}\"\n" +
 		"done\n" +
 		") || unreadable 'the listed sudo commands'\n" +
+		"admin_uid=$(printf '%s\\n' \"$accounts\" | awk -F: -v user=\"$admin\" '$1 == user { print $3; exit }') || unreadable 'the admin uid'\n" +
 		imageAccounts +
 		"groups=$(\n" +
 		"for group in " + strings.Join(privilegedGroups, " ") + "; do\n" +
@@ -505,7 +427,7 @@ func privilegedAccountsCommand(admin string, imageUsers []string) string {
 		"done\n" +
 		") || unreadable 'the privileged groups'\n" +
 		"uids=$(printf '%s\\n' \"$accounts\" | awk -F: '$3 == 0 && $1 != \"root\" { printf \"" + driftFailPrefix + "%s has uid 0\\n\", $1 }') || unreadable 'the uid 0 accounts'\n" +
-		"printf '%s\\n' \"$sudoers\" \"$listed\" \"$images\" \"$groups\" \"$uids\" | sed '/^$/d' | sort -u\n" +
+		"printf '%s\\n' " + shell.Quote(sudoersSectionMarker) + " \"$sudoers\" " + shell.Quote(sudoCommandsSectionMarker) + " \"$commands\" " + shell.Quote(adminUIDSectionMarker) + " \"$admin_uid\" " + shell.Quote(accountsSectionMarker) + " \"$images\" \"$groups\" \"$uids\"\n" +
 		"printf 'checked groups: %s\\n' " + shell.Quote(strings.Join(privilegedGroups, " "))
 }
 

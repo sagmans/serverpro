@@ -54,13 +54,35 @@ func remoteMetadataUserDataSpecification(user, path string) remoteCheckSpecifica
 }
 
 func remoteDriftSpecification(name, command, remediation string) remoteCheckSpecification {
+	return remoteGradedDriftSpecification(name, command, nil, remediation)
+}
+
+// outputGrader turns raw probe output into drift lines for checks whose
+// probe returns data Go grades, such as JSON. An error means the output
+// could not be read and fails the check as a probe failure.
+type outputGrader func(string) (string, error)
+
+// remoteGradedDriftSpecification is remoteDriftSpecification for a probe
+// whose output passes through grade first; a nil grade passes it as is.
+func remoteGradedDriftSpecification(name, command string, grade outputGrader, remediation string) remoteCheckSpecification {
 	return remoteCheckSpecification{
 		readCommands: []string{command},
 		run: func(ctx context.Context, runner remote.Runner, user, host string, _ Options) []Result {
-			out, err := runner.Run(ctx, user, host, command)
+			out, err := gradedRun(ctx, runner, user, host, command, grade)
 			return []Result{driftResult(name, out, err, remediation)}
 		},
 	}
+}
+
+// gradedRun runs the probe and grades its output. A grade error counts as a
+// failed probe, so it never reaches a repair, and it replaces the raw
+// output, which may be a whole sudoers document.
+func gradedRun(ctx context.Context, runner remote.Runner, user, host, command string, grade outputGrader) (string, error) {
+	out, err := runner.Run(ctx, user, host, command)
+	if err == nil && grade != nil {
+		return grade(out)
+	}
+	return out, err
 }
 
 // remotePrivilegedAccountsSpecification repairs only what the compute
@@ -70,13 +92,14 @@ func remoteDriftSpecification(name, command, remediation string) remoteCheckSpec
 // the removal script refuses, the check has no repair at all.
 func remotePrivilegedAccountsSpecification(admin string, imageUsers []string) remoteCheckSpecification {
 	command := privilegedAccountsCommand(admin, imageUsers)
+	grade := gradePrivilegedAccounts(admin)
 	removal, err := lifecycle.ImageUsersRemovalScript(admin, imageUsers)
 	if len(imageUsers) == 0 || err != nil {
-		return remoteDriftSpecification(privilegedAccountsCheckName, command, privilegedAccountsRemediation)
+		return remoteGradedDriftSpecification(privilegedAccountsCheckName, command, grade, privilegedAccountsRemediation)
 	}
-	return remoteFixableDriftSpecificationWhen(privilegedAccountsCheckName, command, privilegedAccountsRemediation, removal, func(result Result) bool {
+	return remoteGradedFixableDriftSpecification(privilegedAccountsCheckName, command, grade, privilegedAccountsRemediation, removal, func(result Result) bool {
 		return namesAnyAccount(result.Evidence, imageUsers)
-	})
+	}, nil)
 }
 
 // namesAnyAccount reports whether evidence names one of the accounts as a
@@ -121,6 +144,12 @@ func remoteFixableDriftSpecificationWhen(name, command, remediation, fixCommand 
 // the host cannot see. An error keeps the repair from running and becomes
 // the finding's evidence. A nil guard always lets the repair run.
 func remoteGuardedFixableDriftSpecification(name, command, remediation, fixCommand string, fixable func(Result) bool, guard func(context.Context, Options) error) remoteCheckSpecification {
+	return remoteGradedFixableDriftSpecification(name, command, nil, remediation, fixCommand, fixable, guard)
+}
+
+// remoteGradedFixableDriftSpecification is the shared body: the probe output
+// passes through grade (see gradedDriftResult) before and after the repair.
+func remoteGradedFixableDriftSpecification(name, command string, grade outputGrader, remediation, fixCommand string, fixable func(Result) bool, guard func(context.Context, Options) error) remoteCheckSpecification {
 	return remoteCheckSpecification{
 		readCommands:     []string{command},
 		liveCommands:     []string{fixCommand},
@@ -130,7 +159,7 @@ func remoteGuardedFixableDriftSpecification(name, command, remediation, fixComma
 				// The batch baseline predates a repair earlier in this run.
 				discardBaseline(runner, command)
 			}
-			out, err := runner.Run(ctx, user, host, command)
+			out, err := gradedRun(ctx, runner, user, host, command, grade)
 			result := driftResult(name, out, err, remediation)
 			if err != nil || result.Status == Pass || !opt.Fix || (fixable != nil && !fixable(result)) {
 				return []Result{result}
@@ -147,7 +176,7 @@ func remoteGuardedFixableDriftSpecification(name, command, remediation, fixComma
 			if fixErr != nil {
 				return []Result{fail("remote", name, result.Evidence+"; fix failed: "+remoteFailureEvidence(fixOut, fixErr), remediation)}
 			}
-			out, err = runner.Run(ctx, user, host, command)
+			out, err = gradedRun(ctx, runner, user, host, command, grade)
 			after := driftResult(name, out, err, remediation)
 			if after.Status == Pass {
 				return []Result{fixedResult(name, after.Evidence, fixOut, remediation)}

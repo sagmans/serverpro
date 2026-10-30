@@ -650,7 +650,7 @@ are output inline. The file list shows `/usr/bin/cvtsudoers` in Ubuntu
 ### GTFOBins
 
 ```text
-https://gtfobins.github.io/
+https://gtfobins.org/
 ```
 
 Use: the sudo entries behind doctor's root-equivalent command list for
@@ -658,7 +658,14 @@ Use: the sudo entries behind doctor's root-equivalent command list for
 and package, service, or container managers that reach root through a
 sudoers rule even when it names them by absolute path. The list adds the
 Debian alternatives (`editor`, `sensible-editor`, `pager`) that point at one
-of them.
+of them. It also has the GTFOBins sudo entries for `sort`, `uniq`, `shuf`,
+`setcap`, `ssh-keygen`, `nc`, `ltrace`, `valgrind`, `at`, `logrotate`, and
+`vimdiff`. GTFOBins has no entry for the rest of the list, which reaches root
+the same way: `rview` is vim, `mksh` is a shell, `ncat` is `nc`, `gpg
+--output` writes any file, `insmod`, `modprobe`, and `kmod` load kernel
+code, `systemd-tmpfiles` creates and changes the mode of any path its
+command line names, and the dynamic loader (`ld.so`, `ld-linux*`) runs any
+program.
 
 ### chpasswd
 

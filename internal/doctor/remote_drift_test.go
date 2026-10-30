@@ -3,7 +3,6 @@ package doctor
 import (
 	"context"
 	"errors"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -290,116 +289,24 @@ func fakeEtc(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-func TestPrivilegedAccountsCommandListsEveryRootPath(t *testing.T) {
-	etc := fakeEtc(t, map[string]string{
-		"group": "sudo:x:27:deploy,linuxuser\nadmin:x:116:\nlxd:x:110:\n",
-		"passwd": "root:x:0:0::/root:/bin/bash\n" +
-			"deploy:x:1000:1000::/home/deploy:/bin/bash\n" +
-			"linuxuser:x:1001:1001::/home/linuxuser:/bin/bash\n" +
-			"builder:x:1002:110::/home/builder:/bin/bash\n" +
-			"toor:x:0:0::/root:/bin/sh\n",
-	})
-	sudoers := fakeSudoers(t, "Defaults env_reset\nroot ALL=(ALL:ALL) ALL\n%sudo ALL=(ALL:ALL) ALL\n@includedir /etc/sudoers.d\n", map[string]string{
-		"90-cloud-init-users": "# Created by cloud-init\ndeploy ALL=(ALL) ALL\n",
-		"README":              "# Files in this directory are read by sudo.\n#\n",
-		"ci":                  "Cmnd_Alias DEPLOY = /usr/local/bin/deploy-app restart, \\\n    /usr/local/bin/deploy-app status app\nci ALL=(root) NOPASSWD: DEPLOY\n",
-		"shells":              "shells ALL=(root) NOPASSWD: /usr/bin/systemctl restart app, /usr/bin/python3.12, /usr/local/bin/deploy-app\n",
-		"old.dpkg-dist":       "ghost ALL=(ALL) ALL\n",
-		"ops":                 "ops ALL=(ALL) NOPASSWD: ALL\n",
-		"wild":                "wild ALL=(root) /usr/bin/*\n",
-		"multi":               "multi ALL = /usr/bin/id : ALL = ALL\n",
-		"split":               "split ALL=(root) NOPASSWD: /usr/bin/id : web1=(root : adm) NOPASSWD: /usr/bin/whoami\n",
-		"toolchain":           "toolchain ALL=(root) /usr/bin/compile\n",
-		"owned":               "owned ALL=(root) /usr/bin/owned, /usr/bin/missing\n",
-	})
-	out, err := driftProbe{
-		command:      privilegedAccountsCommand("deploy", []string{"linuxuser", "absent"}),
-		replacements: map[string]string{sudoersPath: sudoers},
-		tools:        map[string]string{"getent": fakeGetent, "realpath": fakeRealpath, "ls": fakeLs},
-		env:          []string{"FAKE_ETC=" + etc},
-	}.run(t)
-	result := driftResult(privilegedAccountsCheckName, out, err, privilegedAccountsRemediation)
-	if result.Status != Fail {
-		t.Fatalf("result = %+v, want fail", result)
-	}
-	for _, want := range []string{"linuxuser is in privileged group sudo", "builder is in privileged group lxd", "toor has uid 0", "sudoers.d/ci grants sudo to ci", "provider image account linuxuser exists"} {
-		if !strings.Contains(result.Evidence, want) {
-			t.Fatalf("evidence %q lacks %q", result.Evidence, want)
-		}
-	}
-	// A rule limited to listed commands warns and names them; ALL, a
-	// wildcard path, or a root-equivalent command fails.
-	for _, want := range []string{
-		driftWarnPrefix + sudoers + ".d/ci grants sudo to ci for listed commands: /usr/local/bin/deploy-app\n",
-		driftFailPrefix + sudoers + ".d/shells grants sudo to shells for root-equivalent commands: /usr/bin/systemctl /usr/bin/python3.12\n",
-		driftFailPrefix + sudoers + ".d/ops grants sudo to ops without a command limit\n",
-		driftFailPrefix + sudoers + ".d/wild grants sudo to wild without a command limit\n",
-		// Every ":"-joined part of a rule is graded, so a later ALL fails.
-		driftFailPrefix + sudoers + ".d/multi grants sudo to multi without a command limit\n",
-		driftWarnPrefix + sudoers + ".d/split grants sudo to split for listed commands: /usr/bin/id /usr/bin/whoami\n",
-		// A listed path is graded by what it resolves to on the host.
-		driftFailPrefix + sudoers + ".d/split grants sudo to split for /usr/bin/whoami, which resolves to root-equivalent /usr/bin/bash\n",
-		driftFailPrefix + sudoers + ".d/toolchain grants sudo to toolchain for /usr/bin/compile, which resolves to root-equivalent /usr/bin/x86_64-linux-gnu-gcc-13\n",
-		driftFailPrefix + sudoers + ".d/ci grants sudo to ci for /usr/local/bin/deploy-app, whose path /opt/app is writable by group or others\n",
-		driftFailPrefix + sudoers + ".d/owned grants sudo to owned for /usr/bin/owned, whose path /usr/bin/owned is not owned by root\n",
-		driftFailPrefix + sudoers + ".d/owned grants sudo to owned for /usr/bin/missing, which does not resolve to a file\n",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("output %q lacks %q", out, want)
-		}
-	}
-	// The admin, root, the sudo group, a continued command list, command
-	// arguments, a drop-in sudo itself skips, and an image account that is
-	// gone are not drift.
-	for _, unwanted := range []string{"deploy is", "root has", "to deploy", "to %sudo", "to /usr/", "status app", "ghost", "absent", "for /usr/bin/id,"} {
-		if strings.Contains(result.Evidence, unwanted) {
-			t.Fatalf("evidence %q reports %q", result.Evidence, unwanted)
-		}
-	}
+// privilegedProbe builds the read-only probe's output the way a host prints
+// it, so the repair flow below runs through the real grader: the cvtsudoers
+// JSON policy, each listed command's host verdict, the admin uid, then the
+// account findings.
+func privilegedProbe(policy, verdicts, accounts string) string {
+	return strings.Join([]string{sudoersSectionMarker, policy, sudoCommandsSectionMarker, verdicts, adminUIDSectionMarker, "1000", accountsSectionMarker, accounts}, "\n")
 }
 
-// fakeRealpath and fakeLs stand in for the host's view of listed sudo
-// commands, so the test does not depend on the files of the machine running
-// it: whoami and compile resolve to root-equivalent binaries, deploy-app to a
-// directory its group can write, owned to a file another user owns, and
-// missing to nothing.
+// Sudoers fixtures for the repair test: a CI deploy user limited to a
+// root-owned script is report-only and must stay a warning after the image
+// account removal; an unlimited rule and an env_keep of LD_PRELOAD are
+// unknown drift that the repair must leave alone.
 const (
-	fakeRealpath = `case "$2" in
-(/usr/bin/whoami) echo /usr/bin/bash ;;
-(/usr/bin/compile) echo /usr/bin/x86_64-linux-gnu-gcc-13 ;;
-(/usr/local/bin/deploy-app) echo /opt/app/deploy-app ;;
-(/usr/bin/missing) exit 1 ;;
-(*) printf '%s\n' "$2" ;;
-esac`
-	fakeLs = `case "$3" in
-(/opt/app) echo "drwxrwxr-x 2 0 1001 4096 Jan 1 00:00 $3" ;;
-(/usr/bin/owned) echo "-rwxr-xr-x 1 1001 0 10 Jan 1 00:00 $3" ;;
-(*) echo "-rwxr-xr-x 1 0 0 10 Jan 1 00:00 $3" ;;
-esac`
+	ciListedPolicy  = `{"User_Specs": [{"User_List": [{"username": "ci"}], "Cmnd_Specs": [{"Options": [{"authenticate": false}], "Commands": [{"command": "/usr/local/bin/deploy-app restart"}]}]}]}`
+	ciListedVerdict = "/usr/local/bin/deploy-app\tok"
+	unknownPolicy   = `{"Defaults": [{"Options": [{"operation": "list_add", "env_keep": ["LD_PRELOAD"]}]}], "User_Specs": [{"User_List": [{"username": "ci"}], "Cmnd_Specs": [{"Commands": [{"command": "ALL"}]}]}]}`
+	emptyPolicy     = `{"User_Specs": []}`
 )
-
-// fakeSudoers writes a sudoers file and its drop-in directory side by side,
-// so replacing the sudoers path also redirects the drop-in directory.
-func fakeSudoers(t *testing.T, main string, dropIns map[string]string) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "sudoers")
-	if err := os.WriteFile(path, []byte(main), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(path+".d", 0o700); err != nil {
-		t.Fatal(err)
-	}
-	for name, body := range dropIns {
-		if err := os.WriteFile(filepath.Join(path+".d", name), []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return path
-}
-
-// ciListedRule is a CI deploy user's sudoers finding: report-only, so the
-// image account repair must leave it as a warning.
-const ciListedRule = "warn: /etc/sudoers.d/ci grants sudo to ci for listed commands: /usr/bin/systemctl"
 
 func TestPrivilegedAccountsSpecificationRepairsOnlyImageAccounts(t *testing.T) {
 	if specification := remotePrivilegedAccountsSpecification("deploy", nil); len(specification.liveCommands) != 0 {
@@ -418,9 +325,9 @@ func TestPrivilegedAccountsSpecificationRepairsOnlyImageAccounts(t *testing.T) {
 		wantFix              bool
 		want                 Status
 	}{
-		{name: "unknown account stays report-only", finding: "fail: /etc/sudoers.d/ci grants sudo to ci without a command limit\nfail: linuxuser2 is in privileged group sudo", want: Fail},
-		{name: "image account is removed", finding: "fail: provider image account linuxuser exists", after: "checked groups: sudo", wantFix: true, want: Pass},
-		{name: "listed-command rule left after the removal keeps its warning", finding: "fail: provider image account linuxuser exists\n" + ciListedRule, after: ciListedRule, wantFix: true, want: Warn},
+		{name: "unknown account stays report-only", finding: privilegedProbe(unknownPolicy, "", "fail: linuxuser2 is in privileged group sudo"), want: Fail},
+		{name: "image account is removed", finding: privilegedProbe(emptyPolicy, "", "fail: provider image account linuxuser exists"), after: privilegedProbe(emptyPolicy, "", "checked groups: sudo"), wantFix: true, want: Pass},
+		{name: "listed-command rule left after the removal keeps its warning", finding: privilegedProbe(ciListedPolicy, ciListedVerdict, "fail: provider image account linuxuser exists"), after: privilegedProbe(ciListedPolicy, ciListedVerdict, ""), wantFix: true, want: Warn},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			runner := &scriptedRemote{responses: map[string][]remoteCall{command: {{out: tc.finding}, {out: tc.after}}}}
@@ -436,22 +343,6 @@ func TestPrivilegedAccountsSpecificationRepairsOnlyImageAccounts(t *testing.T) {
 				t.Fatalf("evidence = %q, want the partial repair prefix", results[0].Evidence)
 			}
 		})
-	}
-}
-
-func TestPrivilegedAccountsCommandPassesAdminOnlyHost(t *testing.T) {
-	etc := fakeEtc(t, map[string]string{
-		"group":  "sudo:x:27:deploy\n",
-		"passwd": "root:x:0:0::/root:/bin/bash\ndeploy:x:1000:1000::/home/deploy:/bin/bash\n",
-	})
-	out, err := driftProbe{
-		command:      privilegedAccountsCommand("deploy", nil),
-		replacements: map[string]string{sudoersPath: fakeSudoers(t, "root ALL=(ALL:ALL) ALL\n", nil)},
-		tools:        map[string]string{"getent": fakeGetent},
-		env:          []string{"FAKE_ETC=" + etc},
-	}.run(t)
-	if result := driftResult(privilegedAccountsCheckName, out, err, privilegedAccountsRemediation); result.Status != Pass {
-		t.Fatalf("result = %+v, want pass", result)
 	}
 }
 

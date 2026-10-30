@@ -256,7 +256,12 @@ access paths for app-owned deployment flows.
     runtime sysctl, and a live cloudflared connector while ingress is `none`.
     Each probe prints `fail: ` or `warn: ` lines and exits 0 when it could read
     the host, so a probe that never ran (non-zero exit) fails instead of
-    passing.
+    passing. The privileged accounts probe is the one graded in Go: the host
+    prints sudo's own parse of the rules (`lifecycle.SudoersPolicyCommand`),
+    a path-walk verdict for each listed command, and the account findings,
+    and `gradePrivilegedAccounts` turns them into the same fail and warn
+    lines. Output it cannot read is a probe failure, so it can never pass
+    and it blocks the repair.
     Five have a repair: restricted egress re-runs the provisioning lockdown,
     OpenSSH off re-runs the create step (`lifecycle.OpenSSHDisableScript`,
     safety checks included, and a repair's warnings stay in the result)
