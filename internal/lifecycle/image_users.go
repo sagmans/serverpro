@@ -60,7 +60,8 @@ var imageUserNamePattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 // name, so a shared file that still names the account elsewhere (an alias or
 // a rule for several accounts) stops the removal before userdel. An account
 // with running processes also stops it, because deleting the account would
-// orphan them; it stays locked and the message says how to undo that. Before
+// orphan them; it stays locked and the message gives the command that puts
+// back its password lock, expiry, and shell as they were. Before
 // any of that, a rule for the account in /etc/sudoers or in a file it
 // includes from outside /etc/sudoers.d stops the removal with nothing
 // changed: serverpro does not edit those files, and the rule would outlive
@@ -124,6 +125,11 @@ exit_status() {
   "$@" >/dev/null || status=$?
   printf '%s' "$status"
 }
+# quote prints $1 as one single-quoted shell word, so an undo command built
+# from account fields can be pasted as printed, an empty field included.
+quote() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
 # account_exists succeeds when account $1 exists and stops when the account
 # database cannot be read, so a failed read cannot pass for a removal.
 account_exists() {
@@ -172,8 +178,19 @@ remove_image_user() {
     uid=$(printf '%s\n' "$entry" | cut -d: -f3)
     [ "$uid" != 0 ] || stop "$user has uid 0"
     login_shell=$(printf '%s\n' "$entry" | cut -d: -f7)
+    # The undo command puts back what the lock changes: the expiry and shell
+    # as they were (empty means none and the default shell), and the
+    # password lock only when the password was not locked already. Only the
+    # first character of the password field is read, never printed.
+    shadow=$(getent shadow "$user") || stop "cannot read the shadow entry of $user"
+    expiry=$(printf '%s\n' "$shadow" | cut -d: -f8)
+    case $(printf '%s\n' "$shadow" | cut -d: -f2) in
+      ('!'*) unlock_flag= ;;
+      (*) unlock_flag='-U ' ;;
+    esac
+    shadow=
+    unlock="usermod ${unlock_flag}-e $(quote "$expiry") -s $(quote "$login_shell") $user"
     usermod -L -e 1 -s /usr/sbin/nologin "$user"
-    unlock="usermod -U -e '' -s $login_shell $user"
     case $(exit_status pgrep -u "$user") in
       (0) stop "$user has running processes and is now locked; end them (loginctl terminate-user $user) and rerun, or undo the lock ($unlock)" ;;
       (` + noMatchStatus + `) ;;

@@ -507,6 +507,14 @@ another account's rule, and removed drop-in rules for an account it then
 called absent. The current script stopped on each one, before `userdel`,
 and the other account kept its sudo rule.
 
+A fifth run ran the undo command from the "running processes" stop, in the
+same kind of container, for four starting states. The earlier command
+cleared an expiry date the account had, unlocked a password that was locked
+before the removal, and failed with `invalid shell` for an empty shell
+field, which left the account locked and expired. The current command put
+back the password lock state, the expiry, and the shell exactly in all four
+states, and its quoting kept a value with a single quote as one word.
+
 Not covered: a real Vultr host (doctor `--fix` was not run against
 production).
 

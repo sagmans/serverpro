@@ -822,8 +822,10 @@ from older hosts. For each account, the removal:
    out with `visudo -f FILE` and rerun.
 2. Locks the account and expires it, so no new session starts.
 3. Stops if the account has running processes. The account stays locked, and
-   the message names the command that undoes the lock. End the processes, for
-   example with `sudo loginctl terminate-user linuxuser`, and rerun.
+   the message names the command that undoes the lock: it puts back the
+   expiry and the shell the account had (an empty shell field included), and
+   unlocks the password only if it was not locked before. End the processes,
+   for example with `sudo loginctl terminate-user linuxuser`, and rerun.
 4. Archives its home and crontab under
    `/root/serverpro-removed-accounts/<account>-<UTC time>/`.
 5. Moves each `/etc/sudoers.d` file whose rules are all for that account into
