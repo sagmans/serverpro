@@ -119,6 +119,11 @@ default.
   is enabled or running on a host whose config ingress is `none`. None of them
   has a repair, because each finding needs an operator decision. See USAGE.md,
   Drift checks.
+- Tailnet packet rules are outside serverpro's ownership: serverpro edits only
+  its tag owners and SSH rule. Doctor warns when the tailnet policy lets every
+  source reach every port, since UFW is then the only barrier between any
+  tailnet device and every listening port. See `docs/tailscale-setup.md`,
+  Recommended grants policy.
 - Tailnet DNS is part of the access path: with MagicDNS enabled, the tailnet
   must define global nameservers and enable Override DNS servers, or managed
   hosts can lose all public name resolution without any local change.

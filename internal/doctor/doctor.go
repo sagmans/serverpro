@@ -36,6 +36,7 @@ func RunWithOptions(ctx context.Context, cfg config.Config, st state.State, cred
 	}
 	rs = append(rs, node)
 	rs = append(rs, checkTailscaleDNS(ctx, creds.Tailscale, clients.Tailscale))
+	rs = append(rs, checkTailnetPacketPolicy(ctx, creds.Tailscale, clients.Tailscale))
 	if remoteBlocked {
 		rs = append(rs, skip("remote", remoteChecksBlockedName, remoteChecksBlockedEvidence))
 	} else {

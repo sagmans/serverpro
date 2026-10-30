@@ -367,6 +367,23 @@ https://tailscale.com/kb/1193/tailscale-ssh
 
 Use: mandatory admin path and SSH policy behavior.
 
+### Tailscale policy file and grants
+
+```text
+https://tailscale.com/docs/reference/syntax/policy-file
+https://tailscale.com/docs/reference/syntax/grants
+https://tailscale.com/docs/features/access-control/acls
+https://tailscale.com/docs/reference/examples/acls
+```
+
+Use: doctor `tailnet policy` allow-all detection and the recommended grants
+example in `docs/tailscale-setup.md`. Reviewed 2026-10-30: a file with no
+`acls` section gets the default allow-all policy; `"acls": []` denies all;
+a grant `ip` of `tcp:22` limits it to TCP 22, while a bare port also opens UDP
+and ICMP; Tailscale SSH needs a network rule to port 22 and an `ssh` rule.
+The pages do not say whether the default allow-all still applies to a file
+with `grants` and no `acls`.
+
 ### Tailscale auth keys
 
 ```text

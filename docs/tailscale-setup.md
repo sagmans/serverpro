@@ -54,6 +54,58 @@ tailscale dns status   # Resolvers must list the configured nameservers
 dig google.com         # NOERROR via 100.100.100.100
 ```
 
+## Recommended grants policy
+
+serverpro writes only its tag owners and one `ssh` rule to the tailnet policy
+file. It never edits the packet rules (`acls` or `grants`). Those rules decide
+which tailnet devices reach which ports on a managed server. A new tailnet
+starts with the default allow-all rule, so any tailnet device, including a
+compromised laptop, reaches every port that a server listens on. UFW is then the
+only barrier.
+
+Replace the allow-all rule with grants that open only what each source needs.
+Example for the default tag `tag:serverpro-server` (use your namespace tag,
+`tag:serverpro-<namespace>`, where it applies):
+
+```jsonc
+{
+  "tagOwners": {
+    "tag:serverpro-server": ["autogroup:admin"],
+  },
+  "grants": [
+    // Tailscale SSH to managed servers, TCP 22 only.
+    {"src": ["autogroup:admin"], "dst": ["tag:serverpro-server"], "ip": ["tcp:22"]},
+    // Add one grant per real need, for example:
+    // {"src": ["group:web-testers"], "dst": ["tag:serverpro-server"], "ip": ["tcp:443"]},
+  ],
+  "ssh": [
+    // serverpro writes and reconciles this rule; keep it.
+    {"action": "check", "src": ["autogroup:admin"], "dst": ["tag:serverpro-server"], "users": ["<admin user>"]},
+  ],
+}
+```
+
+- Tailscale SSH needs both a network grant to `tcp:22` and an `ssh` rule. The
+  `ssh` rule alone does not open the port.
+- Write `tcp:22`, not `22`. A port without a protocol also opens UDP and ICMP.
+- Add grants for the traffic between your other devices before you remove the
+  default rule. Otherwise those devices lose access to each other.
+- Remove the default `{"src": ["*"], "dst": ["*"], "ip": ["*"]}` grant and the
+  default `{"action": "accept", "src": ["*"], "dst": ["*:*"]}` acl.
+
+`serverpro server doctor` reads the policy file with the Tailscale API token
+and the provider `tailnet policy` check warns when:
+
+- the file has no `acls` and no `grants` section (Tailscale then applies its
+  default allow-all policy);
+- an `acls` rule accepts `*` to `*:*`;
+- a grant gives `*` to `*` on ip `*`.
+
+An empty `"acls": []` denies all traffic, so doctor does not warn on it.
+Doctor reads a file with `grants` and no `acls` as grants only. Tailscale's
+docs do not say whether the default allow-all still applies to such a file:
+check the effective access in the admin console before you rely on it.
+
 ## Official docs
 
 - Tailscale API: <https://tailscale.com/docs/reference/tailscale-api>
@@ -61,6 +113,9 @@ dig google.com         # NOERROR via 100.100.100.100
 - Auth keys: <https://tailscale.com/kb/1085/auth-keys>
 - Tags: <https://tailscale.com/kb/1068/tags>
 - ACL syntax: <https://tailscale.com/kb/1337/acl-syntax>
+- Grants syntax: <https://tailscale.com/docs/reference/syntax/grants>
+- Policy file syntax: <https://tailscale.com/docs/reference/syntax/policy-file>
+- ACL examples (allow all, deny all): <https://tailscale.com/docs/reference/examples/acls>
 - Hetzner Tailscale install guide: <https://tailscale.com/docs/install/cloud/hetzner>
 - DNS in Tailscale: <https://tailscale.com/docs/reference/dns-in-tailscale>
 - MagicDNS: <https://tailscale.com/docs/features/magicdns>

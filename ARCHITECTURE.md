@@ -232,12 +232,17 @@ access paths for app-owned deployment flows.
     Each probe prints `fail: ` or `warn: ` lines and exits 0 when it could read
     the host, so a probe that never ran (non-zero exit) fails instead of
     passing.
-    They have no repair, because each finding needs an operator decision.
+    They have no repair, because each finding needs an operator decision. The
+    provider `tailnet policy` check reads the policy file through the mesh
+    snapshot and warns on allow-all packet rules.
 - Polling: `internal/poll`
   - Shared context-aware wait policy used by provider and lifecycle polling.
 - Mesh facade: `internal/mesh`
   - Provider-neutral device/auth-key/policy types, canonical identity matching,
     and the shared fail-closed device selector used by create, doctor, and import.
+  - `PacketPolicy` models the tailnet `acls` and `grants` sections as
+    pointers, because an absent section (default allow-all) differs from an
+    empty one (deny all).
 - Tailscale adapter: `internal/provider/tailscale`
   - Mesh API operations and explicit tailnet-global policy reconciliation.
 - Provider utilities: `internal/provider/providerutil`

@@ -677,6 +677,7 @@ repair, and only when config ingress is `cloudflare-tunnel`.
 | `sysctl runtime` | warn | A running kernel value differs from `/etc/sysctl.d/99-serverpro.conf`, or the file lacks or changed a serverpro value. |
 | `cloudflared ingress` | fail | Config ingress is `none`, but `cloudflared.service` is enabled or running, or the host state cannot be classified (for example a `cloudflared` process outside the service). A dormant package passes. Runs only with ingress `none`. |
 | `cloudflared apt pin` | fail | The serverpro apt pin for cloudflared is missing or changed. Runs only with ingress `cloudflare-tunnel`; `--fix` rewrites only the pin. |
+| `tailnet policy` (provider) | warn | The tailnet policy lets every source reach every port. See `docs/tailscale-setup.md`, Recommended grants policy. |
 
 A probe that cannot read the host fails with "the read-only probe could not
 run". Drift is then unknown, so doctor does not report a pass. The
@@ -685,7 +686,9 @@ user-data, the hash, or the shadow entry. The compute provider adapter supplies
 the metadata path; with no path, the check is skipped. With ingress `none`,
 the `cloudflared` check above audits and repairs the connector itself;
 `cloudflared ingress` only reports that a live connector contradicts config,
-and it reads the same host state as that audit.
+and it reads the same host state as that audit. The `tailnet policy` check
+needs an API token that can read the policy file; serverpro never edits
+tailnet packet rules.
 
 ### Restricted egress
 

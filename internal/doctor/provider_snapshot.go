@@ -43,6 +43,10 @@ type snapshotTailscaleClient struct {
 	dnsOnce   sync.Once
 	dnsConfig mesh.DNSConfig
 	dnsErr    error
+	// policy* keep one tailnet policy read per doctor run, like the DNS read.
+	policyOnce sync.Once
+	policy     mesh.PacketPolicy
+	policyErr  error
 }
 
 func (c *snapshotTailscaleClient) WaitDevice(ctx context.Context, q mesh.DeviceQuery) (mesh.Device, error) {
@@ -57,6 +61,15 @@ func (c *snapshotTailscaleClient) DNSConfig(ctx context.Context) (mesh.DNSConfig
 	}
 	c.dnsOnce.Do(func() { c.dnsConfig, c.dnsErr = source.DNSConfig(ctx) })
 	return c.dnsConfig, c.dnsErr
+}
+
+func (c *snapshotTailscaleClient) PacketPolicy(ctx context.Context) (mesh.PacketPolicy, error) {
+	source, ok := c.source.(TailnetPacketPolicyClient)
+	if !ok {
+		return mesh.PacketPolicy{}, errTailnetPolicyUnsupported
+	}
+	c.policyOnce.Do(func() { c.policy, c.policyErr = source.PacketPolicy(ctx) })
+	return c.policy, c.policyErr
 }
 
 type snapshotCloudflareClient struct {

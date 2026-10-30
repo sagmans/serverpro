@@ -23,6 +23,13 @@ type TailscaleDNSClient interface {
 	DNSConfig(context.Context) (mesh.DNSConfig, error)
 }
 
+// TailnetPacketPolicyClient reads the tailnet policy's acls and grants. It is
+// optional like TailscaleDNSClient, and a separate method from the preflight
+// Policy read so fakes that audit preflight calls do not see doctor reads.
+type TailnetPacketPolicyClient interface {
+	PacketPolicy(context.Context) (mesh.PacketPolicy, error)
+}
+
 // PublicSSHProbe separates orchestration tests from real public-network access.
 type PublicSSHProbe func(context.Context, string) error
 
