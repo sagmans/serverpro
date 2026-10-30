@@ -50,8 +50,25 @@ func TestRenderHardeningAndTailscale(t *testing.T) {
 	if !strings.Contains(out, bootstrapGrant) || strings.Count(out, "NOPASSWD") != 1 {
 		t.Fatalf("cloud-init should grant first-boot sudo only through %s\n%s", BootstrapSudoersPath, out)
 	}
-	if err := yaml.Unmarshal([]byte(out), new(map[string]any)); err != nil {
+	var parsed struct {
+		WriteFiles []struct {
+			Path    string `yaml:"path"`
+			Content string `yaml:"content"`
+		} `yaml:"write_files"`
+	}
+	if err := yaml.Unmarshal([]byte(out), &parsed); err != nil {
 		t.Fatalf("cloud-init rendered invalid YAML: %v\n%s", err, out)
+	}
+	// Doctor --fix restores the drop-in from the same function, so the
+	// parsed file must equal it byte for byte.
+	unattended := ""
+	for _, file := range parsed.WriteFiles {
+		if file.Path == UnattendedUpgradesConfigPath {
+			unattended = file.Content
+		}
+	}
+	if unattended != UnattendedUpgradesConfig() || !strings.Contains(unattended, "Remove-Unused-Kernel-Packages \"true\";") {
+		t.Fatalf("unattended-upgrades drop-in = %q, want %q", unattended, UnattendedUpgradesConfig())
 	}
 	for _, secret := range []string{"hetzner-secret-token", "tailscale-api-token", "cf-token"} {
 		if strings.Contains(out, secret) {

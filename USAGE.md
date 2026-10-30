@@ -663,17 +663,19 @@ toolset summary.
 
 These doctor checks compare the live host with what config and provisioning
 set up. Most are read-only: `--fix` does not change what they find, because
-each finding needs an operator decision. Three checks have a repair, because
-config or the compute provider already states the wanted result:
-`egress restricted` re-applies the restricted egress lockdown,
-`privileged accounts` removes the provider's own image accounts, and
+each finding needs an operator decision. Four checks have a repair, because
+config, provisioning, or the compute provider already states the wanted
+result: `egress restricted` re-applies the restricted egress lockdown,
+`unattended upgrades config` rewrites the serverpro unattended-upgrades
+drop-in, `privileged accounts` removes the provider's own image accounts, and
 `cloudflared apt pin` rewrites the pin (only with ingress
 `cloudflare-tunnel`).
 
 | Check | Result | Finding |
 | --- | --- | --- |
 | `egress restricted` | fail | UFW's default outgoing policy is not `deny`/`reject`, a lockdown `ALLOW OUT` rule is missing, or a TCP connect to `1.1.1.1:853` succeeds. Runs only with `network.egress.mode: restricted`; `--fix` re-applies the lockdown. |
-| `reboot pending` | warn | `/var/run/reboot-required` exists, or an installed kernel is newer than the running one. |
+| `reboot pending` | warn | `/var/run/reboot-required` exists, or an installed kernel is newer than the running one. Doctor never reboots, also with `--fix`; see Reboots and kernel cleanup. |
+| `unattended upgrades config` | fail or warn | An option of `/etc/apt/apt.conf.d/52serverpro-unattended-upgrades` has another effective value in `apt-config` (fail), or is not set at all (warn: a host created before the drop-in). `--fix` rewrites the drop-in; a later apt.conf.d file that overrides it stays a finding. |
 | `privileged accounts` | fail | An account other than the admin user is in `sudo`, `admin`, `lxd`, or `docker` (also as primary group), a rule in `/etc/sudoers` or `/etc/sudoers.d` grants sudo to another account or group, a non-root account has uid 0, or a provider image account (Vultr: `linuxuser`) exists. `--fix` removes only the provider image accounts; see Provider image accounts. |
 | `metadata user-data` | fail or warn | The provider metadata user-data holds the admin's current password hash (fail), or another password hash or `passwd` key (warn). |
 | `tailscale operator` | fail | tailscaled has an `OperatorUser`. |
@@ -715,6 +717,27 @@ from older hosts. For each account, the removal:
 Any other account that `privileged accounts` lists (for example a `deploy`
 user with its own sudoers.d file) is report-only, also with `--fix`. Confirm
 what runs as it, then remove it yourself.
+
+### Reboots and kernel cleanup
+
+Cloud-init writes `/etc/apt/apt.conf.d/52serverpro-unattended-upgrades` with
+`Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";`. Every kernel
+update installs a new image, and without this cleanup old images fill
+`/boot` until a later kernel update fails. The file sorts after Ubuntu's
+`50unattended-upgrades`, so its value wins. Serverpro owns the file: put
+local options in a file that sorts later.
+
+Serverpro does not turn on automatic reboots. When `reboot pending` warns,
+reboot when the workload allows:
+
+```sh
+serverpro server ssh NAME -n NAMESPACE
+sudo systemctl reboot
+```
+
+Then rerun doctor. `serverpro server restart` uses the provider's reboot API,
+which is a hard reset on some providers, so it is not the recommended path
+for an update reboot.
 
 ### Restricted egress
 

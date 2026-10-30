@@ -111,7 +111,8 @@ access paths for app-owned deployment flows.
 - Cloud-init: `internal/cloudinit`
   - First-boot hardening user data with a defense-in-depth Ubuntu
     24.04/codename/architecture check, pre-install base-package candidate floors,
-    post-install verification, and architecture-scoped checksum-verified
+    post-install verification, an unattended-upgrades drop-in that turns on
+    unused-kernel removal, and architecture-scoped checksum-verified
     Tailscale static binaries. Live provider image validation remains the
     authoritative pre-mutation host gate because cloud-init module failures do
     not globally cancel later modules.
@@ -229,15 +230,18 @@ access paths for app-owned deployment flows.
     the newest 5 reports per server when cleanup succeeds. Storage failure
     falls back to the complete stdout report and a stderr warning.
     Drift checks compare the live host with what config and provisioning
-    promised: restricted egress, pending reboot, privileged accounts,
-    metadata user-data password hash, Tailscale operator, Serve and Funnel,
+    promised: restricted egress, pending reboot, unattended-upgrades
+    options, privileged accounts, metadata user-data password hash, Tailscale operator, Serve and Funnel,
     runtime sysctl, and a live cloudflared connector while ingress is `none`.
     Each probe prints `fail: ` or `warn: ` lines and exits 0 when it could read
     the host, so a probe that never ran (non-zero exit) fails instead of
     passing.
-    Two have a repair: restricted egress re-runs the provisioning lockdown,
-    and privileged accounts removes the accounts the compute adapter declares
-    as image accounts. Every other finding needs an operator decision. The
+    Three have a repair: restricted egress re-runs the provisioning lockdown,
+    the unattended-upgrades drop-in is rewritten from the function that
+    renders it for cloud-init, and privileged accounts removes the accounts
+    the compute adapter declares as image accounts. Every other finding needs
+    an operator decision; a pending reboot names the operator's commands, and
+    doctor never reboots. The
     provider `tailnet policy` check reads the policy file through the mesh
     snapshot and warns on allow-all packet rules.
 - Polling: `internal/poll`

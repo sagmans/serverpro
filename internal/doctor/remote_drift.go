@@ -20,9 +20,10 @@ const (
 // remoteDriftSpecifications are checks for host drift that the hardening
 // checks cannot see: each compares the live host with what config or
 // provisioning promised. Most are read-only, because the finding needs an
-// operator decision (an unknown account, a reboot window). Restricted egress
-// and provider image accounts have a repair, because config or the provider
-// adapter already states the wanted result.
+// operator decision (an unknown account, a reboot window). Restricted
+// egress, the unattended-upgrades drop-in, and provider image accounts have a
+// repair, because config, provisioning, or the provider adapter already
+// states the wanted result.
 func remoteDriftSpecifications(cfg config.Config, opt Options) []remoteCheckSpecification {
 	user := cfg.Admin.Username
 	var specifications []remoteCheckSpecification
@@ -30,7 +31,8 @@ func remoteDriftSpecifications(cfg config.Config, opt Options) []remoteCheckSpec
 		specifications = append(specifications, remoteFixableDriftSpecification(egressRestrictedCheckName, egressRestrictedCommand(), egressRestrictedRemediation, network.LockdownScript(cfg)))
 	}
 	return append(specifications,
-		remoteDriftSpecification(rebootPendingCheckName, rebootPendingCommand(), rebootPendingRemediation),
+		remoteDriftSpecification(rebootPendingCheckName, rebootPendingCommand(), rebootPendingRemediation(cfg.Namespace, cfg.Server)),
+		remoteFixableDriftSpecification(unattendedUpgradesConfigCheckName, unattendedUpgradesConfigCommand(), unattendedUpgradesConfigRemediation, unattendedUpgradesConfigFixCommand()),
 		remotePrivilegedAccountsSpecification(user, opt.ImageDefaultUsers),
 		remoteMetadataUserDataSpecification(user, opt.MetadataUserDataPath),
 		remoteDriftSpecification(tailscaleOperatorCheckName, tailscaleOperatorCommand(), tailscaleOperatorRemediation),

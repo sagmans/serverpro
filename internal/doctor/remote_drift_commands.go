@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -29,8 +30,15 @@ const (
 	rebootRequiredPkgsPath = rebootRequiredPath + ".pkgs"
 	// kernelImagePrefix is where Ubuntu installs one image per kernel
 	// package; the bare /boot/vmlinuz symlinks do not match the prefix.
-	kernelImagePrefix        = "/boot/vmlinuz-"
-	rebootPendingRemediation = "security updates wait for a reboot: schedule one (sudo systemctl reboot) when the workload allows, then rerun doctor"
+	kernelImagePrefix = "/boot/vmlinuz-"
+	// rebootCommand is the graceful reboot doctor names but never runs: a
+	// reboot needs a workload window only the operator knows. It runs on the
+	// host, not through serverpro server restart, because some providers'
+	// reboot API is a hard reset that can cut an apt or workload write.
+	rebootCommand = "sudo systemctl reboot"
+
+	unattendedUpgradesConfigCheckName   = "unattended upgrades config"
+	unattendedUpgradesConfigRemediation = "serverpro server doctor --fix restores " + cloudinit.UnattendedUpgradesConfigPath + " (serverpro owns that file; put local options in a later-sorting file); if a value stays wrong, a later apt.conf.d file overrides it: find it with apt-config dump and remove that line"
 
 	privilegedAccountsCheckName   = "privileged accounts"
 	privilegedAccountsRemediation = "serverpro server doctor --fix removes only the compute provider's own image accounts; for any other listed account, confirm what runs as it, then remove it from the group (gpasswd -d USER GROUP) or move its sudoers.d file out and run visudo -c"
@@ -110,6 +118,48 @@ func egressAllowRulesCommand() string {
 		command.WriteString("printf '%s\\n' \"$status\" | grep -Eq " + shell.Quote("^(\\[ *[0-9]+\\] )?"+regexp.QuoteMeta(rule)+"( \\(v6\\))?[[:space:]]+ALLOW OUT") + " || printf '%s\\n' " + shell.Quote(driftFailPrefix+"ufw allow out "+rule+" missing") + "\n")
 	}
 	return command.String()
+}
+
+// rebootPendingRemediation names the exact commands for this server, so the
+// operator does not have to work out how to reach it.
+func rebootPendingRemediation(namespace, server string) string {
+	return "updates wait for a reboot, and doctor never reboots: when the workload allows, run serverpro server ssh " + server + " -n " + namespace + ", then " + rebootCommand + "; rerun doctor after it is back"
+}
+
+// unattendedUpgradesConfigCommand reads the effective value of every option
+// the serverpro drop-in sets, not the file: a later apt.conf.d file or an
+// edited conffile wins over the drop-in, and only apt-config shows which
+// value unattended-upgrades will use. An unset value means the drop-in is
+// gone and the package's in-code default applies, which serverpro does not
+// pin, so it is a warning.
+func unattendedUpgradesConfigCommand() string {
+	var command strings.Builder
+	command.WriteString("export LC_ALL=C\n")
+	for _, setting := range cloudinit.UnattendedUpgradesSettings() {
+		want := cloudinit.AptBool(setting.Value)
+		command.WriteString("value=$(apt-config shell value " + shell.Quote(setting.Key+"/b") + ") || exit 1\n" +
+			"case \"$value\" in\n" +
+			"  " + shell.Quote("value='"+want+"'") + ") printf '%s\\n' " + shell.Quote(setting.Key+" is "+want) + " ;;\n" +
+			"  '') printf '%s\\n' " + shell.Quote(driftWarnPrefix+setting.Key+" is not set; the package default applies") + " ;;\n" +
+			"  *) printf '%s\\n' " + shell.Quote(driftFailPrefix+setting.Key+" is not "+want) + " ;;\n" +
+			"esac\n")
+	}
+	return command.String()
+}
+
+// unattendedUpgradesConfigFixCommand rewrites the serverpro drop-in with the
+// bytes cloud-init writes. The temporary file sits in the parent of
+// apt.conf.d: the same filesystem keeps the rename atomic, and APT never
+// parses a half-written file there.
+func unattendedUpgradesConfigFixCommand() string {
+	scratchDir := path.Dir(path.Dir(cloudinit.UnattendedUpgradesConfigPath))
+	return "set -eu\n" +
+		"umask 022\n" +
+		"tmp=$(mktemp " + shell.Quote(scratchDir+"/.serverpro-unattended-upgrades.") + "XXXXXX)\n" +
+		"trap 'rm -f \"$tmp\"' EXIT\n" +
+		"printf '%s' " + shell.Quote(cloudinit.UnattendedUpgradesConfig()) + " > \"$tmp\"\n" +
+		"chmod 0644 \"$tmp\"\n" +
+		"mv -f \"$tmp\" " + shell.Quote(cloudinit.UnattendedUpgradesConfigPath)
 }
 
 // rebootPendingCommand reports both Ubuntu's own flag and a newer installed

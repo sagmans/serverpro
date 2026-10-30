@@ -115,14 +115,18 @@ default.
   doctor never takes it from the host.
 - Doctor drift checks report what weakens this model after provisioning:
   restricted egress not in force (UFW policy, every lockdown rule, and a real
-  connect to a port the lockdown never allows), a pending reboot, extra accounts in
+  connect to a port the lockdown never allows), a pending reboot,
+  unattended-upgrades options that differ from the serverpro drop-in (which
+  turns on unused-kernel removal so `/boot` cannot block a kernel update),
+  extra accounts in
   `sudo`/`admin`/`lxd`/`docker`, with a sudoers rule, or with uid 0, provider
   image accounts, a Tailscale `OperatorUser`,
   Tailscale Funnel or Serve entries with no local listener, runtime sysctl
   values that differ from the serverpro drop-in, and a cloudflared service that
   is enabled or running on a host whose config ingress is `none`. Restricted
   egress has a repair (the provisioning lockdown), because config states the
-  wanted policy. Privileged accounts has a repair only for the accounts the
+  wanted policy, and so does the unattended-upgrades drop-in. Doctor never
+  reboots: a reboot needs a workload window only the operator knows. Privileged accounts has a repair only for the accounts the
   compute adapter declares as its image accounts; every other account,
   sudoers rule, or group member is report-only, because it may run a
   workload. See USAGE.md, Drift checks and Provider image accounts.

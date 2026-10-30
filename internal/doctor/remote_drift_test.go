@@ -68,29 +68,32 @@ func TestRemoteDriftSpecificationsProbeEgressOnlyWhenRestricted(t *testing.T) {
 	if !specificationsRead(remoteDriftSpecifications(cfg, Options{}), egressRestrictedCommand()) {
 		t.Fatal("restricted egress is not probed")
 	}
-	// Restricted egress is the one drift check config can converge, and its
-	// repair is the provisioning lockdown itself, not a doctor-only variant.
-	for _, specification := range remoteDriftSpecifications(cfg, Options{}) {
-		want := 0
-		if specificationsRead([]remoteCheckSpecification{specification}, egressRestrictedCommand()) {
-			want = 1
-			if len(specification.liveCommands) != want || specification.liveCommands[0] != network.LockdownScript(cfg) {
-				t.Fatal("egress repair is not the provisioning lockdown")
+	// Only checks whose wanted result provisioning already writes have a
+	// repair, and each repair writes what provisioning writes, not a
+	// doctor-only variant.
+	assertRepairs := func(repairs map[string]string) {
+		t.Helper()
+		for _, specification := range remoteDriftSpecifications(cfg, Options{}) {
+			want := ""
+			for read, repair := range repairs {
+				if specificationsRead([]remoteCheckSpecification{specification}, read) {
+					want = repair
+				}
+			}
+			switch {
+			case want == "" && len(specification.liveCommands) != 0:
+				t.Fatalf("drift check %v declares a repair: %v", specification.readCommands, specification.liveCommands)
+			case want != "" && (len(specification.liveCommands) != 1 || specification.liveCommands[0] != want):
+				t.Fatalf("drift check %v repairs with %v, want the provisioning step", specification.readCommands, specification.liveCommands)
 			}
 		}
-		if len(specification.liveCommands) != want {
-			t.Fatalf("drift check %v declares %d repairs, want %d", specification.readCommands, len(specification.liveCommands), want)
-		}
 	}
+	assertRepairs(map[string]string{egressRestrictedCommand(): network.LockdownScript(cfg), unattendedUpgradesConfigCommand(): unattendedUpgradesConfigFixCommand()})
 	cfg.Network.Egress.Mode = "open"
 	if specificationsRead(remoteDriftSpecifications(cfg, Options{}), egressRestrictedCommand()) {
 		t.Fatal("open egress is probed as restricted")
 	}
-	for _, specification := range remoteDriftSpecifications(cfg, Options{}) {
-		if len(specification.liveCommands) != 0 {
-			t.Fatalf("drift check declares a repair: %+v", specification.liveCommands)
-		}
-	}
+	assertRepairs(map[string]string{unattendedUpgradesConfigCommand(): unattendedUpgradesConfigFixCommand()})
 }
 
 func TestRemoteFixableDriftSpecificationRepairsOnlyReadableDrift(t *testing.T) {
@@ -146,9 +149,18 @@ func specificationsRead(specifications []remoteCheckSpecification, command strin
 func TestRemoteDriftSpecificationReportsProbeOutput(t *testing.T) {
 	command := rebootPendingCommand()
 	runner := &scriptedRemote{responses: map[string][]remoteCall{command: {{out: "warn: /var/run/reboot-required present"}}}}
-	results := remoteDriftSpecification(rebootPendingCheckName, command, rebootPendingRemediation).run(context.Background(), runner, "deploy", "prod-01", Options{})
+	results := remoteDriftSpecification(rebootPendingCheckName, command, rebootPendingRemediation("demo", "web")).run(context.Background(), runner, "deploy", "prod-01", Options{})
 	if len(results) != 1 || results[0].Status != Warn || results[0].Name != rebootPendingCheckName {
 		t.Fatalf("results = %+v", results)
+	}
+	// Doctor names the reboot but never runs one, even with --fix.
+	if !strings.Contains(results[0].Remediation, "serverpro server ssh web -n demo, then "+rebootCommand) {
+		t.Fatalf("remediation = %q, want the exact operator commands", results[0].Remediation)
+	}
+	for _, specification := range remoteDriftSpecifications(config.ExampleServer("demo", "web"), Options{}) {
+		if specificationsRead([]remoteCheckSpecification{specification}, command) && len(specification.liveCommands) != 0 {
+			t.Fatalf("reboot pending declares a repair: %v", specification.liveCommands)
+		}
 	}
 }
 
@@ -222,7 +234,7 @@ func TestRebootPendingCommandReportsFlagAndNewerKernel(t *testing.T) {
 				replacements: map[string]string{rebootRequiredPath: flagPath, kernelImagePrefix: imagePrefix},
 				tools:        map[string]string{"uname": `printf '6.8.0-41-generic\n'`},
 			}.run(t)
-			result := driftResult(rebootPendingCheckName, out, err, rebootPendingRemediation)
+			result := driftResult(rebootPendingCheckName, out, err, rebootPendingRemediation("demo", "web"))
 			if result.Status != tc.want || !strings.Contains(result.Evidence, tc.wantEvidence) {
 				t.Fatalf("result = %+v, want %s with %q", result, tc.want, tc.wantEvidence)
 			}
@@ -434,6 +446,32 @@ func TestTailscaleOperatorCommandPrintsOnlyOperator(t *testing.T) {
 			}
 			if strings.Contains(out, "privkey") {
 				t.Fatalf("probe output leaks node prefs: %q", out)
+			}
+		})
+	}
+}
+
+func TestUnattendedUpgradesConfigCommandReadsEffectiveValues(t *testing.T) {
+	first := cloudinit.UnattendedUpgradesSettings()[0]
+	want := cloudinit.AptBool(first.Value)
+	for _, tc := range []struct {
+		name, value  string
+		want         Status
+		wantEvidence string
+	}{
+		{name: "set", value: "value='" + want + "'", want: Pass, wantEvidence: first.Key + " is " + want},
+		{name: "drop-in gone", value: "", want: Warn, wantEvidence: "is not set"},
+		{name: "overridden by a later file", value: "value='" + cloudinit.AptBool(!first.Value) + "'", want: Fail, wantEvidence: first.Key + " is not " + want},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := driftProbe{
+				command: unattendedUpgradesConfigCommand(),
+				tools:   map[string]string{"apt-config": `[ "$1 $2 $3" = "shell value $FAKE_KEY/b" ] || exit 2; [ -z "$FAKE_VALUE" ] || printf '%s\n' "$FAKE_VALUE"`},
+				env:     []string{"FAKE_KEY=" + first.Key, "FAKE_VALUE=" + tc.value},
+			}.run(t)
+			result := driftResult(unattendedUpgradesConfigCheckName, out, err, unattendedUpgradesConfigRemediation)
+			if result.Status != tc.want || !strings.Contains(result.Evidence, tc.wantEvidence) {
+				t.Fatalf("result = %+v, want %s with %q", result, tc.want, tc.wantEvidence)
 			}
 		})
 	}

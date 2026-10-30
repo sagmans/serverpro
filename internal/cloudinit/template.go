@@ -84,7 +84,10 @@ write_files:
   - path: ` + SysctlConfigPath + `
     permissions: '0644'
     content: |
-` + sysctlWriteFileContent() + `  - path: /root/.serverpro-tailscale-authkey
+` + sysctlWriteFileContent() + `  - path: ` + UnattendedUpgradesConfigPath + `
+    permissions: '0644'
+    content: |
+` + unattendedUpgradesWriteFileContent() + `  - path: /root/.serverpro-tailscale-authkey
     permissions: '0600'
     content: |
       {{ .TailscaleAuthKey }}

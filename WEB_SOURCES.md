@@ -650,6 +650,22 @@ instance reboots after an update. Reviewed 2026-10-30; the DigitalOcean and
 Vultr paths were also read live on managed hosts. No Hetzner host was
 available, so its path rests on the Ignition provider source.
 
+### Unattended-upgrades options
+
+```text
+https://documentation.ubuntu.com/server/how-to/software/automatic-updates/
+https://github.com/mvo5/unattended-upgrades/blob/master/README.md
+https://docs.vultr.com/products/compute/cloud-compute/management/restart-instance
+```
+
+Use: the serverpro unattended-upgrades drop-in and the reboot advice. APT
+reads apt.conf.d in lexical order, and the upstream README asks for a file
+that sorts after `50unattended-upgrades` instead of edits to it. In
+`2.9.1+nmu4ubuntu1` (noble), `Remove-Unused-Kernel-Packages` defaults to true
+in code but is commented out in the shipped file, and `Automatic-Reboot`
+defaults to false. Vultr documents an instance restart as a hard reboot, so
+doctor recommends a graceful host reboot. Reviewed 2026-10-30.
+
 ### Provider image accounts
 
 ```text
