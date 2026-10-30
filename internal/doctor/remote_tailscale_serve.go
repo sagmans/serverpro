@@ -49,7 +49,7 @@ type serveHTTPHandler struct {
 func tailscaleServeResult(out string) Result {
 	serveJSON, listeners, ok := splitServeOutput(out)
 	if !ok {
-		return fail("remote", tailscaleServeCheckName, "unexpected serve probe output: "+trim(out), driftProbeFailedRemediation)
+		return fail("remote", tailscaleServeCheckName, "unexpected serve probe output: "+trim(withoutServeConfig(out)), driftProbeFailedRemediation)
 	}
 	var config serveConfig
 	if strings.TrimSpace(serveJSON) != "" {
@@ -79,6 +79,17 @@ func tailscaleServeResult(out string) Result {
 		return pass("remote", tailscaleServeCheckName, "no serve entries")
 	}
 	return pass("remote", tailscaleServeCheckName, fmt.Sprintf("%d local serve backends listening", len(backends)))
+}
+
+// withoutServeConfig cuts text from the serve section marker on. The probe
+// prints nothing on its own failure, but output that fails later (a transport
+// error or an output limit after the probe printed) still carries the config,
+// and SSH errors repeat the output in their text.
+func withoutServeConfig(text string) string {
+	if index := strings.Index(text, tailscaleServeSectionMarker); index >= 0 {
+		return text[:index] + serveConfigWithheld
+	}
+	return text
 }
 
 // splitServeOutput separates the two documents TailscaleServeCommand prints.

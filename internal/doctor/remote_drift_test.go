@@ -680,4 +680,28 @@ func TestTailscaleServeCommandFeedsServeResult(t *testing.T) {
 	if len(results) != 1 || results[0].Status != Fail || results[0].Remediation != driftProbeFailedRemediation {
 		t.Fatalf("probe error results = %+v", results)
 	}
+
+	// A failed listener read must not print the serve config it already read.
+	const serveSecret = "secret-backend.ts.net"
+	out, err = driftProbe{
+		command: TailscaleServeCommand(),
+		tools: map[string]string{
+			"tailscale": `printf '%s\n' '{"Web":{"` + serveSecret + `:443":{}}}'`,
+			"ss":        `exit 3`,
+		},
+	}.run(t)
+	if err == nil || strings.Contains(out, serveSecret) || !strings.Contains(out, "ss -H -tuln failed (exit 3)") {
+		t.Fatalf("failed ss: err=%v out=%q", err, out)
+	}
+	// Output that fails after the probe printed keeps the config out of the
+	// evidence, including the copy an SSH error repeats.
+	printed := tailscaleServeSectionMarker + "\n" + `{"Web":{"` + serveSecret + `:443":{}}}` + "\n"
+	runner = &scriptedRemote{responses: map[string][]remoteCall{TailscaleServeCommand(): {{out: printed, err: errors.New("tailscale ssh failed: output limit: " + printed)}}}}
+	results = remoteTailscaleServeSpecification().run(context.Background(), runner, "deploy", "prod-01", Options{})
+	if len(results) != 1 || strings.Contains(results[0].Evidence, serveSecret) || !strings.Contains(results[0].Evidence, serveConfigWithheld) {
+		t.Fatalf("late failure evidence = %+v", results)
+	}
+	if result := tailscaleServeResult(printed); strings.Contains(result.Evidence, serveSecret) {
+		t.Fatalf("output without the listener section = %+v", result)
+	}
 }

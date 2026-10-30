@@ -225,7 +225,7 @@ func remoteTailscaleServeSpecification() remoteCheckSpecification {
 		run: func(ctx context.Context, runner remote.Runner, user, host string, _ Options) []Result {
 			out, err := runner.Run(ctx, user, host, command)
 			if err != nil {
-				return []Result{fail("remote", tailscaleServeCheckName, remoteFailureEvidence(out, err), driftProbeFailedRemediation)}
+				return []Result{fail("remote", tailscaleServeCheckName, withoutServeConfig(remoteFailureEvidence(out, err)), driftProbeFailedRemediation)}
 			}
 			return []Result{tailscaleServeResult(out)}
 		},

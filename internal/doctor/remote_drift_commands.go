@@ -84,6 +84,10 @@ const (
 	// probe output, which carries two documents, into its parts.
 	tailscaleServeSectionMarker = "--- serve"
 	listenersSectionMarker      = "--- listeners"
+	// serveConfigWithheld replaces the serve config wherever a failed or
+	// malformed read would otherwise put it in evidence, which is saved to
+	// disk: the config names tailnet hosts, paths, and backends.
+	serveConfigWithheld = "(serve config not shown)"
 
 	sysctlRuntimeCheckName   = "sysctl runtime"
 	sysctlRuntimeRemediation = "re-apply the file (sudo sysctl -p " + cloudinit.SysctlConfigPath + "); if the value drifts again, find the later writer (systemd-sysctl order, networkd, provider agents) before the next reboot"
@@ -553,14 +557,17 @@ func tailscaleOperatorCommand() string {
 // read, so doctor compares both from the same moment; Go parses the JSON
 // because the host has no JSON tool doctor can rely on. ss lists TCP and UDP
 // so its lines keep the Netid column the listening-ports parser expects.
+// Both reads finish before anything prints, so a failed ss never leaves the
+// serve config in the error output; tailscale's stderr is dropped for the
+// same reason, and the exit status stands in for it.
 // It is exported, with TailscaleServeIdleOutput, for remote fakes that answer
 // by script: the probe parses its output, so a generic success string fails.
 func TailscaleServeCommand() string {
 	return "export LC_ALL=C\n" +
-		"printf '%s\\n' " + shell.Quote(tailscaleServeSectionMarker) + "\n" +
-		"tailscale serve status --json || exit 1\n" +
-		"printf '%s\\n' " + shell.Quote(listenersSectionMarker) + "\n" +
-		"ss -H -tuln || exit 1"
+		"serve=$(tailscale serve status --json 2>/dev/null) || { status=$?; printf 'tailscale serve status --json failed (exit %s)\\n' \"$status\"; exit 1; }\n" +
+		"listeners=$(ss -H -tuln) || { status=$?; unset serve; printf 'ss -H -tuln failed (exit %s)\\n' \"$status\"; exit 1; }\n" +
+		"printf '%s\\n' " + shell.Quote(tailscaleServeSectionMarker) + " \"$serve\" " + shell.Quote(listenersSectionMarker) + " \"$listeners\"\n" +
+		"unset serve listeners"
 }
 
 // sysctlRuntimeCommand compares each value in the serverpro drop-in with the

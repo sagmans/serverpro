@@ -429,6 +429,15 @@ script, a missing path, `sqlite3` and `editor` by name, and `/usr/bin/id`.
 The old probe only warned on all of them. The new one failed each one and
 named why, and still only warned on `/usr/bin/id`.
 
+Another run rendered the `tailscale serve` probe before and after it held
+both reads until both succeeded, and ran both with `sh` (dash) in a
+disposable `ubuntu:24.04` container with fake `tailscale` and `ss`. When
+`ss` failed, the old probe had already printed the full Serve config, which
+then went into the doctor evidence. The new probe printed only the failed
+command and its exit status, for a failed `ss` or a failed
+`tailscale serve status`. With both reads passing, the two printed the same
+output.
+
 ### Restricted egress lockdown dogfood
 
 On 2026-10-30 the rendered lockdown and the `egress restricted` probe ran with
