@@ -16,14 +16,20 @@ const (
 	// Older mise skips pinned-checksum, Node-signature, and attestation checks
 	// when a file is missing, sends the GitHub token to any /api/v3 host, and
 	// passes untrusted git refs as options; this release fails closed on all.
-	MinimumMiseVersion                = "2026.10.24"
-	MiseLinuxX64TarGzSHA256           = "9a6c9c55f5c6372d0af70a9979fe6d742aea3793267a929e1738022143c466cc"
-	MiseLinuxArm64TarGzSHA256         = "8c8f5d7f748bf3aef431dc50f0ad776270f36025c788aa21c74e2fabdbbd6d3e"
-	NodeVersion                       = "24.22.1"
-	NPMVersion                        = "11.19.1"
-	PiVersion                         = "0.87.1"
-	PiBraceExpansionVersion           = "5.0.12"
-	PiBraceExpansionIntegrity         = "sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ=="
+	MinimumMiseVersion        = "2026.10.24"
+	MiseLinuxX64TarGzSHA256   = "9a6c9c55f5c6372d0af70a9979fe6d742aea3793267a929e1738022143c466cc"
+	MiseLinuxArm64TarGzSHA256 = "8c8f5d7f748bf3aef431dc50f0ad776270f36025c788aa21c74e2fabdbbd6d3e"
+	NodeVersion               = "24.22.1"
+	NPMVersion                = "11.19.1"
+	PiVersion                 = "0.87.1"
+	PiBraceExpansionVersion   = "5.0.12"
+	PiBraceExpansionIntegrity = "sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ=="
+	// Pi 0.87.1 shrinkwraps undici 8.10.2, which bypasses TLS certificate
+	// validation when Agent drops tls options (GHSA-2m5v-pch6-74hx) and lets
+	// cross-origin redirects poison its cache (GHSA-4w7w-5xrc-9h26); 8.12.2
+	// fixes these and six more advisories.
+	PiUndiciVersion                   = "8.12.3"
+	PiUndiciIntegrity                 = "sha512-+fdndUTwBP86cVjihTp21hZHo7d6oj1c/47XPA3lL8mM0XHs+C4EkcjmgRsFnFk2f/UONGDy9ItBItmXsLOQHw=="
 	PiDependencyMinimumReleaseAgeDays = "7"
 	UVVersion                         = "0.13.5"
 	UVMiseBackend                     = "aqua:astral-sh/uv"
@@ -157,10 +163,9 @@ func manifestEnvPairs() [][2]string {
 	return append(pairs,
 		[2]string{"SERVERPRO_BOOTSTRAP_NPM_VERSION", NPMVersion},
 		[2]string{"SERVERPRO_BOOTSTRAP_PI_VERSION", PiVersion},
-		[2]string{"SERVERPRO_BOOTSTRAP_PI_BRACE_EXPANSION_VERSION", PiBraceExpansionVersion},
-		[2]string{"SERVERPRO_BOOTSTRAP_PI_BRACE_EXPANSION_INTEGRITY", PiBraceExpansionIntegrity},
+		[2]string{piDependencyRepairsEnv, piDependencyRepairManifest()},
 		[2]string{"SERVERPRO_BOOTSTRAP_PI_DEPENDENCY_MIN_RELEASE_AGE_DAYS", PiDependencyMinimumReleaseAgeDays},
-		[2]string{"SERVERPRO_BOOTSTRAP_PI_BRACE_EXPANSION_PROBE_BASE64", base64.StdEncoding.EncodeToString([]byte(piBraceExpansionProbe))},
+		[2]string{piDependencyProbeEnv, base64.StdEncoding.EncodeToString([]byte(piDependencyProbe))},
 		[2]string{"SERVERPRO_BOOTSTRAP_HERDR_VERSION", HerdrVersion},
 		[2]string{"SERVERPRO_BOOTSTRAP_HERDR_BACKEND", HerdrMiseBackend},
 		[2]string{"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64", HerdrLinuxX64SHA256},
@@ -241,7 +246,7 @@ func Checks(user string) []Check {
 		if tool.key == "node" {
 			checks = append(checks,
 				Check{Name: "npm " + NPMVersion, Command: userHomeCommand(user, `actual_npm=$("$HOME/.local/bin/mise" exec -- npm --version); test "$actual_npm" = "`+NPMVersion+`" || { printf 'expected npm `+NPMVersion+`, got %s\n' "$actual_npm" >&2; exit 1; }; printf '%s\n' "$actual_npm"`)},
-				Check{Name: "pi " + PiVersion, Command: userHomeCommand(user, `expected_pi="$HOME/.local/share/mise/installs/node/`+NodeVersion+`/bin/pi"; actual_pi=$("$HOME/.local/bin/mise" exec -- sh -c 'command -v pi'); test "$actual_pi" = "$expected_pi" || { printf 'expected pi at %s, got %s\n' "$expected_pi" "$actual_pi" >&2; exit 1; }; `+piBraceExpansionCheckCommand()+`; pi_version=$("$HOME/.local/bin/mise" exec -- pi --version 2>&1) || { status=$?; printf 'pi --version failed (%s): %s\n' "$status" "$pi_version" >&2; exit "$status"; }; test "$pi_version" = "`+PiVersion+`" || { printf 'expected pi `+PiVersion+`, got %s\n' "$pi_version" >&2; exit 1; }; printf '%s\n' "$pi_version"`)},
+				Check{Name: "pi " + PiVersion, Command: userHomeCommand(user, `expected_pi="$HOME/.local/share/mise/installs/node/`+NodeVersion+`/bin/pi"; actual_pi=$("$HOME/.local/bin/mise" exec -- sh -c 'command -v pi'); test "$actual_pi" = "$expected_pi" || { printf 'expected pi at %s, got %s\n' "$expected_pi" "$actual_pi" >&2; exit 1; }; `+piDependencyCheckCommand()+`; pi_version=$("$HOME/.local/bin/mise" exec -- pi --version 2>&1) || { status=$?; printf 'pi --version failed (%s): %s\n' "$status" "$pi_version" >&2; exit "$status"; }; test "$pi_version" = "`+PiVersion+`" || { printf 'expected pi `+PiVersion+`, got %s\n' "$pi_version" >&2; exit 1; }; printf '%s\n' "$pi_version"`)},
 			)
 		}
 	}

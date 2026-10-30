@@ -52,7 +52,9 @@ shrinkwrapped `brace-expansion@5.0.9`. A later disposable Ubuntu run exercised
 the production local repair, Pi help, idempotence, and rejection of dependency drift.
 Repair restored `5.0.12` and the reviewed integrity; the runtime audit found zero vulnerabilities.
 Regression tests reject old versions, changed lock metadata, wrong integrity,
-and a missing shrinkwrap without executing dependency code.
+and a missing shrinkwrap without executing dependency code. Since 2026-10-30
+they cover brace-expansion and undici separately, reject unsafe repair manifest
+rows, and require the doctor command to reach the bootstrap probe’s verdict.
 The 2026-10-03 refresh repeated the complete managed user-tool installation
 with mise `2026.10.0` and uv `0.12.19` in disposable Ubuntu arm64.
 Canonical readiness and idempotence passed; Pi’s runtime audit remained clean.

@@ -72,11 +72,12 @@ reviewed pins, integrity checks, and replacement lifecycle.
 | cloudflared | 2026.10.2 | Minimum Cloudflare apt package version when ingress is enabled. |
 
 Pi `0.87.1` and upstream `1.0.0` contain vulnerable `brace-expansion@5.0.9`
-in their npm shrinkwraps. Serverpro repairs only the local managed Pi graph
-to reviewed `brace-expansion@5.0.12`; it does not modify upstream releases.
+and `undici@8.10.2` in their npm shrinkwraps. Serverpro repairs only the local
+managed Pi graph to reviewed `brace-expansion@5.0.12` and `undici@8.12.3`;
+it does not modify upstream releases.
 Both Pi installation and dependency repair enforce npm’s seven-day minimum age.
 The repair disables lifecycle scripts and omits development dependencies.
-Bootstrap verifies the resolved dependency version and reviewed shrinkwrap integrity,
+Bootstrap verifies each resolved dependency version and reviewed shrinkwrap integrity,
 then requires a clean runtime dependency audit before Pi is ready.
 Doctor rejects an unrepaired graph even when Pi’s own version matches.
 

@@ -65,6 +65,7 @@ their pins.
 | mise | 2026.10.24 | 2026-10-30 10:15:02 | Approved security exception; fail-closed verification, GitHub token limited to GitHub hosts, git ref option-injection and fnox secret-grant fixes |
 | Node.js | 24.22.1 LTS | 2026-10-20 | Approved security exception; Node 24 security release |
 | Pi | 0.87.1 | 2026-09-22 | Normal age gate |
+| Pi dependency `undici` | 8.12.3 | 2026-10-19 14:02:56 | Normal age gate; local repair of Pi's shrinkwrapped `8.10.2` (TLS validation bypass, cache poisoning) |
 | uv | 0.13.5 | 2026-10-22 01:35:54 | Approved security exception; removes the compromised emSign root (`GHSA-hq85-5cpj-mr62`) |
 | Rust | 1.99.1 | 2026-10-16 04:47:44 | Normal age gate; miscompilation fix |
 | gh | 2.103.3 | 2026-10-26 19:20:08 | Approved security exception; `digitorus/pkcs7` fix for `GHSA-3xqc-rpq8-wgp9` |
@@ -137,6 +138,26 @@ repair after drift, and the runtime dependency audit with zero vulnerabilities.
 - https://github.com/advisories/GHSA-6j4f-fj2g-mc7p
 - https://github.com/advisories/GHSA-q2hr-2g5m-vwhr
 - https://registry.npmjs.org/brace-expansion
+
+The 2026-10-30 review found that Pi `0.87.1` and `1.0.0` also pin
+`undici@8.10.2` exactly. Pi requires it directly, and the shrinkwrap holds one
+hoisted copy. Eight advisories affect `>=8.0.0 <8.12.2`, including a TLS
+certificate validation bypass and cross-origin cache poisoning. Version
+`8.12.3` was published 2026-10-19 14:02 UTC and passes the normal seven-day
+age gate. It has no dependencies, requires Node.js `>=22.19.0`, and its
+registry SHA-512 matches the pinned integrity. With both repairs applied, the
+npm bulk advisory endpoint reported no advisories for the 138 runtime
+packages in the Pi `0.87.1` shrinkwrap. No real Pi install was run for this review.
+
+- https://github.com/advisories/GHSA-2m5v-pch6-74hx
+- https://github.com/advisories/GHSA-4w7w-5xrc-9h26
+- https://github.com/advisories/GHSA-xjj6-f33q-929c
+- https://github.com/advisories/GHSA-qrxm-fqhp-jwvm
+- https://github.com/advisories/GHSA-4qv8-2p9j-2685
+- https://github.com/advisories/GHSA-f72v-6w45-q472
+- https://github.com/advisories/GHSA-9fm3-97px-rjf6
+- https://github.com/advisories/GHSA-55wc-3pg8-jfw6
+- https://registry.npmjs.org/undici
 - https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-0.87.1.tgz
 - https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-1.0.0.tgz
 

@@ -245,11 +245,15 @@ updates. Keep ServerPro pins reviewed and run doctor with repair. Checksums
 prove agreement with reviewed bytes, not absence of upstream compromise.
 Release age and checksums do not prove that an artifact or its dependencies
 are uncompromised. Upstream Pi `0.87.1` and `1.0.0` shrinkwrap vulnerable
-`brace-expansion@5.0.9`. Serverpro repairs only its managed local Pi installation
-to reviewed `5.0.12`, with lifecycle scripts disabled and development dependencies omitted.
-Bootstrap and doctor resolve metadata from Pi’s actual minimatch dependency
-without executing dependency code. They require the exact patched version
-and reviewed SHA-512 integrity in the installed shrinkwrap. Bootstrap also
+`brace-expansion@5.0.9` and `undici@8.10.2`. Serverpro repairs only its managed
+local Pi installation to reviewed `brace-expansion@5.0.12` and `undici@8.12.3`,
+with lifecycle scripts disabled and development dependencies omitted.
+The undici advisories include a TLS certificate validation bypass and
+cross-origin cache poisoning in Pi’s HTTP client.
+Bootstrap and doctor resolve each package’s metadata from the module context
+that loads it (minimatch for brace-expansion, Pi’s root for undici) without
+executing dependency code. They require each exact patched version
+and its reviewed SHA-512 integrity in the installed shrinkwrap. Bootstrap also
 requires a clean runtime dependency audit after the repair. Audit failure or
 unavailability stops the installer; an exact Pi CLI version alone is insufficient.
 

@@ -604,6 +604,7 @@ capability: installing it on a hardened host widens the admin-user trust
 boundary, so enable the `pi` or `all` target only where that is intended.
 Pi is installed via `npm install -g` under the mise-managed Node. Serverpro
 repairs only that local installation to reviewed `brace-expansion@5.0.12`
+and `undici@8.12.3`
 with lifecycle scripts disabled. Installation and repair enforce npm’s seven-day
 minimum age. Bootstrap requires a clean runtime dependency audit; doctor also
 rejects incorrect dependency versions or shrinkwrap integrity. No upstream

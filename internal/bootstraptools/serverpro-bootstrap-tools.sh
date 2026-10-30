@@ -8,8 +8,6 @@ export LC_ALL=C
 # Deterministic modes for privileged writes; explicit `install -m` still overrides.
 umask 022
 
-PI_BRACE_EXPANSION_TOOL=brace-expansion
-
 # ServerPro's reserved namespace distinguishes our updates from operator plugins.
 BUILDX_PACKAGE=docker-buildx-plugin
 BUILDX_RELEASE_BASE=https://github.com/docker/buildx/releases/download
@@ -305,17 +303,57 @@ bootstrap_pi_dependency_min_release_age() {
   printf '%s' "${age}"
 }
 
-# Pi's CLI version cannot prove that its shrinkwrapped runtime dependency was repaired.
+# pi_dependency_repairs prints the validated `package|version|integrity|resolve-from`
+# rows. The values reach npm and node command lines, so a leading dash or an
+# unexpected character fails closed before any of them is used.
+pi_dependency_repairs() {
+  local manifest row package version integrity resolve_from extra count=0
+  manifest=$(required_env SERVERPRO_BOOTSTRAP_PI_DEPENDENCY_REPAIRS)
+  while IFS= read -r row; do
+    IFS='|' read -r package version integrity resolve_from extra <<<"${row}"
+    if [[ -n ${extra:-} || -z ${resolve_from:-} ]]; then
+      printf 'Pi dependency repair row needs four fields: %s\n' "${row}" >&2
+      exit 1
+    fi
+    validate_tool_name pi_dependency_package "${package}"
+    validate_version_token pi_dependency_version "${version}"
+    [[ ${integrity} =~ ^sha512-[[:alnum:]/+]{86}==$ ]] || { printf 'invalid Pi %s integrity\n' "${package}" >&2; exit 1; }
+    if [[ ${resolve_from} != - ]]; then
+      validate_tool_name pi_dependency_resolve_from "${resolve_from}"
+    fi
+    if [[ ${package} == -* || ${version} == -* || ${resolve_from} == -?* ]]; then
+      printf 'Pi dependency repair row must not start a field with a dash: %s\n' "${row}" >&2
+      exit 1
+    fi
+    ((count += 1))
+    printf '%s|%s|%s|%s\n' "${package}" "${version}" "${integrity}" "${resolve_from}"
+  done <<<"${manifest}"
+  ((count > 0)) || { printf 'Pi dependency repair manifest is empty\n' >&2; exit 1; }
+}
+
+# pi_dependency_install_specs prints the exact `package@version` specs npm
+# installs over Pi's shrinkwrap.
+pi_dependency_install_specs() {
+  local rows package version specs=()
+  rows=$(pi_dependency_repairs)
+  while IFS='|' read -r package version _; do
+    specs+=("${package}@${version}")
+  done <<<"${rows}"
+  printf '%s' "${specs[*]}"
+}
+
+# Pi's CLI version cannot prove that its shrinkwrapped runtime dependencies were repaired.
 pi_dependency_check_command() {
-  local node_version="$1" pi_tool brace_version integrity probe probe_quoted
+  local node_version="$1" pi_tool rows package version integrity resolve_from probe probe_quoted args=''
   pi_tool=$(bootstrap_pi_tool)
-  brace_version=$(bootstrap_version_env SERVERPRO_BOOTSTRAP_PI_BRACE_EXPANSION_VERSION)
-  integrity=$(required_env SERVERPRO_BOOTSTRAP_PI_BRACE_EXPANSION_INTEGRITY)
-  [[ ${integrity} =~ ^sha512-[[:alnum:]/+]{86}==$ ]] || { printf 'invalid Pi brace-expansion integrity\n' >&2; return 1; }
-  probe=$(printf '%s' "$(required_env SERVERPRO_BOOTSTRAP_PI_BRACE_EXPANSION_PROBE_BASE64)" | base64 -d)
+  rows=$(pi_dependency_repairs)
+  while IFS='|' read -r package version integrity resolve_from; do
+    args+=" \"${package}\" \"${version}\" \"${integrity}\" \"${resolve_from}\""
+  done <<<"${rows}"
+  probe=$(printf '%s' "$(required_env SERVERPRO_BOOTSTRAP_PI_DEPENDENCY_PROBE_BASE64)" | base64 -d)
   [[ -n ${probe} ]] || { printf 'empty Pi dependency probe\n' >&2; return 1; }
   printf -v probe_quoted '%q' "${probe}"
-  printf '%s' "\"\$HOME/.local/bin/mise\" exec -- node -e ${probe_quoted} \"\$HOME/.local/share/mise/installs/node/${node_version}/lib/node_modules/${pi_tool}\" \"${brace_version}\" \"${integrity}\""
+  printf '%s' "\"\$HOME/.local/bin/mise\" exec -- node -e ${probe_quoted} \"\$HOME/.local/share/mise/installs/node/${node_version}/lib/node_modules/${pi_tool}\"${args}"
 }
 
 bootstrap_herdr_version() {
@@ -1542,13 +1580,13 @@ install_user_tools_for_target() {
     staged+=("mise --yes install --force herdr@${herdr_version}")
   fi
   if [[ ${install_pi} -eq 1 ]]; then
-    local brace_version minimum_age pi_package
-    brace_version=$(bootstrap_version_env SERVERPRO_BOOTSTRAP_PI_BRACE_EXPANSION_VERSION)
+    local repair_specs minimum_age pi_package
+    repair_specs=$(pi_dependency_install_specs)
     minimum_age=$(bootstrap_pi_dependency_min_release_age)
     pi_package="\$HOME/.local/share/mise/installs/node/${node_version}/lib/node_modules/${pi_tool}"
     staged+=("\"\$HOME/.local/bin/mise\" exec -- npm install -g ${pi_tool}@${pi_version} --min-release-age=${minimum_age}")
-    # Pi's upstream shrinkwrap must not restore the reviewed vulnerable dependency.
-    staged+=("\"\$HOME/.local/bin/mise\" exec -- npm --prefix \"${pi_package}\" install --ignore-scripts --omit=dev --save-exact --min-release-age=${minimum_age} ${PI_BRACE_EXPANSION_TOOL}@${brace_version}")
+    # Pi's upstream shrinkwrap must not restore the reviewed vulnerable dependencies.
+    staged+=("\"\$HOME/.local/bin/mise\" exec -- npm --prefix \"${pi_package}\" install --ignore-scripts --omit=dev --save-exact --min-release-age=${minimum_age} ${repair_specs}")
     staged+=("$(pi_dependency_check_command "${node_version}")")
     staged+=("\"\$HOME/.local/bin/mise\" exec -- npm --prefix \"${pi_package}\" audit --omit=dev")
   fi
