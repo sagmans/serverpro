@@ -114,9 +114,11 @@ default.
   provisioning: restricted egress not in force (UFW policy and a real connect
   to a port the lockdown never allows), a pending reboot, extra accounts in
   `sudo`/`admin`/`lxd`/`docker` or with uid 0, a Tailscale `OperatorUser`,
-  Tailscale Funnel or Serve entries with no local listener, and runtime sysctl
-  values that differ from the serverpro drop-in. None of them has a repair,
-  because each finding needs an operator decision. See USAGE.md, Drift checks.
+  Tailscale Funnel or Serve entries with no local listener, runtime sysctl
+  values that differ from the serverpro drop-in, and a cloudflared service that
+  is enabled or running on a host whose config ingress is `none`. None of them
+  has a repair, because each finding needs an operator decision. See USAGE.md,
+  Drift checks.
 - Tailnet DNS is part of the access path: with MagicDNS enabled, the tailnet
   must define global nameservers and enable Override DNS servers, or managed
   hosts can lose all public name resolution without any local change.

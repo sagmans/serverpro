@@ -54,17 +54,29 @@ func TestRemoteReadPlanDeclaresConditionalAndConfiguredReads(t *testing.T) {
 	if !plan.hasRead(cloudInitWaitCommand) || !plan.hasRead(cloudInitLongCommand) {
 		t.Fatalf("cloud-init reads missing from plan: %+v", plan.commands)
 	}
-	if plan.hasRead(tunnel.CheckCommand()) || !plan.hasRead(tunnel.UnmanagedCheckCommand()) {
-		t.Fatalf("want only the unmanaged cloudflared read without ingress: %+v", plan.commands)
+	// Ingress none audits an unowned connector with its own repair and adds
+	// the host-state read that flags a live one as ingress drift; the managed
+	// connector repair and the pin repair must stay out of the plan.
+	if plan.hasRead(tunnel.CheckCommand()) || !plan.hasRead(tunnel.UnmanagedCheckCommand()) || !plan.hasRead(tunnel.HostStateCommand()) {
+		t.Fatalf("want the unmanaged cloudflared and host-state reads without ingress: %+v", plan.commands)
 	}
-	if plan.allowsLive(tunnel.UpgradeScript()) || !plan.allowsLive(tunnel.UnmanagedRepairScript()) {
+	if plan.hasRead(tunnel.PinCheckCommand()) {
+		t.Fatal("pin read planned although config owns no connector")
+	}
+	if plan.allowsLive(tunnel.UpgradeScript()) || plan.allowsLive(tunnel.PinRepairScript()) || !plan.allowsLive(tunnel.UnmanagedRepairScript()) {
 		t.Fatal("want only the unmanaged cloudflared repair without ingress")
 	}
 
 	cfg.Network.Ingress = "cloudflare-tunnel"
 	plan = buildRemoteReadPlan(cfg, Options{})
-	if !plan.hasRead(tunnel.CheckCommand()) || plan.hasRead(tunnel.UnmanagedCheckCommand()) {
-		t.Fatalf("want only the managed cloudflared read with ingress: %+v", plan.commands)
+	if !plan.hasRead(tunnel.CheckCommand()) || !plan.hasRead(tunnel.PinCheckCommand()) {
+		t.Fatalf("want the managed cloudflared and pin reads with ingress: %+v", plan.commands)
+	}
+	if plan.hasRead(tunnel.UnmanagedCheckCommand()) || plan.hasRead(tunnel.HostStateCommand()) {
+		t.Fatal("unmanaged reads planned although config owns the connector")
+	}
+	if !plan.allowsLive(tunnel.UpgradeScript()) || !plan.allowsLive(tunnel.PinRepairScript()) {
+		t.Fatal("cloudflared connector or pin repair missing from live plan")
 	}
 	if !plan.hasRead(tailscaletools.CheckCommand()) {
 		t.Fatal("Tailscale version read missing from plan")

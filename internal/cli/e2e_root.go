@@ -24,6 +24,7 @@ import (
 	"github.com/sagmans/serverpro/internal/provider/httpjson"
 	"github.com/sagmans/serverpro/internal/remote"
 	"github.com/sagmans/serverpro/internal/state"
+	"github.com/sagmans/serverpro/internal/tunnel"
 	"github.com/spf13/cobra"
 )
 
@@ -203,6 +204,8 @@ func e2eRemoteEvidence(script string) string {
 	switch script {
 	case doctor.TailscaleServeCommand():
 		return doctor.TailscaleServeIdleOutput()
+	case tunnel.HostStateCommand():
+		return tunnel.HostStateAnswer(tunnel.HostStateAbsent)
 	}
 	return e2eRemoteSuccessEvidence
 }

@@ -93,15 +93,7 @@ func remoteCheckSpecifications(cfg config.Config, opt Options) []remoteCheckSpec
 	if cfg.Git.Access == config.GitAccessAccountKey {
 		specifications = append(specifications, remoteGitIdentitySpecifications(cfg)...)
 	}
-	if cfg.Network.Ingress != "none" {
-		specifications = append(specifications, remoteCloudflaredSpecification(tunnel.CheckCommand(), tunnel.UpgradeScript()))
-	} else {
-		// Ingress "none" only means serverpro set up no tunnel. Another tool
-		// can still leave a connector behind, so the host is audited for one
-		// instead of skipped; an absent connector passes.
-		specifications = append(specifications, remoteCloudflaredSpecification(tunnel.UnmanagedCheckCommand(), tunnel.UnmanagedRepairScript()))
-	}
-	return specifications
+	return append(specifications, remoteCloudflaredSpecifications(cfg)...)
 }
 
 func remoteSupportedPlatformCommand() string {

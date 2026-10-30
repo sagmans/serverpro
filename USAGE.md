@@ -663,7 +663,8 @@ toolset summary.
 
 These doctor checks compare the live host with what config and provisioning
 set up. They are read-only. `--fix` never changes what they find, because each
-finding needs an operator decision.
+finding needs an operator decision. Only the `cloudflared apt pin` check has a
+repair, and only when config ingress is `cloudflare-tunnel`.
 
 | Check | Result | Finding |
 | --- | --- | --- |
@@ -674,12 +675,17 @@ finding needs an operator decision.
 | `tailscale operator` | fail | tailscaled has an `OperatorUser`. |
 | `tailscale serve` | fail or warn | Funnel publishes a port (fail), or a Serve entry forwards to a local port with no TCP listener (warn). |
 | `sysctl runtime` | warn | A running kernel value differs from `/etc/sysctl.d/99-serverpro.conf`, or the file lacks or changed a serverpro value. |
+| `cloudflared ingress` | fail | Config ingress is `none`, but `cloudflared.service` is enabled or running, or the host state cannot be classified (for example a `cloudflared` process outside the service). A dormant package passes. Runs only with ingress `none`. |
+| `cloudflared apt pin` | fail | The serverpro apt pin for cloudflared is missing or changed. Runs only with ingress `cloudflare-tunnel`; `--fix` rewrites only the pin. |
 
 A probe that cannot read the host fails with "the read-only probe could not
 run". Drift is then unknown, so doctor does not report a pass. The
 `metadata user-data` check reports presence only: doctor never prints the
 user-data, the hash, or the shadow entry. The compute provider adapter supplies
-the metadata path; with no path, the check is skipped.
+the metadata path; with no path, the check is skipped. With ingress `none`,
+the `cloudflared` check above audits and repairs the connector itself;
+`cloudflared ingress` only reports that a live connector contradicts config,
+and it reads the same host state as that audit.
 
 ### Restricted egress
 

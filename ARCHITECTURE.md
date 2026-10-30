@@ -92,6 +92,10 @@ access paths for app-owned deployment flows.
     fingerprint and the exact apt source line (migrating only the legacy
     suite-`any` line to the codename suite), upgrades from that repository
     to at least the floor, then enables and restarts the service.
+  - Read-only drift reads: the connector host state through the shared
+    `cloudflared_host_state` helper, which the doctor `cloudflared ingress`
+    check uses with ingress `none`, and an exact apt pin check for managed
+    ingress. The pin repair writes only the pin.
 - State: `internal/state`
   - Provider-neutral registry, per-server JSON state, and context-cancellable
     workflow lock ordering.
@@ -224,7 +228,7 @@ access paths for app-owned deployment flows.
     Drift checks compare the live host with what config and provisioning
     promised: restricted egress, pending reboot, privileged accounts,
     metadata user-data password hash, Tailscale operator, Serve and Funnel,
-    and runtime sysctl.
+    runtime sysctl, and a live cloudflared connector while ingress is `none`.
     Each probe prints `fail: ` or `warn: ` lines and exits 0 when it could read
     the host, so a probe that never ran (non-zero exit) fails instead of
     passing.
