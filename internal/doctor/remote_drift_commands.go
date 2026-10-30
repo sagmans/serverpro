@@ -89,6 +89,14 @@ const (
 // Ubuntu's sudoers, lxd and docker through privileged containers.
 var privilegedGroups = []string{"sudo", "admin", "lxd", "docker"}
 
+// getentNotFoundStatus and grepNoMatchStatus are the exits that mean "no
+// such entry" rather than a failed read: the privileged accounts scan skips
+// only those, so a broken account database cannot read as an empty one.
+const (
+	getentNotFoundStatus = "2"
+	grepNoMatchStatus    = "1"
+)
+
 // egressRestrictedCommand checks the policy and the effect separately: UFW
 // can report "deny (outgoing)" while an ALLOW OUT Anywhere rule, a second
 // firewall, or a missed reload still lets traffic out, so a real connect to a
@@ -270,38 +278,62 @@ FNR == 1 { line = "" }
 // this way or the other. It also lists each provider image account that still
 // exists, privileged or not, because it is a second login path with its own
 // keys that serverpro does not manage.
+//
+// Each scan is captured and its status checked on its own, and the account
+// database is read once: in a pipeline without pipefail a scan that failed
+// part way would still exit 0 through sort, and a partial list would read as
+// a host with nothing to report. The case patterns use the (pattern) form,
+// which a case inside $(...) needs so a bare ")" cannot end the substitution.
 func privilegedAccountsCommand(admin string, imageUsers []string) string {
-	imageAccounts := ""
+	imageAccounts := "images=\n"
 	if len(imageUsers) > 0 {
 		quoted := make([]string, len(imageUsers))
 		for i, user := range imageUsers {
 			quoted[i] = shell.Quote(user)
 		}
-		imageAccounts = "for user in " + strings.Join(quoted, " ") + "; do\n" +
-			"  if getent passwd \"$user\" >/dev/null; then printf '" + driftFailPrefix + "provider image account %s exists\\n' \"$user\"; fi\n" +
-			"done\n"
+		imageAccounts = "images=$(\n" +
+			"for user in " + strings.Join(quoted, " ") + "; do\n" +
+			"  status=0\n" +
+			"  printf '%s\\n' \"$accounts\" | cut -d: -f1 | grep -Fqx -- \"$user\" || status=$?\n" +
+			"  case $status in\n" +
+			"    (0) printf '" + driftFailPrefix + "provider image account %s exists\\n' \"$user\" ;;\n" +
+			"    (" + grepNoMatchStatus + ") ;;\n" +
+			"    (*) exit 1 ;;\n" +
+			"  esac\n" +
+			"done\n" +
+			") || unreadable 'the provider image accounts'\n"
 	}
 	return "export LC_ALL=C\n" +
 		"admin=" + shell.Quote(admin) + "\n" +
-		"{\n" +
+		"unreadable() {\n" +
+		"  printf 'could not evaluate privileged accounts: cannot read %s\\n' \"$1\"\n" +
+		"  exit 1\n" +
+		"}\n" +
+		"accounts=$(getent passwd) || unreadable 'the account database'\n" +
 		// sudo skips drop-in names with a dot or a trailing ~, so doctor does too.
 		"set -- " + sudoersPath + "\n" +
 		"for file in " + sudoersDropInDir + "/*; do\n" +
 		"  case \"${file##*/}\" in *.*|*~) continue ;; esac\n" +
 		"  [ -f \"$file\" ] && set -- \"$@\" \"$file\"\n" +
 		"done\n" +
-		"awk -v admin=\"$admin\" " + shell.Quote(sudoersGrantsProgram) + " \"$@\"\n" +
+		"sudoers=$(awk -v admin=\"$admin\" " + shell.Quote(sudoersGrantsProgram) + " \"$@\") || unreadable 'the sudoers rules'\n" +
 		imageAccounts +
+		"groups=$(\n" +
 		"for group in " + strings.Join(privilegedGroups, " ") + "; do\n" +
-		"  entry=$(getent group \"$group\") || continue\n" +
+		"  status=0\n" +
+		"  entry=$(getent group \"$group\") || status=$?\n" +
+		"  [ \"$status\" -eq " + getentNotFoundStatus + " ] && continue\n" +
+		"  [ \"$status\" -eq 0 ] || exit 1\n" +
 		"  gid=$(printf '%s\\n' \"$entry\" | cut -d: -f3)\n" +
-		"  for member in $(printf '%s\\n' \"$entry\" | cut -d: -f4 | tr ',' ' ') $(getent passwd | awk -F: -v gid=\"$gid\" '$4 == gid { print $1 }'); do\n" +
+		"  primary=$(printf '%s\\n' \"$accounts\" | awk -F: -v gid=\"$gid\" '$4 == gid { print $1 }') || exit 1\n" +
+		"  for member in $(printf '%s\\n' \"$entry\" | cut -d: -f4 | tr ',' ' ') $primary; do\n" +
 		"    [ \"$member\" = \"$admin\" ] && continue\n" +
 		"    printf '" + driftFailPrefix + "%s is in privileged group %s\\n' \"$member\" \"$group\"\n" +
 		"  done\n" +
 		"done\n" +
-		"getent passwd | awk -F: '$3 == 0 && $1 != \"root\" { printf \"" + driftFailPrefix + "%s has uid 0\\n\", $1 }'\n" +
-		"} | sort -u\n" +
+		") || unreadable 'the privileged groups'\n" +
+		"uids=$(printf '%s\\n' \"$accounts\" | awk -F: '$3 == 0 && $1 != \"root\" { printf \"" + driftFailPrefix + "%s has uid 0\\n\", $1 }') || unreadable 'the uid 0 accounts'\n" +
+		"printf '%s\\n' \"$sudoers\" \"$images\" \"$groups\" \"$uids\" | sed '/^$/d' | sort -u\n" +
 		"printf 'checked groups: %s\\n' " + shell.Quote(strings.Join(privilegedGroups, " "))
 }
 

@@ -268,10 +268,11 @@ func TestRebootPendingCommandReportsFlagAndNewerKernel(t *testing.T) {
 }
 
 // fakeGetent answers from files under $FAKE_ETC like the libc databases do,
-// exiting non-zero for a missing key so callers see getent's own contract.
+// exiting 2 for a missing key as getent does, so the scan can tell a missing
+// group from a failed read.
 const fakeGetent = `case "$1:$#" in
 passwd:1) cat "$FAKE_ETC/passwd" ;;
-*) grep "^$2:" "$FAKE_ETC/$1" ;;
+*) grep "^$2:" "$FAKE_ETC/$1" || exit 2 ;;
 esac`
 
 func fakeEtc(t *testing.T, files map[string]string) string {
