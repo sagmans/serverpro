@@ -296,7 +296,8 @@ func TestPrivilegedAccountsCommandListsEveryRootPath(t *testing.T) {
 	sudoers := fakeSudoers(t, "Defaults env_reset\nroot ALL=(ALL:ALL) ALL\n%sudo ALL=(ALL:ALL) ALL\n@includedir /etc/sudoers.d\n", map[string]string{
 		"90-cloud-init-users": "# Created by cloud-init\ndeploy ALL=(ALL) ALL\n",
 		"README":              "# Files in this directory are read by sudo.\n#\n",
-		"ci":                  "Cmnd_Alias DEPLOY = /usr/bin/systemctl restart app, \\\n    /usr/bin/systemctl status app\nci ALL=(root) NOPASSWD: DEPLOY\n",
+		"ci":                  "Cmnd_Alias DEPLOY = /usr/local/bin/deploy-app restart, \\\n    /usr/local/bin/deploy-app status app\nci ALL=(root) NOPASSWD: DEPLOY\n",
+		"shells":              "shells ALL=(root) NOPASSWD: /usr/bin/systemctl restart app, /usr/bin/python3.12, /usr/local/bin/deploy-app\n",
 		"old.dpkg-dist":       "ghost ALL=(ALL) ALL\n",
 		"ops":                 "ops ALL=(ALL) NOPASSWD: ALL\n",
 		"wild":                "wild ALL=(root) /usr/bin/*\n",
@@ -316,10 +317,11 @@ func TestPrivilegedAccountsCommandListsEveryRootPath(t *testing.T) {
 			t.Fatalf("evidence %q lacks %q", result.Evidence, want)
 		}
 	}
-	// A rule limited to listed commands warns and names them; ALL or a
-	// wildcard path fails.
+	// A rule limited to listed commands warns and names them; ALL, a
+	// wildcard path, or a root-equivalent command fails.
 	for _, want := range []string{
-		driftWarnPrefix + sudoers + ".d/ci grants sudo to ci for listed commands: /usr/bin/systemctl\n",
+		driftWarnPrefix + sudoers + ".d/ci grants sudo to ci for listed commands: /usr/local/bin/deploy-app\n",
+		driftFailPrefix + sudoers + ".d/shells grants sudo to shells for root-equivalent commands: /usr/bin/systemctl /usr/bin/python3.12\n",
 		driftFailPrefix + sudoers + ".d/ops grants sudo to ops without a command limit\n",
 		driftFailPrefix + sudoers + ".d/wild grants sudo to wild without a command limit\n",
 	} {
@@ -330,7 +332,7 @@ func TestPrivilegedAccountsCommandListsEveryRootPath(t *testing.T) {
 	// The admin, root, the sudo group, a continued command list, command
 	// arguments, a drop-in sudo itself skips, and an image account that is
 	// gone are not drift.
-	for _, unwanted := range []string{"deploy is", "root has", "to deploy", "to %sudo", "to /usr/bin", "status app", "ghost", "absent"} {
+	for _, unwanted := range []string{"deploy is", "root has", "to deploy", "to %sudo", "to /usr/", "status app", "ghost", "absent"} {
 		if strings.Contains(result.Evidence, unwanted) {
 			t.Fatalf("evidence %q reports %q", result.Evidence, unwanted)
 		}

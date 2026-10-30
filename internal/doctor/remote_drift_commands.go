@@ -46,7 +46,7 @@ const (
 	unattendedUpgradesConfigRemediation = "serverpro server doctor --fix restores " + cloudinit.UnattendedUpgradesConfigPath + " (serverpro owns that file; put local options in a later-sorting file); if a value stays wrong, a later apt.conf.d file overrides it: find it with apt-config dump and remove that line"
 
 	privilegedAccountsCheckName   = "privileged accounts"
-	privilegedAccountsRemediation = "serverpro server doctor --fix removes only the compute provider's own image accounts and never changes any other account; keep any other listed account (it may be a CI deploy user) and confirm what runs as it: limit a rule that grants sudo without a command limit to the absolute command paths it needs, take the account out of a privileged group it does not need (gpasswd -d USER GROUP), and run visudo -c after each sudoers change"
+	privilegedAccountsRemediation = "serverpro server doctor --fix removes only the compute provider's own image accounts and never changes any other account; keep any other listed account (it may be a CI deploy user) and confirm what runs as it: limit a rule that grants sudo without a command limit to the absolute command paths it needs, replace a root-equivalent command (a shell, editor, pager, interpreter, file writer, package, service, or container manager) with a root-owned wrapper script that the account cannot write and that runs one fixed action, take the account out of a privileged group it does not need (gpasswd -d USER GROUP), and run visudo -c after each sudoers change"
 	// sudoersPath and sudoersDropInDir are where sudo reads rules; doctor
 	// reads the same files so a grant outside the sudo group is reported.
 	sudoersPath      = "/etc/sudoers"
@@ -88,6 +88,40 @@ const (
 // privilegedGroups grant root or a root-equivalent: sudo and admin through
 // Ubuntu's sudoers, lxd and docker through privileged containers.
 var privilegedGroups = []string{"sudo", "admin", "lxd", "docker"}
+
+// rootEquivalentCommands are command names that hand out a root shell or
+// root file writes even when a sudoers rule lists them by absolute path: a
+// shell or interpreter runs anything, an editor or pager escapes to a shell,
+// a file writer can rewrite sudoers, and a package, service, or container
+// manager runs code as root. Fixed arguments do not make them safe, because
+// a pager or editor still opens and sudo's argument matching is easy to get
+// wrong, so a rule that names one fails whatever its arguments. The probe
+// matches on the base name with any dotted or numeric version suffix
+// dropped, so /usr/bin/python3.12 and /usr/bin/vim.basic match too. The
+// list follows the sudo entries in GTFOBins (see WEB_SOURCES.md) for tools
+// commonly found on Ubuntu servers.
+var rootEquivalentCommands = []string{
+	// Shells and command runners.
+	"sh", "bash", "dash", "ash", "zsh", "ksh", "csh", "tcsh", "fish", "busybox",
+	"su", "sudo", "env", "nice", "nohup", "timeout", "stdbuf", "xargs", "find",
+	"script", "expect", "tmux", "screen", "watch", "flock", "setsid", "chroot",
+	"nsenter", "unshare", "setpriv", "runuser", "capsh", "strace", "gdb", "ssh",
+	// Editors and pagers.
+	"vi", "vim", "view", "rvim", "nvim", "nano", "ed", "ex", "emacs",
+	"less", "more", "most", "man", "journalctl",
+	// Interpreters.
+	"awk", "gawk", "mawk", "nawk", "sed", "perl", "python", "ruby", "lua",
+	"node", "php", "tclsh", "wish",
+	// File writers and permission changers.
+	"tee", "dd", "cp", "mv", "install", "ln", "rsync", "tar", "zip", "unzip",
+	"cpio", "chmod", "chown", "chgrp", "setfacl", "curl", "wget", "scp",
+	"sftp", "mount",
+	// Account, package, service, and container managers.
+	"passwd", "chpasswd", "usermod", "useradd", "visudo", "crontab",
+	"apt", "apt-get", "dpkg", "snap", "pip", "npm", "gem", "make", "git",
+	"systemctl", "systemd-run", "service", "docker", "podman", "ctr", "nerdctl",
+	"kubectl", "lxc",
+}
 
 // getentNotFoundStatus and grepNoMatchStatus are the exits that mean "no
 // such entry" rather than a failed read: the privileged accounts scan skips
@@ -217,8 +251,26 @@ func rebootPendingCommand() string {
 // command paths, directly or through a Cmnd_Alias, is how a CI deploy user
 // gets the few commands it needs, so it only warns and names the commands.
 // ALL, a wildcard path, a nested alias, or anything the program cannot read
-// as a command list fails, because it may grant every command.
-const sudoersGrantsProgram = `function commandScope(list, depth,    n, i, j, entry, part, word, cmd, nested, inner, seen, out) {
+// as a command list fails, because it may grant every command. So does a
+// listed command whose name is in rootEquivalentNames (rootEquivalentCommands,
+// passed in by the caller), because it reaches root by itself.
+const sudoersGrantsProgram = `BEGIN {
+  rootCount = split(rootEquivalentNames, rootName, " ")
+  for (ri = 1; ri <= rootCount; ri++) rootEquivalent[rootName[ri]] = 1
+}
+function rootEquivalents(scope,    n, i, cmd, base, out) {
+  n = split(scope, cmd, " ")
+  out = ""
+  for (i = 1; i <= n; i++) {
+    base = cmd[i]
+    sub(/.*\//, "", base)
+    sub(/\..*$/, "", base)
+    sub(/[0-9]+$/, "", base)
+    if (base in rootEquivalent) out = out (out == "" ? "" : " ") cmd[i]
+  }
+  return out
+}
+function commandScope(list, depth,    n, i, j, entry, part, word, cmd, nested, inner, seen, out) {
   gsub(/\([^)]*\)/, "", list)
   n = split(list, part, ",")
   out = ""
@@ -268,6 +320,7 @@ FNR == 1 { line = "" }
   commands = rule
   scope = sub(/^[^=]*=/, "", commands) ? commandScope(commands, 0) : ""
   if (scope == "") printf "` + driftFailPrefix + `%s grants sudo to %s without a command limit\n", FILENAME, who
+  else if ((rooted = rootEquivalents(scope)) != "") printf "` + driftFailPrefix + `%s grants sudo to %s for root-equivalent commands: %s\n", FILENAME, who, rooted
   else printf "` + driftWarnPrefix + `%s grants sudo to %s for listed commands: %s\n", FILENAME, who, scope
 }`
 
@@ -316,7 +369,7 @@ func privilegedAccountsCommand(admin string, imageUsers []string) string {
 		"  case \"${file##*/}\" in *.*|*~) continue ;; esac\n" +
 		"  [ -f \"$file\" ] && set -- \"$@\" \"$file\"\n" +
 		"done\n" +
-		"sudoers=$(awk -v admin=\"$admin\" " + shell.Quote(sudoersGrantsProgram) + " \"$@\") || unreadable 'the sudoers rules'\n" +
+		"sudoers=$(awk -v admin=\"$admin\" -v rootEquivalentNames=" + shell.Quote(strings.Join(rootEquivalentCommands, " ")) + " " + shell.Quote(sudoersGrantsProgram) + " \"$@\") || unreadable 'the sudoers rules'\n" +
 		imageAccounts +
 		"groups=$(\n" +
 		"for group in " + strings.Join(privilegedGroups, " ") + "; do\n" +

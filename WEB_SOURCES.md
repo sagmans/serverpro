@@ -587,6 +587,17 @@ Use: `NOPASSWD` and `PASSWD` semantics, and `verifypw=any` for the first-boot
 grant (with the default `verifypw=all`, the admin's `%sudo` entry makes
 `sudo -v` demand the not-yet-set password).
 
+### GTFOBins
+
+```text
+https://gtfobins.github.io/
+```
+
+Use: the sudo entries behind doctor's root-equivalent command list for
+`privileged accounts`: shells, interpreters, editors, pagers, file writers,
+and package, service, or container managers that reach root through a
+sudoers rule even when it names them by absolute path.
+
 ### chpasswd
 
 ```text

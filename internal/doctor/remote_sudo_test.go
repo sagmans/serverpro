@@ -46,7 +46,7 @@ func TestRemoteChecksWithFixRejectsMultilineSudoPassword(t *testing.T) {
 	if !hasResult(Report{Results: results}, "sudo password required", Fail, "invalid sudo password") {
 		t.Fatalf("missing invalid password failure: %+v", results)
 	}
-	if hasCommand(r.commands, "chpasswd") {
+	if hasCommand(r.commands, "| chpasswd") {
 		t.Fatalf("multiline password should not run fix: %#v", r.commands)
 	}
 }
@@ -61,7 +61,7 @@ func TestRemoteChecksWithFixRejectsMissingSudoPassword(t *testing.T) {
 	if !hasResult(Report{Results: results}, "sudo password required", Fail, "invalid sudo password") {
 		t.Fatalf("missing invalid password failure: %+v", results)
 	}
-	if hasCommand(r.commands, "chpasswd") {
+	if hasCommand(r.commands, "| chpasswd") {
 		t.Fatalf("missing sudo password should not run fix: %#v", r.commands)
 	}
 }
@@ -109,7 +109,7 @@ func TestRemoteChecksFailsOnLegacySHACryptAdminPassword(t *testing.T) {
 	if !hasResult(Report{Results: results}, "admin password hash", Fail, "legacy crypt scheme $6$") {
 		t.Fatalf("missing legacy hash failure: %+v", results)
 	}
-	if hasCommand(r.commands, "chpasswd") {
+	if hasCommand(r.commands, "| chpasswd") {
 		t.Fatalf("doctor without --fix must not re-set the password: %#v", r.commands)
 	}
 }

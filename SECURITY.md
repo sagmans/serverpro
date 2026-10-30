@@ -163,8 +163,12 @@ default.
   compute adapter declares as its image accounts; every other account,
   sudoers rule, or group member is report-only, because it may run a
   workload such as a CI deploy. A sudoers rule without a command limit
-  fails; a rule that lists only absolute command paths warns and names
-  them. See USAGE.md, Drift checks and Provider image accounts.
+  fails, and so does a rule that lists a root-equivalent command (a shell,
+  editor, pager, interpreter, file writer, or account, package, service, or
+  container manager) by any path or arguments; a rule that lists only other
+  absolute command paths warns and names them. Give such an account a
+  root-owned wrapper script that it cannot write and that runs one fixed
+  action. See USAGE.md, Drift checks and Provider image accounts.
 - Tailnet packet rules are outside serverpro's ownership: serverpro edits only
   its tag owners and SSH rule. Doctor warns when the tailnet policy lets every
   source reach every port, since UFW is then the only barrier between any
