@@ -528,6 +528,28 @@ another account's rule, and removed drop-in rules for an account it then
 called absent. The current script stopped on each one, before `userdel`,
 and the other account kept its sudo rule.
 
+On 2026-10-30 the image account removal gained checks with sudo's own
+parser (`cvtsudoers` JSON). The script was rendered before and after the
+change and run as root in a disposable Ubuntu 24.04 arm64 container with
+sudo 1.9.15p5, once per case in a fresh container, each sudoers sample
+accepted by `visudo -c` first. Then the account database and `cvtsudoers`
+showed what was left.
+
+- With a `#uid` rule for the account, a rule in an include named by a
+  nested sudoers.d path or a `..` path, or a user list `account , other`,
+  the old script removed the account. It left the rule live, or dropped the
+  other account's grant with it. The new script stopped before any change,
+  or at the shared file for the user list.
+- With a name only sudo's parser reads (`linux\user`), the old script
+  removed the account and left a live rule. The new one stopped before
+  `userdel`, with the account locked and the undo command in its message.
+- With a rule continued past trailing blanks, the old script stopped on a
+  candidate that `visudo` rejected. The new one removed the whole rule and
+  kept the other account's.
+- With another account's `#uid` rule in the same drop-in, the old script
+  archived the whole file and that rule with it. The new one kept the rule.
+- With only its own drop-in, both removed the account.
+
 A fifth run ran the undo command from the "running processes" stop, in the
 same kind of container, for four starting states. The earlier command
 cleared an expiry date the account had, unlocked a password that was locked

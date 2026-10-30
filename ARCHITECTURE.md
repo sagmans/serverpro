@@ -416,14 +416,17 @@ flowchart LR
    the same script. Then remove the compute provider's image accounts
    (`remote_image_users` phase), because the admin user now works through
    sudo: `lifecycle.ImageUsersRemovalScript` first stops with nothing changed
-   when `/etc/sudoers` or a file it includes outside sudoers.d (the list
-   `visudo -c` prints) names the account, then locks each account, archives its
+   when a file sudo reads that is not directly in sudoers.d (the list
+   `visudo -c` prints) names the account, or a rule names its uid, then
+   locks each account, archives its
    home, crontab, and single-account sudoers.d files under
    `/root/serverpro-removed-accounts`, removes only that account's rules from
    a shared sudoers.d file (archiving the original), checks `visudo -c`, and
-   then runs `userdel -r`. It stops on running processes after the lock, and
+   then runs `userdel -r`. It stops on running processes after the lock,
    before userdel when a shared file still names the account outside its own
-   rules, and it never touches root, the
+   rules, and before userdel when sudo's own parser
+   (`lifecycle.SudoersPolicyCommand`, `cvtsudoers` JSON) still finds the
+   name or uid in any rule or Defaults entry, and it never touches root, the
    admin user, or uid 0. Then converge the managed host tools through the
    embedded bootstrap script and apply the egress lockdown. With
    `reboot.enabled: true`, install the gated reboot (`remote_reboot_gate`

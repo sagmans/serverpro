@@ -633,6 +633,20 @@ Use: `NOPASSWD` and `PASSWD` semantics, and `verifypw=any` for the first-boot
 grant (with the default `verifypw=all`, the admin's `%sudo` entry makes
 `sudo -v` demand the not-yet-set password).
 
+### cvtsudoers
+
+```text
+https://www.sudo.ws/docs/man/cvtsudoers.man/
+https://packages.ubuntu.com/noble/amd64/sudo/filelist
+```
+
+Use: doctor's `privileged accounts` probe and the image account removal read
+the sudoers rules through sudo's own parser. `-f json` prints typed rules,
+`-e` expands aliases, `-c /dev/null` replaces the default
+`/etc/cvtsudoers.conf` so a filter there cannot hide rules, and include files
+are output inline. The file list shows `/usr/bin/cvtsudoers` in Ubuntu
+24.04's `sudo` package, so the parser is there wherever sudo is.
+
 ### GTFOBins
 
 ```text

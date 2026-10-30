@@ -826,11 +826,14 @@ removes these accounts after the admin password step proves that the admin
 user works through sudo. `serverpro server doctor NAME --fix` removes them
 from older hosts. For each account, the removal:
 
-1. Stops before any change if `/etc/sudoers`, or a file it includes from
-   outside `/etc/sudoers.d` (`#include`, `@include`, or an `includedir`),
-   names the account, or if `visudo -c` already fails. Serverpro never edits
-   those files, and a rule there would outlive the account. Take the account
-   out with `visudo -f FILE` and rerun.
+1. Stops before any change if `/etc/sudoers`, or any other file sudo reads
+   that is not directly in `/etc/sudoers.d` (a file an `#include`,
+   `@include`, or includedir names, a nested path such as
+   `/etc/sudoers.d/sub/x`, or a path with a `.` or `..` part), names the
+   account, if a rule names the account by uid (`#1001`), or if `visudo -c`
+   already fails. Serverpro never edits those files or uid rules, and a rule
+   there would outlive the account. Take the account out with
+   `visudo -f FILE` and rerun.
 2. Locks the account and expires it, so no new session starts.
 3. Stops if the account has running processes. The account stays locked, and
    the message names the command that undoes the lock: it puts back the
@@ -843,14 +846,19 @@ from older hosts. For each account, the removal:
    the same archive. From a file that also has rules for other accounts, it
    removes only that account's rules and keeps the original in the archive.
    It stops before any change when such a file still names the account in
-   another place, for example a `User_Alias` or a rule for several accounts:
-   edit that file with `visudo -f` and rerun. After each change it runs
-   `visudo -c`. If that fails, it puts the original back and stops.
-6. Runs `userdel -r`. No sudoers rule for the name stays, so an account
-   created later with the same name gets no sudo from it.
+   another place, for example a `User_Alias` or a rule for several accounts
+   (`linuxuser , other ALL=...`): edit that file with `visudo -f` and rerun.
+   After each change it runs `visudo -c`. If that fails, it puts the original
+   back and stops.
+6. Reads the rules with sudo's own parser (`cvtsudoers`) and stops, with the
+   account locked and the undo command in the message, if any rule or
+   `Defaults` entry still names the account or its uid in a form the edits
+   above cannot see, such as an escaped character in the name.
+7. Runs `userdel -r`. No sudoers rule for the name or uid stays, so an
+   account created later with the same name or uid gets no sudo from it.
 
 A read that fails, rather than finding nothing (the account database, the
-process list, or a sudoers file), stops the removal too.
+process list, a sudoers file, or sudo's parser), stops the removal too.
 
 Any other account that `privileged accounts` lists is report-only, also
 with `--fix`, and doctor never suggests removing it. A CI deploy user that

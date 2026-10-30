@@ -21,11 +21,25 @@ const (
 	// imageUserRemovalFailedPrefix starts every reason the removal stops, so
 	// operators and tests can find it in output.
 	imageUserRemovalFailedPrefix = "image account removal stopped: "
-	// sudoersMainPath and sudoersDropInGlob are the sudoers files the removal
-	// knows: it edits only the drop-ins, and it requires the main file in
-	// visudo's list so an empty list cannot read as "nothing names it".
+	// sudoersMainPath and sudoersDropInDir are the sudoers files the removal
+	// knows: it edits only files directly in the drop-in directory, and it
+	// requires the main file in visudo's list so an empty list cannot read
+	// as "nothing names it".
 	sudoersMainPath   = "/etc/sudoers"
-	sudoersDropInGlob = "/etc/sudoers.d/*"
+	sudoersDropInDir  = "/etc/sudoers.d"
+	sudoersDropInGlob = sudoersDropInDir + "/*"
+	// SudoersParserPath is sudo's own sudoers parser, shipped in Ubuntu's
+	// sudo package. Doctor and the image account removal read the rules
+	// through it instead of line patterns, because sudo accepts forms a line
+	// pattern misreads: continued lines, user lists, #uid principals,
+	// aliases, and includes. The absolute path keeps a PATH entry from
+	// standing in for it.
+	SudoersParserPath = "/usr/bin/cvtsudoers"
+	// SudoersPolicyCommand prints every rule and Defaults entry sudo reads,
+	// starting from the main file and following each include, as JSON with
+	// aliases expanded. The empty config keeps a cvtsudoers.conf filter from
+	// hiding rules.
+	SudoersPolicyCommand = SudoersParserPath + " -c /dev/null -e -f json " + sudoersMainPath
 	// visudoParsedSuffix ends each line visudo -c prints for a file it read
 	// (under LC_ALL=C), which is how sudo itself lists every include.
 	visudoParsedSuffix = ": parsed OK"
@@ -62,13 +76,17 @@ var imageUserNamePattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 // with running processes also stops it, because deleting the account would
 // orphan them; it stays locked and the message gives the command that puts
 // back its password lock, expiry, and shell as they were. Before
-// any of that, a rule for the account in /etc/sudoers or in a file it
-// includes from outside /etc/sudoers.d stops the removal with nothing
-// changed: serverpro does not edit those files, and the rule would outlive
-// userdel. The file list comes from visudo -c, so it follows every #include,
-// @include, and includedir exactly as sudo does. The script never touches
-// root, the admin user, or a uid 0 account, and it is a no-op for an account
-// that is already gone.
+// any of that, a rule for the account in /etc/sudoers or in any other file
+// sudo reads that is not directly in /etc/sudoers.d stops the removal with
+// nothing changed: serverpro does not edit those files, and the rule would
+// outlive userdel. The file list comes from visudo -c, so it follows every
+// #include, @include, and includedir exactly as sudo does. A rule that names
+// the account by uid (#uid) also stops it before any change, since the edits
+// match rules by name only. Last, before userdel, sudo's own parser must
+// find no rule or Defaults entry left that names the account or its uid, so
+// a form the line edits cannot see stops the removal instead of outliving
+// it. The script never touches root, the admin user, or a uid 0 account,
+// and it is a no-op for an account that is already gone.
 func ImageUsersRemovalScript(admin string, users []string) (string, error) {
 	for _, user := range users {
 		if !imageUserNamePattern.MatchString(user) || user == admin || user == "root" {
@@ -88,26 +106,60 @@ stop() {
   printf '` + imageUserRemovalFailedPrefix + `%s\n' "$1" >&2
   exit 1
 }
-# without_user_rules prints sudoers file $2 without the rules for $1. It joins
-# continued lines first, so a wrapped rule goes as a whole and leaves no
-# orphaned continuation behind.
+# without_user_rules prints sudoers file $2 without the rules for $1 alone.
+# It joins continued lines first, as sudo does even when blanks follow the
+# backslash, so a wrapped rule goes as a whole and leaves no orphaned
+# continuation behind. A rule whose user list goes on after $1 ("$1 , other")
+# also grants another account, so it stays, and the check of the edited
+# file then stops the removal.
 without_user_rules() {
   awk -v user="$1" '
     { block = block $0 "\n"; logical = logical $0 }
-    /\\$/ { sub(/\\$/, "", logical); next }
+    /\\[ \t]*$/ { sub(/\\[ \t]*$/, "", logical); next }
     {
-      split(logical, field, /[[:space:]]+/)
-      token = (field[1] == "" ? field[2] : field[1])
-      if (token != user) printf "%s", block
+      rest = logical
+      sub(/^[ \t]+/, "", rest)
+      own = substr(rest, 1, length(user)) == user && substr(rest, length(user) + 1) ~ /^[ \t]+[^, \t]/
+      if (!own) printf "%s", block
       block = ""; logical = ""
     }
     END { printf "%s", block }
   ' "$2"
 }
 # without_comments drops comments and blank lines from stdin. #include and
-# #includedir are directives, not comments, so they stay.
+# #includedir are directives, and #<digits> starts a rule for a uid, so they
+# stay.
 without_comments() {
-  sed -e '/^[[:space:]]*#include/b' -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d'
+  sed -e '/^[[:space:]]*#include/b' -e '/^[[:space:]]*#[0-9]/b' -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d'
+}
+# is_drop_in succeeds only for a file directly in the drop-in directory, the
+# one place serverpro edits. An include can name any other path, a nested or
+# dot-segment one included, and those are checked as files serverpro does
+# not edit.
+is_drop_in() {
+  case $1 in
+    (` + sudoersDropInDir + `/*/*|` + sudoersDropInDir + `/.|` + sudoersDropInDir + `/..) return 1 ;;
+    (` + sudoersDropInGlob + `) return 0 ;;
+    (*) return 1 ;;
+  esac
+}
+# read_sudoers_policy reads every rule sudo reads into $policy with sudo's
+# own parser, and stops when it cannot, so a parse failure cannot pass for
+# "nothing names the account".
+read_sudoers_policy() {
+  [ -x ` + SudoersParserPath + ` ] || stop "cannot check the sudoers rules: ` + SudoersParserPath + ` (sudo package) is missing"
+  policy=$(` + SudoersPolicyCommand + ` 2>/dev/null) || stop "sudo's parser cannot read the sudoers rules; fix them with visudo -c first"
+}
+# policy_names_user and policy_names_uid succeed when $policy names account
+# $1 or uid $1. The match is on the parser's JSON, not on sudoers text, so a
+# user list, alias, or continued line cannot hide the name.
+policy_names_user() {
+  case $policy in (*"\"username\": \"$1\""*) return 0 ;; esac
+  return 1
+}
+policy_names_uid() {
+  case $policy in (*"\"userid\": $1"[!0-9]*) return 0 ;; esac
+  return 1
 }
 # names_user succeeds when a rule or directive in file $2 names account $1,
 # exits ` + noMatchStatus + ` when none does, and anything else when it cannot tell. The file
@@ -153,7 +205,7 @@ outside_sudoers_d() {
 '
   for sudoers_file in $files; do
     [ "$sudoers_file" != ` + shell.Quote(sudoersMainPath) + ` ] || seen_main=1
-    case $sudoers_file in (` + sudoersDropInGlob + `) continue ;; esac
+    ! is_drop_in "$sudoers_file" || continue
     case $(exit_status names_user "$1" "$sudoers_file") in
       (0) stop "$sudoers_file names $1, and serverpro does not edit that file; take $1 out of it with visudo -f $sudoers_file and rerun" ;;
       (` + noMatchStatus + `) ;;
@@ -168,6 +220,8 @@ remove_image_user() {
   user=$1
   dest="$archive_root/$user-$stamp"
   outside_sudoers_d "$user"
+  uid=
+  unlock=
   status=0
   entry=$(getent passwd "$user") || status=$?
   case $status in
@@ -177,6 +231,10 @@ remove_image_user() {
   if [ "$status" = 0 ]; then
     uid=$(printf '%s\n' "$entry" | cut -d: -f3)
     [ "$uid" != 0 ] || stop "$user has uid 0"
+    read_sudoers_policy
+    if policy_names_uid "$uid"; then
+      stop "a sudoers rule names $user by uid #$uid, and serverpro removes rules by name only; take it out with visudo and rerun"
+    fi
     login_shell=$(printf '%s\n' "$entry" | cut -d: -f7)
     # The undo command puts back what the lock changes: the expiry and shell
     # as they were (empty means none and the default shell), and the
@@ -256,6 +314,10 @@ remove_image_user() {
     fi
     printf 'removed the rules for %s from %s; the original is in %s\n' "$user" "$file" "$dest"
   done
+  read_sudoers_policy
+  if policy_names_user "$user" || { [ -n "$uid" ] && policy_names_uid "$uid"; }; then
+    stop "sudo still reads a rule for $user after the sudoers edits; remove it with visudo and rerun${unlock:+, or undo the lock ($unlock)}"
+  fi
   if account_exists "$user"; then
     # userdel exits non-zero for a missing mail spool after it removed the
     # account, so the account's presence decides, not the exit status.
