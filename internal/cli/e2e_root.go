@@ -104,7 +104,10 @@ func NewE2E(apiURL string) (*cobra.Command, error) {
 			clients := doctor.Clients{
 				Compute:   provider,
 				Tailscale: tailscaleClient,
-				Remote:    e2eDoctorRemote{secrets: []string{creds.ServerProvider, creds.Tailscale, sudoPassword}},
+				Remote: e2eDoctorRemote{
+					secrets:         []string{creds.ServerProvider, creds.Tailscale, sudoPassword},
+					privilegedProbe: doctor.PrivilegedAccountsCommand(cfg.Admin.Username, compute.ImageDefaultUsers(provider)),
+				},
 				PublicSSHProbe: func(context.Context, string) error {
 					return syscall.ECONNREFUSED
 				},
@@ -186,6 +189,10 @@ func (e2eTailscale) WaitDevice(_ context.Context, q mesh.DeviceQuery) (mesh.Devi
 
 type e2eDoctorRemote struct {
 	secrets []string
+	// privilegedProbe is the privileged accounts probe for this server's
+	// admin and provider image accounts. It is built per server because
+	// both are part of the script the fake must recognize.
+	privilegedProbe string
 }
 
 func (r e2eDoctorRemote) Run(_ context.Context, user, _ string, script string) (string, error) {
@@ -195,13 +202,15 @@ func (r e2eDoctorRemote) Run(_ context.Context, user, _ string, script string) (
 			strings.Join(r.secrets, "\n") + "\n" + e2eDoctorRepairCause
 		return out, errors.New(e2eDoctorRepairErrorPrefix + out)
 	}
-	return e2eRemoteEvidence(script), nil
+	return r.evidence(script), nil
 }
 
-// e2eRemoteEvidence answers a read with generic success unless doctor parses
-// that read's output, in which case it gets what an idle host prints.
-func e2eRemoteEvidence(script string) string {
+// evidence answers a read with generic success unless doctor parses that
+// read's output, in which case it gets what an idle host prints.
+func (r e2eDoctorRemote) evidence(script string) string {
 	switch script {
+	case r.privilegedProbe:
+		return doctor.PrivilegedAccountsIdleOutput()
 	case doctor.TailscaleServeCommand():
 		return doctor.TailscaleServeIdleOutput()
 	case tunnel.HostStateCommand():
@@ -213,7 +222,7 @@ func e2eRemoteEvidence(script string) string {
 func (r e2eDoctorRemote) RunBatch(_ context.Context, user, _ string, commands []remote.BatchCommand) ([]remote.BatchResult, error) {
 	results := make([]remote.BatchResult, len(commands))
 	for i, command := range commands {
-		results[i].Output = e2eRemoteEvidence(command.Script)
+		results[i].Output = r.evidence(command.Script)
 	}
 	failure := os.Getenv(e2eDoctorPackageFailureEnv)
 	if failure != e2eDoctorPackageFailureShort && failure != e2eDoctorPackageFailureBoundary {

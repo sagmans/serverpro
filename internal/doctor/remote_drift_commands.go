@@ -90,6 +90,26 @@ const (
 
 	sysctlRuntimeCheckName   = "sysctl runtime"
 	sysctlRuntimeRemediation = "re-apply the file (sudo sysctl -p " + cloudinit.SysctlConfigPath + "); if the value drifts again, find the later writer (systemd-sysctl order, networkd, provider agents) before the next reboot"
+
+	// privilegedGroupsCheckedLead starts the privileged accounts probe's
+	// last line, which names the scanned groups so a clean result still
+	// shows what was looked at.
+	privilegedGroupsCheckedLead = "checked groups: "
+)
+
+// Stock-host answer of the privileged accounts probe, for remote fakes. The
+// policy is what cvtsudoers prints for Ubuntu's packaged /etc/sudoers, which
+// every provider image starts from, and the admin uid is the first one
+// useradd hands out there.
+const (
+	privilegedAccountsIdleSecurePath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+	privilegedAccountsIdleAdminUID   = "1000"
+	privilegedAccountsIdlePolicy     = `{"Defaults": [{"Options": [{"env_reset": true}]}, {"Options": [{"mail_badpass": true}]}, {"Options": [{"secure_path": "` + privilegedAccountsIdleSecurePath + `"}]}, {"Options": [{"use_pty": true}]}], ` +
+		`"User_Specs": [` +
+		`{"User_List": [{"username": "root"}], "Host_List": [{"hostname": "ALL"}], "Cmnd_Specs": [{"runasusers": [{"username": "ALL"}], "runasgroups": [{"usergroup": "ALL"}], "Options": [{"setenv": true}], "Commands": [{"command": "ALL"}]}]}, ` +
+		`{"User_List": [{"usergroup": "admin"}], "Host_List": [{"hostname": "ALL"}], "Cmnd_Specs": [{"runasusers": [{"username": "ALL"}], "Options": [{"setenv": true}], "Commands": [{"command": "ALL"}]}]}, ` +
+		`{"User_List": [{"usergroup": "sudo"}], "Host_List": [{"hostname": "ALL"}], "Cmnd_Specs": [{"runasusers": [{"username": "ALL"}], "runasgroups": [{"usergroup": "ALL"}], "Options": [{"setenv": true}], "Commands": [{"command": "ALL"}]}]}` +
+		`]}`
 )
 
 // privilegedGroups grant root or a root-equivalent: sudo and admin through
@@ -493,7 +513,35 @@ func privilegedAccountsCommand(admin string, imageUsers []string) string {
 		"uids=$(printf '%s\\n' \"$accounts\" | awk -F: '$3 == 0 && $1 != \"root\" { printf \"" + driftFailPrefix + "%s has uid 0\\n\", $1 }') || unreadable 'the uid 0 accounts'\n" +
 		"sources=$(sudoers_source_gaps " + shell.Quote(driftFailPrefix+sudoersSourceFindingLead) + ") || unreadable 'the sudo.conf or nsswitch.conf settings'\n" +
 		"printf '%s\\n' " + shell.Quote(sudoersSectionMarker) + " \"$sudoers\" " + shell.Quote(sudoCommandsSectionMarker) + " \"$commands\" " + shell.Quote(sudoersPathsSectionMarker) + " \"$paths\" " + shell.Quote(adminUIDSectionMarker) + " \"$admin_uid\" " + shell.Quote(accountsSectionMarker) + " \"$images\" \"$groups\" \"$uids\" \"$sources\"\n" +
-		"printf 'checked groups: %s\\n' " + shell.Quote(strings.Join(privilegedGroups, " "))
+		"printf '" + privilegedGroupsCheckedLead + "%s\\n' " + shell.Quote(strings.Join(privilegedGroups, " "))
+}
+
+// PrivilegedAccountsCommand is the privileged accounts probe. It is exported,
+// with PrivilegedAccountsIdleOutput, for remote fakes that answer by script:
+// the grader fails closed on output without its sections, so a generic
+// success string fails the check.
+func PrivilegedAccountsCommand(admin string, imageUsers []string) string {
+	return privilegedAccountsCommand(admin, imageUsers)
+}
+
+// PrivilegedAccountsIdleOutput is PrivilegedAccountsCommand's answer on a
+// host with only the packaged sudoers policy, root-owned secure_path
+// directories, and no account beyond the admin in a privileged group. Its
+// layout follows the probe's final printf lines, one line per value.
+func PrivilegedAccountsIdleOutput() string {
+	var paths []string
+	for _, dir := range strings.Split(privilegedAccountsIdleSecurePath, sudoersSecurePathSeparator) {
+		paths = append(paths, sudoersPathDirectory+"\t"+dir+"\t"+sudoCommandSafe)
+	}
+	return strings.Join([]string{
+		sudoersSectionMarker, privilegedAccountsIdlePolicy,
+		sudoCommandsSectionMarker, "",
+		sudoersPathsSectionMarker, strings.Join(paths, "\n"),
+		adminUIDSectionMarker, privilegedAccountsIdleAdminUID,
+		// Empty image, group, uid 0, and sudo source findings.
+		accountsSectionMarker, "", "", "", "",
+		privilegedGroupsCheckedLead + strings.Join(privilegedGroups, " "),
+	}, "\n") + "\n"
 }
 
 // metadataUserDataCommand reports only whether provider user-data still holds
