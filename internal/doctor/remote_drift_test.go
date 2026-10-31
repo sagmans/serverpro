@@ -319,14 +319,17 @@ func TestPrivilegedAccountsSpecificationRepairsOnlyImageAccounts(t *testing.T) {
 	if len(specification.liveCommands) != 1 || !strings.Contains(specification.liveCommands[0], "userdel -r") {
 		t.Fatalf("live commands = %v, want the image account removal", specification.liveCommands)
 	}
-	command, removal := specification.readCommands[0], specification.liveCommands[0]
+	// The runner answers only the exported probe, and the repaired host
+	// answers with the stock-host output, so remote fakes that use both
+	// stay in step with what doctor runs and with what the grader passes.
+	command, removal := PrivilegedAccountsCommand("deploy", []string{"linuxuser"}), specification.liveCommands[0]
 	for _, tc := range []struct {
 		name, finding, after string
 		wantFix              bool
 		want                 Status
 	}{
 		{name: "unknown account stays report-only", finding: privilegedProbe(unknownPolicy, "", "fail: linuxuser2 is in privileged group sudo"), want: Fail},
-		{name: "image account is removed", finding: privilegedProbe(emptyPolicy, "", "fail: provider image account linuxuser exists"), after: privilegedProbe(emptyPolicy, "", "checked groups: sudo"), wantFix: true, want: Pass},
+		{name: "image account is removed", finding: privilegedProbe(emptyPolicy, "", "fail: provider image account linuxuser exists"), after: PrivilegedAccountsIdleOutput(), wantFix: true, want: Pass},
 		{name: "listed-command rule left after the removal keeps its warning", finding: privilegedProbe(ciListedPolicy, ciListedVerdict, "fail: provider image account linuxuser exists"), after: privilegedProbe(ciListedPolicy, ciListedVerdict, ""), wantFix: true, want: Warn},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
