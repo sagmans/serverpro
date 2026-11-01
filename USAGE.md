@@ -499,6 +499,8 @@ use a Cloudflare Tunnel; on yes it asks for the account ID and token. Runs with
 `--with-cloudflare --cloudflare-account-id ID` there. Import reads the token
 only from `SERVERPRO_CLOUDFLARE_TOKEN` or the prompt, never from a generic
 `CLOUDFLARE_API_TOKEN`, because import saves it in the server's credential file.
+For the same reason, import reads the Tailscale token only from
+`SERVERPRO_TAILSCALE_TOKEN` or the prompt, never from `TAILSCALE_API_TOKEN`.
 
 Import claims only resources stamped with `managed-by=serverpro` ownership
 labels. It also restores the typed managed access-policy reference needed for

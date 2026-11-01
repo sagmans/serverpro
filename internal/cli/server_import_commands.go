@@ -232,15 +232,18 @@ func (a *app) buildImportOptions(candidates []importsync.Candidate, providerToke
 		DryRun:           a.dryRun,
 	}
 	// Mesh is default intent; collect token for writes and optional device enrich.
+	// No generic TAILSCALE_API_TOKEN fallback: import saves this token into the
+	// server's credential file, and a shell-wide token set for other tools must
+	// never be persisted by accident (same rule as the Cloudflare token below).
 	if flags.withTailscale || !a.dryRun {
-		token, err := a.resolveOptionalServiceToken("Tailscale API token", "SERVERPRO_TAILSCALE_TOKEN", "TAILSCALE_API_TOKEN", false)
+		token, err := a.resolveOptionalServiceToken("Tailscale API token", "SERVERPRO_TAILSCALE_TOKEN", "", false)
 		if err != nil {
 			return importsync.ImportOptions{}, err
 		}
 		opts.TailscaleToken = token
 	}
 	if flags.withTailscale && opts.TailscaleToken == "" {
-		token, err := a.resolveOptionalServiceToken("Tailscale API token", "SERVERPRO_TAILSCALE_TOKEN", "TAILSCALE_API_TOKEN", true)
+		token, err := a.resolveOptionalServiceToken("Tailscale API token", "SERVERPRO_TAILSCALE_TOKEN", "", true)
 		if err != nil {
 			return importsync.ImportOptions{}, err
 		}
