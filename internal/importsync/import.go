@@ -217,6 +217,9 @@ func enrichImportArtifacts(ctx context.Context, candidate Candidate, opts Import
 		if cloudflareState.TunnelID != "" {
 			cfg.Network.Ingress = "cloudflare-tunnel"
 			cfg.Cloudflare.Tunnel.Enabled = true
+			// Config validation accepts an enabled tunnel only in connector-only
+			// mode; without this every command after import rejects the config.
+			cfg.Cloudflare.Tunnel.CreateConnectorOnly = true
 			cfg.Cloudflare.Tunnel.Name = cloudflareState.Name
 		}
 	}

@@ -118,7 +118,7 @@ func TestEnrichImportArtifactsAppliesOptionalProviderEvidence(t *testing.T) {
 	if st.Tailscale.NodeID != "node-1" || st.Tailscale.Tailnet != opts.Tailnet || st.Cloudflare.TunnelID != "tunnel-1" {
 		t.Fatalf("state=%+v", st)
 	}
-	if cfg.Network.Ingress != "cloudflare-tunnel" || !cfg.Cloudflare.Tunnel.Enabled || cfg.Cloudflare.Tunnel.Name != "demo-web" {
+	if cfg.Network.Ingress != "cloudflare-tunnel" || !cfg.Cloudflare.Tunnel.Enabled || !cfg.Cloudflare.Tunnel.CreateConnectorOnly || cfg.Cloudflare.Tunnel.Name != "demo-web" {
 		t.Fatalf("config=%+v", cfg)
 	}
 }

@@ -502,7 +502,9 @@ host state, so rerun the command with `--force --with-tailscale` before SSH when
 the initial import omitted enrichment. When only the hostname matches because
 the device lost its tags, import refuses to record an untagged device while
 namespace tags are configured: doctor would reject it on every run. Tag the
-device in the admin console, then rerun. Forced import repairs the invalid
+device in the admin console, then rerun. With `--with-cloudflare`, a matched
+tunnel is recorded with provenance `imported` and enabled in connector-only
+mode, the only tunnel mode config validation accepts. Forced import repairs the invalid
 disabled-Tailscale config written by earlier releases and preserves existing
 service tokens when replacements are omitted. Vultr supplies its attached
 firewall-group ID; Hetzner and
