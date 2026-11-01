@@ -348,8 +348,11 @@ func rebootPendingCommand() string {
 // while its listed path looks narrow. A file named like the path plus a
 // space would be what sudo runs if the path held an escaped space, which
 // the JSON cannot show, so it fails too. The paths come out of the JSON
-// with sed; a path with an escaped character does not match, gets no
-// verdict, and Go fails it.
+// with sed, which takes only the text before the first space: arguments
+// often hold JSON-escaped quotes or backslashes (a digest regex, an empty
+// "" argument), and requiring the whole command to be escape-free left safe
+// wrappers unchecked. A path with an escaped character still does not
+// match, gets no verdict, and Go fails it.
 //
 // cvtsudoers reads only /etc/sudoers and its includes, so the probe also
 // reports each sudo.conf or nsswitch.conf setting that lets sudo take rules
@@ -485,7 +488,7 @@ func privilegedAccountsCommand(admin string, imageUsers []string) string {
 		// Only plain absolute paths are checked; Go fails every other
 		// command without asking the host.
 		"commands=$(\n" +
-		"printf '%s\\n' \"$sudoers\" | sed -n " + shell.Quote(`s/^.*"command": "\([^"\\]*\)".*$/\1/p`) + " | while IFS= read -r cmd; do\n" +
+		"printf '%s\\n' \"$sudoers\" | sed -n " + shell.Quote(`s/^.*"command": "\([^" \\]*\)[ "].*$/\1/p`) + " | while IFS= read -r cmd; do\n" +
 		"  path=${cmd%% *}\n" +
 		"  case $path in (/*) ;; (*) continue ;; esac\n" +
 		"  case $path in (*[*?[]*) continue ;; esac\n" +
