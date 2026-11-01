@@ -45,6 +45,7 @@ rather than leaving a gap. A doc that drifts from code is worse than no doc.
 - `.github/pull_request_template.md` — pull request author checklist.
 - `.githooks/` — repo hooks: generic template copies plus repo checks in `<hook>.d/` (see "Git hooks" in `DEVELOPMENT.md`).
 - `scripts/setup-hooks` — turns on `.githooks` for a clone.
+- `scripts/clean-git-env.sh` — git environment scrub sourced by repo hook checks.
 - `SECURITY.md` — security reference.
 - `CODE_OF_CONDUCT.md` — public collaboration rules.
 - `WEB_SOURCES.md` — external source reference.

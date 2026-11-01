@@ -4,7 +4,8 @@
 # Reads the staged blobs through staged_git so `commit -a` and
 # `commit <paths>` are judged on what the commit will contain.
 set -eu
-. "$(dirname -- "$0")/../_lib/hook-env.sh"
+# shellcheck source=.githooks/lib/helpers.sh
+. "${HOOK_HELPERS:?run from .githooks (scripts/setup-hooks)}"
 
 GO_PATHSPEC='*.go'
 

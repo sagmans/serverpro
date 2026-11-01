@@ -47,7 +47,9 @@ or push.
 - **Generic files are copies.** `.githooks/{pre-commit,pre-merge-commit,prepare-commit-msg,commit-msg,pre-push}`,
   `.githooks/lib/` and `scripts/setup-hooks` come unedited from the shared
   hook template. Never edit them here; update by copying the template again.
-  Repo-specific checks live only in `.githooks/<hook>.d/` and `.githooks/_lib/`.
+  Repo-specific checks live only in `.githooks/<hook>.d/`; their shared
+  helper `scripts/clean-git-env.sh` lives outside `.githooks` so that tree
+  stays a plain copy.
 - **All checks must pass before a push.** Do not use `--no-verify`; fix the
   failure instead. The release workflow still re-runs the full gate on tags.
 - **Pre-commit** reads the commit's own index through `staged_git` (from
@@ -58,12 +60,14 @@ or push.
   (in place for a clean HEAD, otherwise in a temporary detached worktree).
   Deleted refs are skipped.
 - **Git environment.** The hook runner (`.githooks/lib/run-local.sh`) clears
-  git's per-repo variables before repo checks; `.githooks/_lib/clean-git-env.sh` clears them again for steps
-  that run test suites, so a fixture repo can never write this repo's config.
+  git's per-repo variables before repo checks; `scripts/clean-git-env.sh`
+  clears them again for steps that run test suites, so a fixture repo can
+  never write this repo's config.
 - Add a check: an executable `.githooks/<hook>.d/NN-name` script whose top
-  comment says why it exists; source `../_lib/hook-env.sh` relative to the
-  script (it fails with `run from .githooks (scripts/setup-hooks)` when the
-  helpers are missing), and call a Makefile target rather than copying it.
+  comment says why it exists; source `"${HOOK_HELPERS:?run from .githooks (scripts/setup-hooks)}"`
+  (it fails loudly when the helpers are missing) and, for steps that run test
+  suites, `../../scripts/clean-git-env.sh` relative to the script. Call a
+  Makefile target rather than copying it.
 - Secret scan uses `gitleaks` when it is on `PATH`, otherwise built-in
   high-confidence patterns (`scripts/secret-scan.sh`). The scanner always
   comes from the commit being checked: pre-commit runs the staged copy,

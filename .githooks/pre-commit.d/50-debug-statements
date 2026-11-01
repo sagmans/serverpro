@@ -2,7 +2,8 @@
 # Rejects leftover debug output in staged Go lines. The CLI's stdout is a
 # JSON contract; a stray print breaks every consumer that parses it.
 set -eu
-. "$(dirname -- "$0")/../_lib/hook-env.sh"
+# shellcheck source=.githooks/lib/helpers.sh
+. "${HOOK_HELPERS:?run from .githooks (scripts/setup-hooks)}"
 
 # POSIX ERE (no \b) so the same pattern works with BSD grep on macOS.
 # Builtin print/println and spew dumps are never used on purpose here.

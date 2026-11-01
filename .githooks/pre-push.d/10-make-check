@@ -4,8 +4,10 @@
 # govulncheck) must pass on every commit being pushed, not on whatever is
 # checked out. at_sha tests in place only when that commit is a clean HEAD.
 set -eu
-. "$(dirname -- "$0")/../_lib/hook-env.sh"
-. "$(dirname -- "$0")/../_lib/clean-git-env.sh"
+# shellcheck source=.githooks/lib/helpers.sh
+. "${HOOK_HELPERS:?run from .githooks (scripts/setup-hooks)}"
+# shellcheck source=scripts/clean-git-env.sh
+. "$(dirname -- "$0")/../../scripts/clean-git-env.sh"
 
 shas=$(pushed_shas <"${HOOK_STDIN_FILE:?}") || exit 1
 for sha in $shas; do
