@@ -103,7 +103,7 @@ func TestManagedVersionManifestPinsApprovedReleases(t *testing.T) {
 	want := map[string]string{
 		"node":     "24.22.1",
 		"npm":      "11.19.1",
-		"pi":       "0.87.1",
+		"pi":       "1.5.0",
 		"uv":       "0.13.5",
 		"rust":     "1.99.1",
 		"tmux":     "3.7c",
@@ -329,8 +329,8 @@ func TestInstallScriptConfiguresCuratedManagedTools(t *testing.T) {
 }
 
 func TestPiManifestPinsRequiredVersion(t *testing.T) {
-	if PiVersion != "0.87.1" {
-		t.Fatalf("pi version = %q, want 0.87.1", PiVersion)
+	if PiVersion != "1.5.0" {
+		t.Fatalf("pi version = %q, want 1.5.0", PiVersion)
 	}
 }
 
@@ -401,9 +401,9 @@ func TestInstallScriptInstallsPiWithPinnedNodeNpm(t *testing.T) {
 		`force_mise_installs+=("node@${node_version}")`,
 		`mise --yes install --force ${force_mise_installs[*]}`,
 		`export MISE_EXPERIMENTAL=1 MISE_YES=1 MISE_NPM_PACKAGE_MANAGER=npm npm_config_ignore_scripts=true NPM_CONFIG_IGNORE_SCRIPTS=true`,
-		`\"\$HOME/.local/bin/mise\" exec -- npm install -g ${pi_tool}@${pi_version}`,
+		`\"\$HOME/.local/bin/mise\" exec -- npm ci --omit=dev --ignore-scripts --no-audit --no-fund`,
 		`configure_managed_mise_tool "$(managed_mise_tool_row node)"`,
-		`expected_pi=\"\$HOME/.local/share/mise/installs/node/${node_version}/bin/pi\"`,
+		`expected_pi=\"${node_root}/bin/pi\"`,
 	} {
 		if !contains(script, want) {
 			t.Fatalf("install script missing pinned node npm marker %q", want)

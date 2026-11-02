@@ -392,7 +392,7 @@ func TestShellValidateRustProfile(t *testing.T) {
 }
 
 // TestShellValidateToolName guards the pi tool-name token before it reaches
-// `npm install -g`. Scoped npm names (@scope/pkg) and dotted/suffixed names
+// npm and the Pi link path. Scoped npm names (@scope/pkg) and dotted/suffixed names
 // pass; shell metacharacters reject.
 func TestShellValidateToolName(t *testing.T) {
 	assertShellValidator(t, `validate_tool_name NAME "$TESTVAL"`, []validatorCase{
@@ -1462,13 +1462,13 @@ func TestInstallUserToolsRepairsOnlyFailedComponents(t *testing.T) {
 			name:           "all-healthy",
 			target:         "all",
 			wantLog:        "already installed",
-			mustNotContain: []string{"mise --yes install", "npm install -g", "integration install"},
+			mustNotContain: []string{"mise --yes install", "npm ci", "integration install"},
 		},
 		{
 			name:           "all-npm-drift",
 			target:         "all",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != node\|* ]]; }`,
-			mustContain:    []string{"mise --yes install --force node@" + NodeVersion, "npm install -g " + PiToolName + "@" + PiVersion},
+			mustContain:    []string{"mise --yes install --force node@" + NodeVersion, "npm ci --omit=dev --ignore-scripts"},
 			mustNotContain: []string{"mise --yes install node@", "--force rust@", "--force herdr@"},
 		},
 		{
@@ -1476,13 +1476,13 @@ func TestInstallUserToolsRepairsOnlyFailedComponents(t *testing.T) {
 			target:         "node",
 			stubs:          "target_node_ready() { return 1; }",
 			mustContain:    []string{"mise --yes install --force node@" + NodeVersion},
-			mustNotContain: []string{"mise --yes install node@", "npm install -g", "herdr@"},
+			mustNotContain: []string{"mise --yes install node@", "npm ci", "herdr@"},
 		},
 		{
 			name:           "pi-npm-drift",
 			target:         "pi",
 			stubs:          "target_node_ready() { return 1; }",
-			mustContain:    []string{"mise --yes install --force node@" + NodeVersion, "npm install -g " + PiToolName + "@" + PiVersion},
+			mustContain:    []string{"mise --yes install --force node@" + NodeVersion, "npm ci --omit=dev --ignore-scripts"},
 			mustNotContain: []string{"mise --yes install node@", "herdr@"},
 		},
 		{
@@ -1490,62 +1490,62 @@ func TestInstallUserToolsRepairsOnlyFailedComponents(t *testing.T) {
 			target:         "all",
 			stubs:          "target_herdr_pi_integration_ready() { return 1; }",
 			mustContain:    []string{"herdr integration install pi"},
-			mustNotContain: []string{"mise --yes install", "npm install -g"},
+			mustNotContain: []string{"mise --yes install", "npm ci"},
 		},
 		{
 			name:           "tmux-stale-only",
 			target:         "all",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != tmux\|* ]]; }`,
 			mustContain:    []string{"mise --yes install tmux@" + TmuxVersion},
-			mustNotContain: []string{"node@", "--force herdr", "npm install -g", "integration install"},
+			mustNotContain: []string{"node@", "--force herdr", "npm ci", "integration install"},
 		},
 		{
 			name:           "uv-stale-only",
 			target:         "all",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != uv\|* ]]; }`,
 			mustContain:    []string{"mise --yes install uv@" + UVVersion},
-			mustNotContain: []string{"node@", "rust@", "--force herdr", "npm install -g", "integration install"},
+			mustNotContain: []string{"node@", "rust@", "--force herdr", "npm ci", "integration install"},
 		},
 		{
 			name:           "rust-stale-only",
 			target:         "all",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != rust\|* ]]; }`,
 			mustContain:    []string{"mise --yes install --force rust@" + RustVersion},
-			mustNotContain: []string{"node@", "uv@", "--force herdr", "npm install -g", "integration install"},
+			mustNotContain: []string{"node@", "uv@", "--force herdr", "npm ci", "integration install"},
 		},
 		{
 			name:           "ast-grep-stale-only",
 			target:         "all",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != ast-grep\|* ]]; }`,
 			mustContain:    []string{"mise --yes install --force ast-grep@" + AstGrepVersion},
-			mustNotContain: []string{"sem@", "inspect@", "--force herdr", "npm install -g", "integration install"},
+			mustNotContain: []string{"sem@", "inspect@", "--force herdr", "npm ci", "integration install"},
 		},
 		{
 			name:           "sem-stale-only",
 			target:         "all",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != sem\|* ]]; }`,
 			mustContain:    []string{"mise --yes install --force sem@" + SemVersion},
-			mustNotContain: []string{"ast-grep@", "inspect@", "--force herdr", "npm install -g", "integration install"},
+			mustNotContain: []string{"ast-grep@", "inspect@", "--force herdr", "npm ci", "integration install"},
 		},
 		{
 			name:           "inspect-stale-only",
 			target:         "all",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != inspect\|* ]]; }`,
 			mustContain:    []string{"mise --yes install --force inspect@" + InspectVersion},
-			mustNotContain: []string{"ast-grep@", "sem@", "--force herdr", "npm install -g", "integration install"},
+			mustNotContain: []string{"ast-grep@", "sem@", "--force herdr", "npm ci", "integration install"},
 		},
 		{
 			name:           "git-gh-stale-only",
 			target:         "git",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != gh\|* ]]; }`,
 			mustContain:    []string{"mise --yes install gh@" + GitHubCLIVersion},
-			mustNotContain: []string{"node@", "npm install -g", "herdr@"},
+			mustNotContain: []string{"node@", "npm ci", "herdr@"},
 		},
 		{
 			name:           "pi-stale-only",
 			target:         "pi",
 			stubs:          "target_pi_ready() { return 1; }",
-			mustContain:    []string{"npm install -g " + PiToolName + "@" + PiVersion},
+			mustContain:    []string{"npm ci --omit=dev --ignore-scripts"},
 			mustNotContain: []string{"mise --yes install node@"},
 		},
 		{
@@ -1610,6 +1610,12 @@ func TestInstallUserToolsRepairsWrongNPMAndRestoresPi(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			// mise creates these when it installs Node; the Pi stage lives beside them.
+			for _, sub := range []string{"lib", "bin"} {
+				if err := os.MkdirAll(filepath.Join(dir, ".local/share/mise/installs/node", NodeVersion, sub), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
 			npmState := filepath.Join(dir, "npm-version")
 			piState := filepath.Join(dir, "pi-installed")
 			miseLog := filepath.Join(dir, "mise.log")
@@ -1641,7 +1647,10 @@ case "${1:-}" in
   exec)
     shift
     [ "${1:-}" != -- ] || shift
-    if [ "${1:-}" = npm ] && [ "${2:-}" = install ]; then
+    # npm ci runs inside the Pi stage, so it leaves the CLI the install checks for.
+    if [ "${1:-}" = npm ] && [ "${2:-}" = ci ]; then
+      mkdir -p "node_modules/$PI_TOOL/$PI_BIN_DIR"
+      : >"node_modules/$PI_TOOL/$PI_BIN"
       printf 'installed\n' >"$PI_STATE"
     fi
     ;;
@@ -1660,7 +1669,7 @@ TARGET_GID=1000
 ensure_mise_shell_activation() { :; }
 repair_mise_config_for_user() { :; }
 configure_user_tools_for_target() { :; }
-run_as_target() { HOME="$FAKE_HOME" PATH="$FAKE_BIN:$PATH" NPM_STATE="$NPM_STATE" PI_STATE="$PI_STATE" MISE_LOG="$MISE_LOG" EXPECTED_NPM="$EXPECTED_NPM" bash -c "$1"; }
+run_as_target() { HOME="$FAKE_HOME" PATH="$FAKE_BIN:$PATH" NPM_STATE="$NPM_STATE" PI_STATE="$PI_STATE" MISE_LOG="$MISE_LOG" EXPECTED_NPM="$EXPECTED_NPM" PI_TOOL="$PI_TOOL" PI_BIN="$PI_BIN" PI_BIN_DIR="$PI_BIN_DIR" bash -c "$1"; }
 target_node_ready() { [[ $(cat "$NPM_STATE") == "$EXPECTED_NPM" ]]; }
 target_managed_mise_tool_ready() { case "$1" in node\|*) target_node_ready ;; *) return 0 ;; esac; }
 target_pi_ready() { target_node_ready && [[ -f $PI_STATE ]]; }
@@ -1678,6 +1687,9 @@ if [[ $TEST_TARGET != node ]]; then target_pi_ready; fi
 				"MISE_LOG="+miseLog,
 				"EXPECTED_NPM="+NPMVersion,
 				"TEST_TARGET="+target,
+				"PI_TOOL="+PiToolName,
+				"PI_BIN="+piLock.bin,
+				"PI_BIN_DIR="+filepath.Dir(piLock.bin),
 			)...)
 			if code != 0 {
 				t.Fatalf("%s failed to converge npm/Pi state: %s", target, stderr)
@@ -1689,7 +1701,7 @@ if [[ $TEST_TARGET != node ]]; then target_pi_ready; fi
 			if !strings.Contains(string(log), "install --force node@"+NodeVersion) {
 				t.Fatalf("%s did not force Node replacement: %s", target, log)
 			}
-			if target != "node" && !strings.Contains(string(log), "exec -- npm install -g "+PiToolName+"@"+PiVersion) {
+			if target != "node" && !strings.Contains(string(log), "exec -- npm ci --omit=dev --ignore-scripts") {
 				t.Fatalf("%s did not restore Pi after Node replacement: %s", target, log)
 			}
 		})

@@ -32,13 +32,18 @@ SHELLCHECK ?= shellcheck
 # comes from Git so a new tracked script is linted without editing this file;
 # a hand-kept list once left the root bootstrap script unlinted.
 SHELL_LINT_SCRIPTS := $(shell git ls-files -- '*.sh')
+# npm is a system tool like ShellCheck (preinstalled on the CI runner). The
+# audit reads only the reviewed Pi lockfile and installs nothing.
+NPM ?= npm
+PI_LOCK_DIR := internal/bootstraptools/pi
+NPM_REGISTRY := https://registry.npmjs.org/
 
-.PHONY: ci check fmt fmt-check tidy-check test test-unit test-go-check test-harness test-smoke test-integration test-e2e test-full-chain-e2e test-release test-release-shell test-dogfood-readonly test-dogfood-live test-dogfood-live-selftest vet build bin dogfood-no-token link-bin lint lint-shell vuln race cover install-tools hooks install-hooks lint-fast gen-bootstrap-wrapper
+.PHONY: ci check fmt fmt-check tidy-check test test-unit test-go-check test-harness test-smoke test-integration test-e2e test-full-chain-e2e test-release test-release-shell test-dogfood-readonly test-dogfood-live test-dogfood-live-selftest vet build bin dogfood-no-token link-bin lint lint-shell vuln pi-lock-audit race cover install-tools hooks install-hooks lint-fast gen-bootstrap-wrapper
 .SILENT: fmt fmt-check link-bin
 
 ci: build check
 
-check: fmt-check tidy-check test-go-check test-harness test-smoke test-e2e test-release-shell test-dogfood-live-selftest vet lint lint-shell vuln
+check: fmt-check tidy-check test-go-check test-harness test-smoke test-e2e test-release-shell test-dogfood-live-selftest vet lint lint-shell vuln pi-lock-audit
 
 fmt:
 	bash scripts/go-format.sh write
@@ -135,6 +140,12 @@ lint-shell:
 
 vuln: ${GOVULNCHECK_STAMP}
 	"${GOVULNCHECK}" ./...
+
+# Every host installs the Pi lockfile verbatim, so an advisory published after
+# the lock was generated must block the next push, not wait for a host doctor.
+pi-lock-audit:
+	command -v "${NPM}" >/dev/null 2>&1 || { echo "pi-lock-audit: ${NPM} not found; install Node.js with npm" >&2; exit 1; }
+	cd "${PI_LOCK_DIR}" && "${NPM}" audit --omit=dev --registry="${NPM_REGISTRY}"
 
 race:
 	"${GO}" test -race ./...

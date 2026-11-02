@@ -296,64 +296,88 @@ bootstrap_pi_version() {
   bootstrap_version_env SERVERPRO_BOOTSTRAP_PI_VERSION
 }
 
-bootstrap_pi_dependency_min_release_age() {
-  local age
-  age=$(required_env SERVERPRO_BOOTSTRAP_PI_DEPENDENCY_MIN_RELEASE_AGE_DAYS)
-  [[ ${age} =~ ^[0-9]+$ ]] || { printf 'invalid Pi minimum release age: %s\n' "${age}" >&2; return 1; }
-  printf '%s' "${age}"
+bootstrap_pi_install_directory() {
+  local directory
+  directory=$(required_env SERVERPRO_BOOTSTRAP_PI_INSTALL_DIRECTORY) || return 1
+  # The name joins paths that reach rm and mv, so only a plain directory name passes.
+  [[ ${directory} =~ ^[a-z0-9][a-z0-9-]*$ ]] || { printf 'invalid Pi install directory: %s\n' "${directory}" >&2; exit 1; }
+  printf '%s' "${directory}"
 }
 
-# pi_dependency_repairs prints the validated `package|version|integrity|resolve-from`
-# rows. The values reach npm and node command lines, so a leading dash or an
-# unexpected character fails closed before any of them is used.
-pi_dependency_repairs() {
-  local manifest row package version integrity resolve_from extra count=0
-  manifest=$(required_env SERVERPRO_BOOTSTRAP_PI_DEPENDENCY_REPAIRS)
-  while IFS= read -r row; do
-    IFS='|' read -r package version integrity resolve_from extra <<<"${row}"
-    if [[ -n ${extra:-} || -z ${resolve_from:-} ]]; then
-      printf 'Pi dependency repair row needs four fields: %s\n' "${row}" >&2
-      exit 1
-    fi
-    validate_tool_name pi_dependency_package "${package}"
-    validate_version_token pi_dependency_version "${version}"
-    [[ ${integrity} =~ ^sha512-[[:alnum:]/+]{86}==$ ]] || { printf 'invalid Pi %s integrity\n' "${package}" >&2; exit 1; }
-    if [[ ${resolve_from} != - ]]; then
-      validate_tool_name pi_dependency_resolve_from "${resolve_from}"
-    fi
-    if [[ ${package} == -* || ${version} == -* || ${resolve_from} == -?* ]]; then
-      printf 'Pi dependency repair row must not start a field with a dash: %s\n' "${row}" >&2
-      exit 1
-    fi
-    ((count += 1))
-    printf '%s|%s|%s|%s\n' "${package}" "${version}" "${integrity}" "${resolve_from}"
-  done <<<"${manifest}"
-  ((count > 0)) || { printf 'Pi dependency repair manifest is empty\n' >&2; exit 1; }
+bootstrap_pi_bin() {
+  local bin
+  bin=$(required_env SERVERPRO_BOOTSTRAP_PI_BIN) || return 1
+  # The path becomes a symlink target, so it must stay inside the Pi package.
+  if [[ ! ${bin} =~ ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$ || ${bin} == *..* ]]; then
+    printf 'invalid Pi bin path: %s\n' "${bin}" >&2
+    exit 1
+  fi
+  printf '%s' "${bin}"
 }
 
-# pi_dependency_install_specs prints the exact `package@version` specs npm
-# installs over Pi's shrinkwrap.
-pi_dependency_install_specs() {
-  local rows package version specs=()
-  rows=$(pi_dependency_repairs)
-  while IFS='|' read -r package version _; do
-    specs+=("${package}@${version}")
-  done <<<"${rows}"
-  printf '%s' "${specs[*]}"
+# write_pi_project materializes the reviewed install project in an existing
+# directory. The digest check runs on the decoded bytes, so a corrupt or
+# swapped manifest value fails before npm reads it.
+write_pi_project() {
+  local dir="$1" expected actual
+  expected=$(bootstrap_sha256_env SERVERPRO_BOOTSTRAP_PI_LOCK_SHA256) || return 1
+  printf '%s' "$(required_env SERVERPRO_BOOTSTRAP_PI_PACKAGE_JSON_BASE64)" | base64 -d >"${dir}/package.json" || return 1
+  printf '%s' "$(required_env SERVERPRO_BOOTSTRAP_PI_LOCK_BASE64)" | base64 -d >"${dir}/package-lock.json" || return 1
+  actual=$(sha256sum "${dir}/package-lock.json" | awk '{print $1}')
+  if [[ ${actual} != "${expected}" ]]; then
+    printf 'Pi lockfile digest mismatch: expected %s, got %s\n' "${expected}" "${actual}" >&2
+    return 1
+  fi
 }
 
-# Pi's CLI version cannot prove that its shrinkwrapped runtime dependencies were repaired.
-pi_dependency_check_command() {
-  local node_version="$1" pi_tool rows package version integrity resolve_from probe probe_quoted args=''
-  pi_tool=$(bootstrap_pi_tool)
-  rows=$(pi_dependency_repairs)
-  while IFS='|' read -r package version integrity resolve_from; do
-    args+=" \"${package}\" \"${version}\" \"${integrity}\" \"${resolve_from}\""
-  done <<<"${rows}"
-  probe=$(printf '%s' "$(required_env SERVERPRO_BOOTSTRAP_PI_DEPENDENCY_PROBE_BASE64)" | base64 -d)
-  [[ -n ${probe} ]] || { printf 'empty Pi dependency probe\n' >&2; return 1; }
+# pi_lock_probe_command prints the metadata-only probe that proves the
+# project at $1 (a target-user path expression) matches the reviewed lock.
+pi_lock_probe_command() {
+  local root="$1" probe probe_quoted sha
+  probe=$(printf '%s' "$(required_env SERVERPRO_BOOTSTRAP_PI_LOCK_PROBE_BASE64)" | base64 -d) || return 1
+  [[ -n ${probe} ]] || { printf 'empty Pi lock probe\n' >&2; return 1; }
+  sha=$(bootstrap_sha256_env SERVERPRO_BOOTSTRAP_PI_LOCK_SHA256) || return 1
   printf -v probe_quoted '%q' "${probe}"
-  printf '%s' "\"\$HOME/.local/bin/mise\" exec -- node -e ${probe_quoted} \"\$HOME/.local/share/mise/installs/node/${node_version}/lib/node_modules/${pi_tool}\"${args}"
+  printf '%s' "\"\$HOME/.local/bin/mise\" exec -- node -e ${probe_quoted} \"${root}\" ${sha}"
+}
+
+# pi_check_command mirrors doctor's Go-built Pi check (piCheckCommand), so
+# bootstrap readiness and doctor reach one trust decision.
+pi_check_command() {
+  local node_version="$1" pi_version="$2" pi_tool directory bin node_root pi_root probe
+  pi_tool=$(bootstrap_pi_tool) || return 1
+  directory=$(bootstrap_pi_install_directory) || return 1
+  bin=$(bootstrap_pi_bin) || return 1
+  node_root="\$HOME/.local/share/mise/installs/node/${node_version}"
+  pi_root="${node_root}/lib/${directory}"
+  probe=$(pi_lock_probe_command "${pi_root}") || return 1
+  printf '%s' "expected_pi=\"${node_root}/bin/pi\"; actual_pi=\$(\"\$HOME/.local/bin/mise\" exec -- sh -c 'command -v pi'); test \"\$actual_pi\" = \"\$expected_pi\" || { printf 'expected pi at %s, got %s\\n' \"\$expected_pi\" \"\$actual_pi\" >&2; exit 1; }; pi_target=\$(readlink -f \"\$expected_pi\"); want_target=\$(readlink -f \"${pi_root}\")/node_modules/${pi_tool}/${bin}; test \"\$pi_target\" = \"\$want_target\" || { printf 'expected pi to link to %s, got %s; rerun managed bootstrap\\n' \"\$want_target\" \"\$pi_target\" >&2; exit 1; }; ${probe}; pi_version=\$(\"\$HOME/.local/bin/mise\" exec -- pi --version 2>&1) || { status=\$?; printf 'pi --version failed (%s): %s\\n' \"\$status\" \"\$pi_version\" >&2; exit \"\$status\"; }; test \"\$pi_version\" = \"${pi_version}\" || { printf 'expected pi ${pi_version}, got %s\\n' \"\$pi_version\" >&2; exit 1; }; printf '%s\\n' \"\$pi_version\""
+}
+
+# pi_install_commands prints the target-user commands that install the
+# reviewed project from the handoff directory $2. npm ci installs only the
+# locked tree and rejects any integrity mismatch; the stage is probed and
+# audited before it replaces the live project, so a failed run leaves the
+# previous Pi in place.
+pi_install_commands() {
+  local node_version="$1" handoff="$2" pi_tool directory bin node_root lib pi_root
+  pi_tool=$(bootstrap_pi_tool) || return 1
+  directory=$(bootstrap_pi_install_directory) || return 1
+  bin=$(bootstrap_pi_bin) || return 1
+  node_root="\$HOME/.local/share/mise/installs/node/${node_version}"
+  lib="${node_root}/lib"
+  pi_root="${lib}/${directory}"
+  printf '%s\n' "pi_stage=\$(mktemp -d \"${pi_root}.stage.XXXXXX\"); trap 'rm -rf -- \"\${pi_stage:?}\"' EXIT"
+  printf '%s\n' "cp -- \"${handoff}/package.json\" \"${handoff}/package-lock.json\" \"\${pi_stage}/\""
+  printf '%s\n' "(cd \"\${pi_stage}\" && \"\$HOME/.local/bin/mise\" exec -- npm ci --omit=dev --ignore-scripts --no-audit --no-fund)"
+  printf '%s\n' "test -f \"\${pi_stage}/node_modules/${pi_tool}/${bin}\""
+  pi_lock_probe_command "\${pi_stage}"
+  printf '\n'
+  printf '%s\n' "(cd \"\${pi_stage}\" && \"\$HOME/.local/bin/mise\" exec -- npm audit --omit=dev)"
+  # Older serverpro releases installed Pi with npm install -g; drop that copy so only the reviewed tree remains.
+  printf '%s\n' "if test -e \"${lib}/node_modules/${pi_tool}\"; then \"\$HOME/.local/bin/mise\" exec -- npm uninstall -g --ignore-scripts ${pi_tool}; fi"
+  printf '%s\n' "rm -rf -- \"${pi_root}.old\"; if test -e \"${pi_root}\"; then mv -- \"${pi_root}\" \"${pi_root}.old\"; fi; mv -- \"\${pi_stage}\" \"${pi_root}\"; rm -rf -- \"${pi_root}.old\""
+  printf '%s\n' "ln -sfn -- \"../lib/${directory}/node_modules/${pi_tool}/${bin}\" \"${node_root}/bin/pi\""
 }
 
 bootstrap_herdr_version() {
@@ -759,8 +783,10 @@ validate_bootstrap_env() {
   validate_managed_mise_manifest
   bootstrap_npm_version >/dev/null
   bootstrap_pi_version >/dev/null
-  bootstrap_pi_dependency_min_release_age >/dev/null
-  pi_dependency_check_command "$(bootstrap_node_version)" >/dev/null
+  bootstrap_pi_install_directory >/dev/null
+  bootstrap_pi_bin >/dev/null
+  bootstrap_sha256_env SERVERPRO_BOOTSTRAP_PI_LOCK_SHA256 >/dev/null
+  pi_check_command "$(bootstrap_node_version)" "$(bootstrap_pi_version)" >/dev/null
   bootstrap_herdr_version >/dev/null
   bootstrap_herdr_backend >/dev/null
   bootstrap_sha256_env SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64 >/dev/null
@@ -1483,9 +1509,9 @@ target_pi_ready() {
   local expected_pi_version="$2"
   local expected_npm_version
   expected_npm_version=$(bootstrap_npm_version)
-  local dependency_check
-  dependency_check=$(pi_dependency_check_command "${node_version}")
-  run_as_target "set -euo pipefail; test \"\$(\"\$HOME/.local/bin/mise\" exec -- node --version)\" = \"v${node_version}\"; test \"\$(\"\$HOME/.local/bin/mise\" exec -- npm --version)\" = \"${expected_npm_version}\"; expected_pi=\"\$HOME/.local/share/mise/installs/node/${node_version}/bin/pi\"; actual_pi=\$(\"\$HOME/.local/bin/mise\" exec -- sh -c 'command -v pi'); test \"\${actual_pi}\" = \"\${expected_pi}\" || { printf 'expected pi at %s, got %s\\n' \"\${expected_pi}\" \"\${actual_pi}\" >&2; exit 1; }; ${dependency_check}; pi_version=\$(\"\$HOME/.local/bin/mise\" exec -- pi --version 2>&1) || { status=\$?; printf 'pi --version failed (%s): %s\\n' \"\${status}\" \"\${pi_version}\" >&2; exit \"\${status}\"; }; test \"\${pi_version}\" = \"${expected_pi_version}\" || { printf 'expected pi %s, got %s\\n' \"${expected_pi_version}\" \"\${pi_version}\" >&2; exit 1; }"
+  local pi_check
+  pi_check=$(pi_check_command "${node_version}" "${expected_pi_version}") || return 1
+  run_as_target "set -euo pipefail; test \"\$(\"\$HOME/.local/bin/mise\" exec -- node --version)\" = \"v${node_version}\"; test \"\$(\"\$HOME/.local/bin/mise\" exec -- npm --version)\" = \"${expected_npm_version}\"; ${pi_check}"
 }
 
 # herdr_integrity_script builds the target-user probe that resolves the herdr
@@ -1520,11 +1546,10 @@ install_user_tools_for_target() {
   repair_mise_config_for_user
   configure_user_tools_for_target "${target}"
 
-  local node_version pi_version herdr_version pi_tool
+  local node_version pi_version herdr_version
   node_version=$(bootstrap_node_version)
   pi_version=$(bootstrap_pi_version)
   herdr_version=$(bootstrap_herdr_version)
-  pi_tool=$(bootstrap_pi_tool)
 
   # Probe every managed component and stage only the failures: doctor repair of
   # one stale tool must not reinstall (or re-resolve) the healthy toolchain.
@@ -1580,15 +1605,17 @@ install_user_tools_for_target() {
     staged+=("mise --yes install --force herdr@${herdr_version}")
   fi
   if [[ ${install_pi} -eq 1 ]]; then
-    local repair_specs minimum_age pi_package
-    repair_specs=$(pi_dependency_install_specs)
-    minimum_age=$(bootstrap_pi_dependency_min_release_age)
-    pi_package="\$HOME/.local/share/mise/installs/node/${node_version}/lib/node_modules/${pi_tool}"
-    staged+=("\"\$HOME/.local/bin/mise\" exec -- npm install -g ${pi_tool}@${pi_version} --min-release-age=${minimum_age}")
-    # Pi's upstream shrinkwrap must not restore the reviewed vulnerable dependencies.
-    staged+=("\"\$HOME/.local/bin/mise\" exec -- npm --prefix \"${pi_package}\" install --ignore-scripts --omit=dev --save-exact --min-release-age=${minimum_age} ${repair_specs}")
-    staged+=("$(pi_dependency_check_command "${node_version}")")
-    staged+=("\"\$HOME/.local/bin/mise\" exec -- npm --prefix \"${pi_package}\" audit --omit=dev")
+    # Root writes the reviewed project into a fresh root-owned directory that
+    # the target user can read but not change; the lock is public data, so
+    # read access for other local users exposes nothing.
+    local pi_handoff
+    pi_handoff=$(mktemp -d)
+    register_tmp "${pi_handoff}"
+    chmod 0755 "${pi_handoff}"
+    write_pi_project "${pi_handoff}" || exit 1
+    local pi_commands
+    pi_commands=$(pi_install_commands "${node_version}" "${pi_handoff}") || exit 1
+    staged+=("${pi_commands}")
   fi
 
   if [[ ${#staged[@]} -gt 0 ]]; then
@@ -1664,10 +1691,9 @@ verify_node() {
 verify_pi() {
   verify_node
   if [[ -n ${TARGET_USER:-} ]]; then
-    local node_version pi_version
-    node_version=$(bootstrap_node_version)
-    pi_version=$(bootstrap_pi_version)
-    run_as_target "set -euo pipefail; expected_pi=\"\$HOME/.local/share/mise/installs/node/${node_version}/bin/pi\"; actual_pi=\$(\"\$HOME/.local/bin/mise\" exec -- sh -c 'command -v pi'); test \"\${actual_pi}\" = \"\${expected_pi}\" || { printf 'expected pi at %s, got %s\\n' \"\${expected_pi}\" \"\${actual_pi}\" >&2; exit 1; }; actual=\$(\"\$HOME/.local/bin/mise\" exec -- pi --version 2>&1) || { status=\$?; printf 'pi --version failed (%s): %s\\n' \"\${status}\" \"\${actual}\" >&2; exit \"\${status}\"; }; test \"\${actual}\" = \"${pi_version}\" || { printf 'expected pi %s, got %s\\n' \"${pi_version}\" \"\${actual}\" >&2; exit 1; }; printf '%s\\n' \"\${actual}\""
+    local pi_check
+    pi_check=$(pi_check_command "$(bootstrap_node_version)" "$(bootstrap_pi_version)") || exit 1
+    run_as_target "set -euo pipefail; ${pi_check}"
   fi
 }
 
