@@ -1,12 +1,12 @@
 # Web Sources for serverpro
 
-Date: 2026-10-30
+Date: 2026-11-02
 Scope: provider-agnostic serverpro references
 
 Prefer official provider/API docs. If guides conflict with API references, trust
 API references.
 
-## Managed-tool review: 2026-10-03, refreshed 2026-10-22 and 2026-10-30
+## Managed-tool review: 2026-10-03, refreshed 2026-10-22, 2026-10-30, and 2026-11-02
 
 The normal cutoff is 2026-09-26 09:13:29 UTC: stable releases must be at least
 seven days old. Preserve Ubuntu 24.04 packages and Node.js 24 LTS. Keep npm
@@ -54,6 +54,20 @@ for trust. Bootstrap writes no lockfile, installs Node from `nodejs.org`, which
 publishes the signature, and edits only global config with `mise config set`.
 Node.js, npm, uv, tmux, ripgrep, fd, ast-grep, inspect, Herdr, and Pi keep
 their pins.
+
+Reviewed 2026-11-02 (cutoff 2026-10-26): only the cloudflared floor changes,
+to `2026.10.6`, as an owner-approved security exception. mise `2026.10.25`,
+uv `0.13.6`, Node.js `24.22.2`, and ast-grep `0.51.1` are younger than seven
+days and fix no disclosed vulnerability. Node.js `24.22.2` is not a security
+release. Pi stays on `0.87.1`: Pi `1.4.0` still ships no `npm-shrinkwrap.json`.
+With both repairs applied, the npm bulk advisory endpoint reports one advisory
+for the 138 runtime packages: `minimatch` `10.2.6`, `GHSA-g3hv-75wg-m249`
+(medium, denial of service). The flaw needs `optimizationLevel >= 2`, and Pi
+never sets that option, so the default level 1 never reaches it. The fix
+exists only in the `11.x` major line, which adds a dependency, so serverpro
+does not repair it. The mise advisory `GHSA-43hx-4j66-v486` is fixed in
+`2026.10.14`, below the current floor. Every other managed tool is at its
+newest stable release.
 
 | Updated tool | Selected release | Published (UTC) | Selection |
 | --- | --- | --- | --- |
@@ -108,6 +122,9 @@ Primary selection and security evidence:
 - https://github.com/jdx/mise/releases/download/v2026.10.24/SHASUMS256.txt
 - https://github.com/Ataraxy-Labs/sem/releases/download/v0.29.0/checksums.txt
 - https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_checksums.txt
+- https://github.com/advisories/GHSA-g3hv-75wg-m249
+- https://github.com/jdx/mise/security/advisories/GHSA-43hx-4j66-v486
+- https://github.com/cloudflare/cloudflared/releases/tag/2026.10.6
 
 On 2026-10-22 the Docker repository contains Engine 29.9.2, containerd 2.4.2,
 Buildx 0.38.1, and Compose 5.6.1 on both architectures. Keep the reviewed
