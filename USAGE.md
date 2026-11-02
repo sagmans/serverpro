@@ -654,16 +654,14 @@ exposes optional hosted/API and model authentication that serverpro does not
 configure. Pi is an AI coding agent with arbitrary shell-execution
 capability: installing it on a hardened host widens the admin-user trust
 boundary, so enable the `pi` or `all` target only where that is intended.
-Pi is installed via `npm install -g` under the mise-managed Node. Serverpro
-repairs only that local installation to reviewed `brace-expansion@5.0.12`
-and `undici@8.12.3`
-with lifecycle scripts disabled. Installation and repair enforce npm’s seven-day
-minimum age. Bootstrap requires a clean runtime dependency audit; doctor also
-rejects incorrect dependency versions or shrinkwrap integrity. No upstream
-release changes. Other dependencies are not fully vendored, so residual npm
-supply-chain risk remains. The `all`
+Pi is installed with `npm ci` from the serverpro-owned lockfile into
+`<node>/lib/serverpro-pi` under the mise-managed Node, with lifecycle scripts
+disabled. Bootstrap requires a clean runtime dependency audit; doctor also
+rejects a changed lockfile or package version drift. Packages still download
+from the npm registry, so registry trust remains; the lockfile limits it to
+the reviewed versions and integrity hashes. The `all`
 target also installs Node.js `24.22.1` LTS with bundled npm `11.19.1`, Pi
-`0.87.1`, uv `0.13.5` through mise's explicit `aqua:astral-sh/uv` backend, and
+`1.5.0`, uv `0.13.5` through mise's explicit `aqua:astral-sh/uv` backend, and
 Rust `1.99.1` through `core:rust` with the default rustc, Cargo, rustfmt, Clippy,
 and docs profile. Doctor checks those exact versions and all Rust
 default-profile components. Wrong Node/npm state forces same-version Node

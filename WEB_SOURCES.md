@@ -69,6 +69,31 @@ does not repair it. The mise advisory `GHSA-43hx-4j66-v486` is fixed in
 `2026.10.14`, below the current floor. Every other managed tool is at its
 newest stable release.
 
+Later on 2026-11-02 the owner approved Pi `1.5.0` (published 11:05 UTC) as an
+exception to the age gate. Pi 1.x ships no `npm-shrinkwrap.json`, and
+`npm install -g` ignores a shrinkwrap packed into a tarball, so serverpro now
+owns the Pi lockfile (`internal/bootstraptools/pi/`). `scripts/update-pi-lock.sh`
+generates it with npm `--min-release-age=7` and these exclusions:
+
+| Exempt package | Version | Published (UTC) | Reason |
+| --- | --- | --- | --- |
+| `@earendil-works/*` | Pi `1.5.0` | 2026-11-02 11:05 | Owner approval of Pi `1.5.0` |
+| `minimatch` | 11.0.3 | 2026-10-28 20:00 | Fixes `GHSA-g3hv-75wg-m249`; every `11.x` release is younger than seven days |
+| `@isaacs/nonrecursive-glob-match` | 1.0.3 | 2026-10-28 19:50 | New dependency of `minimatch` `11.x` |
+| `@smithy/core` | 3.38.1 | 2026-10-30 23:11 | Redacts nested sensitive data before custom loggers (aws/aws-sdk-js-v3#8393); `3.36.2` is deprecated |
+
+The lockfile pins 121 packages, all from `registry.npmjs.org` with SHA-512
+integrity. `npm audit --omit=dev` found zero vulnerabilities. The only
+deprecated package is `node-domexception`, which Node.js replaces with its
+built-in `DOMException`. The `brace-expansion` and `undici` repairs are gone:
+the lockfile resolves both to fixed releases.
+
+- https://docs.npmjs.com/cli/v11/using-npm/config#min-release-age
+- https://docs.npmjs.com/cli/v11/using-npm/config#min-release-age-exclude
+- https://github.com/advisories/GHSA-g3hv-75wg-m249
+- https://github.com/aws/aws-sdk-js-v3/issues/8393
+- https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-1.5.0.tgz
+
 | Updated tool | Selected release | Published (UTC) | Selection |
 | --- | --- | --- | --- |
 | Tailscale | 1.104.4 | 2026-10-28 01:05 | Approved security exception; Tailscale SSH and Serve fixes (TS-2026-014 to TS-2026-017) |
@@ -78,8 +103,7 @@ newest stable release.
 | Compose | 5.6.1 | 2026-10-21 07:54:18 | Approved security exception; Go `CVE-2026-111943` rebuild |
 | mise | 2026.10.24 | 2026-10-30 10:15:02 | Approved security exception; fail-closed verification, GitHub token limited to GitHub hosts, git ref option-injection and fnox secret-grant fixes |
 | Node.js | 24.22.1 LTS | 2026-10-20 | Approved security exception; Node 24 security release |
-| Pi | 0.87.1 | 2026-09-22 | Normal age gate |
-| Pi dependency `undici` | 8.12.3 | 2026-10-19 14:02:56 | Normal age gate; local repair of Pi's shrinkwrapped `8.10.2` (TLS validation bypass, cache poisoning) |
+| Pi | 1.5.0 | 2026-11-02 11:05:09 | Approved exception; installed from the serverpro-owned lockfile |
 | uv | 0.13.5 | 2026-10-22 01:35:54 | Approved security exception; removes the compromised emSign root (`GHSA-hq85-5cpj-mr62`) |
 | Rust | 1.99.1 | 2026-10-16 04:47:44 | Normal age gate; miscompilation fix |
 | gh | 2.103.3 | 2026-10-26 19:20:08 | Approved security exception; `digitorus/pkcs7` fix for `GHSA-3xqc-rpq8-wgp9` |
@@ -1042,18 +1066,18 @@ https://mise.jdx.dev/dev-tools/backends/npm.html
 ```
 
 Use: reference for npm-backed mise tools. serverpro does NOT use the `npm:`
-backend; it installs Pi `0.87.1` via `npm install -g` under mise-managed Node
-`24.22.1` with lifecycle-script suppression
-(`npm_config_ignore_scripts=true`).
+backend; it installs Pi `1.5.0` with `npm ci` from its own lockfile under
+mise-managed Node `24.22.1`, with lifecycle scripts disabled
+(`--ignore-scripts`).
 
 ### Pi quickstart
 
 ```text
 https://pi.dev/docs/latest/quickstart
-https://www.npmjs.com/package/@earendil-works/pi-coding-agent/v/0.87.1
+https://www.npmjs.com/package/@earendil-works/pi-coding-agent/v/1.5.0
 ```
 
-Use: optional pinned Pi `0.87.1` bootstrap; reviewed 2026-10-01.
+Use: optional pinned Pi `1.5.0` bootstrap; reviewed 2026-11-02.
 Authentication remains operator-owned.
 
 ### tmux

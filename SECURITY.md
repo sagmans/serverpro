@@ -333,8 +333,8 @@ old, except explicitly approved fixes for disclosed vulnerabilities. Tailscale
 `1.104.4`, Docker Engine `29.9.2`, Buildx `0.38.1`, Compose `5.6.1`, mise `2026.10.24`,
 Node.js `24.22.1`, uv `0.13.5`, gh `2.103.3`, and sem `0.29.0` use those exceptions; `WEB_SOURCES.md` records the evidence. The age
 threshold governs release selection. Signed apt candidates can be newer.
-Pi installation and local dependency repair also enforce seven days through
-npm’s `--min-release-age` option. containerd `2.4.2` meets seven days and
+The serverpro-owned Pi lockfile is generated under seven days through npm’s
+`--min-release-age` option, with each exemption recorded in `WEB_SOURCES.md`. containerd `2.4.2` meets seven days and
 fixes `CVE-2026-95839`, `GHSA-8647-2jxj-p2rc`, and `GHSA-hc94-p972-ch66`.
 Docker Engine, Buildx, and Compose are rebuilt with Go releases that reject
 the eight revoked eMudhra intermediate certificates (`CVE-2026-111943`).
@@ -376,18 +376,20 @@ plugins. Docker warns that manual downloads do not receive automatic security
 updates. Keep ServerPro pins reviewed and run doctor with repair. Checksums
 prove agreement with reviewed bytes, not absence of upstream compromise.
 Release age and checksums do not prove that an artifact or its dependencies
-are uncompromised. Upstream Pi `0.87.1` and `1.0.0` shrinkwrap vulnerable
-`brace-expansion@5.0.9` and `undici@8.10.2`. Serverpro repairs only its managed
-local Pi installation to reviewed `brace-expansion@5.0.12` and `undici@8.12.3`,
-with lifecycle scripts disabled and development dependencies omitted.
-The undici advisories include a TLS certificate validation bypass and
-cross-origin cache poisoning in Pi’s HTTP client.
-Bootstrap and doctor resolve each package’s metadata from the module context
-that loads it (minimatch for brace-expansion, Pi’s root for undici) without
-executing dependency code. They require each exact patched version
-and its reviewed SHA-512 integrity in the installed shrinkwrap. Bootstrap also
-requires a clean runtime dependency audit after the repair. Audit failure or
-unavailability stops the installer; an exact Pi CLI version alone is insufficient.
+are uncompromised. Pi 1.x publishes no `npm-shrinkwrap.json`, so a plain
+`npm install -g` would resolve each transitive package to the newest match at
+install time. Serverpro owns the Pi lockfile instead. The binary embeds it and
+refuses to start unless it installs exactly the pinned Pi version, and unless
+every package is a production download from `registry.npmjs.org` with SHA-512
+integrity. Bootstrap verifies the lockfile digest, then installs it with
+`npm ci`, which rejects any integrity mismatch, with lifecycle scripts
+disabled and development dependencies omitted. Bootstrap and doctor check the
+lockfile digest and every installed package version from metadata only,
+without executing dependency code. Bootstrap also requires a clean runtime
+dependency audit before the new tree replaces the old one. Audit failure or
+unavailability stops the installer; an exact Pi CLI version alone is
+insufficient. `make check` audits the lockfile, so a new advisory blocks the
+next push.
 
 Managed host tools install through integrity-checked sources, not
 `curl ... | sh`:
@@ -488,10 +490,10 @@ Managed host tools install through integrity-checked sources, not
   keep apt's exit status and output.
 - Node.js `24.22.1` LTS and bundled npm `11.19.1` are exact. Node/npm drift
   forces same-version Node replacement; `pi` and `all` reinstall Pi afterward
-  because replacing Node can remove its global npm package. Pi `0.87.1` is
-  installed and locally repaired with lifecycle scripts disabled. Its npm
-  dependency graph is not fully vendored; enabling Pi retains this
-  residual package-registry trust boundary.
+  because replacing Node removes the Pi tree under it. Pi `1.5.0` is
+  installed from the serverpro-owned lockfile with lifecycle scripts
+  disabled. Packages still download from the npm registry, so enabling Pi
+  keeps a registry trust boundary that the pinned integrity hashes limit.
 - The bootstrap script runs as root, including system-package and apt work plus
   managed-artifact download, verification, extraction, and staging. Read-only
   doctor uses existing apt candidate metadata; `--fix` refreshes metadata before

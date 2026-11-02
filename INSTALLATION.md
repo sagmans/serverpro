@@ -58,7 +58,7 @@ reviewed pins, integrity checks, and replacement lifecycle.
 | mise | 2026.10.24 | Minimum release; newer compatible mise remains installed. |
 | Node.js | 24.22.1 LTS | Exact mise-managed runtime. |
 | npm | 11.19.1 | Exact npm bundled with the managed Node.js release. |
-| Pi | 0.87.1 | Exact global package under managed Node.js. |
+| Pi | 1.5.0 | Exact serverpro-owned lockfile tree under managed Node.js. |
 | uv | 0.13.5 | Exact mise-managed release. |
 | Rust | 1.99.1 | Exact rustup toolchain with default profile. |
 | tmux | 3.7c | Exact mise-managed release. |
@@ -71,15 +71,18 @@ reviewed pins, integrity checks, and replacement lifecycle.
 | Herdr | 0.9.5 | Exact release and architecture-specific binary digest. |
 | cloudflared | 2026.10.6 | Minimum Cloudflare apt package version when ingress is enabled. |
 
-Pi `0.87.1` and upstream `1.0.0` contain vulnerable `brace-expansion@5.0.9`
-and `undici@8.10.2` in their npm shrinkwraps. Serverpro repairs only the local
-managed Pi graph to reviewed `brace-expansion@5.0.12` and `undici@8.12.3`;
-it does not modify upstream releases.
-Both Pi installation and dependency repair enforce npm’s seven-day minimum age.
-The repair disables lifecycle scripts and omits development dependencies.
-Bootstrap verifies each resolved dependency version and reviewed shrinkwrap integrity,
-then requires a clean runtime dependency audit before Pi is ready.
-Doctor rejects an unrepaired graph even when Pi’s own version matches.
+Pi 1.x publishes no `npm-shrinkwrap.json`. Serverpro owns the lockfile in
+`internal/bootstraptools/pi/`, which pins all 121 packages of the Pi `1.5.0`
+tree with exact versions and SHA-512 integrity.
+`scripts/update-pi-lock.sh` generates it under npm’s seven-day minimum age;
+`WEB_SOURCES.md` lists each exemption and its reason.
+Bootstrap installs the tree with `npm ci` into
+`<node>/lib/serverpro-pi`, with lifecycle scripts disabled and development
+dependencies omitted, and links `<node>/bin/pi` to it.
+It probes and audits the new tree before it replaces the old one.
+Bootstrap removes a Pi from an older serverpro `npm install -g`.
+Doctor rejects a changed lockfile or any package version drift, even when
+Pi’s own version matches.
 
 ### Managed apt package floors
 

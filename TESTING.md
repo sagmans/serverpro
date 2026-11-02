@@ -51,10 +51,21 @@ the patched `0.37.2` floor before installation. The initial Pi audit found
 shrinkwrapped `brace-expansion@5.0.9`. A later disposable Ubuntu run exercised
 the production local repair, Pi help, idempotence, and rejection of dependency drift.
 Repair restored `5.0.12` and the reviewed integrity; the runtime audit found zero vulnerabilities.
-Regression tests reject old versions, changed lock metadata, wrong integrity,
+Its regression tests rejected old versions, changed lock metadata, wrong integrity,
 and a missing shrinkwrap without executing dependency code. Since 2026-10-30
-they cover brace-expansion and undici separately, reject unsafe repair manifest
-rows, and require the doctor command to reach the bootstrap probe’s verdict.
+they covered brace-expansion and undici separately, rejected unsafe repair manifest
+rows, and required the doctor command to reach the bootstrap probe’s verdict.
+On 2026-11-02 Pi moved to `1.5.0` from the serverpro-owned lockfile. A
+disposable Ubuntu 24.04 container first installed Pi `0.87.1` with the
+previous serverpro script, then ran the new script. It installed 121 locked
+packages with `npm ci`, the audit found zero vulnerabilities, and it removed
+the old global Pi and left no stage or handoff directories. The doctor check
+passed, a rerun installed nothing, and `pi --help` ran. A changed `undici`
+version made doctor fail, and the next run repaired it. A separate container
+proved that `npm ci` rejects a lockfile with a wrong integrity hash and that
+`npm install -g` ignores a shrinkwrap packed into a local tarball. New regression
+tests replace the repair tests and reject unreviewed lockfiles, unsafe manifest paths, a digest mismatch,
+dependency drift, a foreign `pi` link, and a wrong CLI version.
 The 2026-10-03 refresh repeated the complete managed user-tool installation
 with mise `2026.10.0` and uv `0.12.19` in disposable Ubuntu arm64.
 Canonical readiness and idempotence passed; Pi’s runtime audit remained clean.
