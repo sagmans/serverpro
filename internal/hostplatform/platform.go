@@ -59,8 +59,10 @@ const (
 	dockerComposeVersion = "5.6.1-1~ubuntu.24.04~noble"
 	cloudflaredPackage   = "cloudflared"
 	// Older connectors still trust eight eMudhra intermediate CAs whose
-	// private keys were compromised, so hosts below this floor fail doctor.
-	cloudflaredVersion = "2026.10.2"
+	// private keys were compromised, and before 2026.10.6 they also ship the
+	// vulnerable go-jose and go-chi modules and expose the metrics debug
+	// endpoints, so hosts below this floor fail doctor.
+	cloudflaredVersion = "2026.10.6"
 )
 
 var (

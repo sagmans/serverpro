@@ -436,10 +436,12 @@ Managed host tools install through integrity-checked sources, not
   contain exactly one primary key with fingerprint
   `CC94B39C77AE7342A68B89628A682D308D4E5E73`. Missing, substituted, or additional
   primary keys fail before the key can enter the trusted keyring. The installer
-  uses the explicit noble repository and requires cloudflared `2026.10.2` or
+  uses the explicit noble repository and requires cloudflared `2026.10.6` or
   newer; ingress-enabled doctor runs verify both that floor and service state.
   Older connectors still trust eight eMudhra intermediate CAs whose private
-  keys were compromised, so doctor fails them and `--fix` upgrades them.
+  keys were compromised, and builds before `2026.10.6` also ship vulnerable
+  go-jose and go-chi modules and expose the metrics debug endpoints, so
+  doctor fails them and `--fix` upgrades them.
   With ingress `none`, doctor still audits a connector that another tool
   installed, because the config setting does not prove the host has none. An
   enabled or running connector gets the full check and repair. A dormant

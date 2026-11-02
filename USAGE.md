@@ -596,7 +596,7 @@ the reviewed binary when apt is below its floor, then returns to a safe apt
 package once available. Operator-owned overrides require operator action;
 repair does not delete them. Tailscale daemon restart is delayed until the updating
 SSH command returns, then doctor waits and rechecks it. When ingress is enabled, doctor verifies cloudflared is active and at or above
-its reviewed `2026.10.2` package floor. A failed `cloudflared` check names one
+its reviewed `2026.10.6` package floor. A failed `cloudflared` check names one
 reason: the package is not installed, its package status, the installed version
 below the floor, a missing install receipt, a connector that is "not the build
 serverpro installed from https://pkg.cloudflare.com/cloudflared", or the service

@@ -72,7 +72,7 @@ their pins.
 | ast-grep | 0.51.0 | 2026-10-15 15:10:15 | Normal age gate; fixes `GHSA-xx6h-xcfw-vf5j` and `GHSA-cmvf-x8f7-rvp6` |
 | sem | 0.29.0 | 2026-10-30 00:51:43 | Approved security exception; `webpki-roots` `1.0.10` drops compromised eMudhra CAs |
 | Herdr | 0.9.5 | 2026-10-14 16:07:28 | Normal age gate |
-| cloudflared | 2026.10.2 | 2026-10-20 09:17:30 | Normal age gate; Go `1.27.3` build distrusts compromised eMudhra intermediate CAs |
+| cloudflared | 2026.10.6 | 2026-10-29 12:18:25 | Approved security exception; go-jose (VULN-184686), go-chi (VULN-183456), and metrics debug endpoint (VULN-176088) fixes |
 
 Primary selection and security evidence:
 
@@ -532,17 +532,24 @@ https://pkg.cloudflare.com/index.html
 https://pkg.cloudflare.com/cloudflare-main.gpg
 https://pkg.cloudflare.com/cloudflared/dists/noble/main/binary-amd64/Packages
 https://pkg.cloudflare.com/cloudflared/dists/noble/main/binary-arm64/Packages
-https://github.com/cloudflare/cloudflared/releases/tag/2026.10.2
+https://github.com/cloudflare/cloudflared/releases/tag/2026.10.6
 https://raw.githubusercontent.com/cloudflare/cloudflared/master/RELEASE_NOTES
 https://blog.cloudflare.com/emudhra-certificate-compromise/
 ```
 
-Use: connector install source, Ubuntu 24.04 package floor `2026.10.2`, and apt
+Use: connector install source, Ubuntu 24.04 package floor `2026.10.6`, and apt
 trust root. Package indexes and release reviewed 2026-10-30. Earlier builds
 still trust eight eMudhra intermediate CAs whose private keys were compromised;
 Cloudflare's 2026-10-20 notice requires `2026.10.2` or later. The noble index
 then offered only `2026.10.6` (published 2026-10-29), so install and repair take
-that build while the reviewed floor stays at the age-gated `2026.10.2`. Primary
+that build while the reviewed floor stays at the age-gated `2026.10.2`.
+Reviewed 2026-11-02: the floor moves to `2026.10.6` as an owner-approved
+security exception. `2026.10.4` allowlists the metrics debug endpoints
+(VULN-176088), `2026.10.5` updates go-chi (VULN-183456), and `2026.10.6`
+updates go-jose to `v4.1.6` (VULN-184686). The noble index now offers only
+`2026.10.7` (published 2026-10-30), so install and repair take that build.
+The `2026.10.6` update-timer change affects only `cloudflared service install`;
+serverpro writes its own unit with `--no-autoupdate`. Primary
 package-signing key fingerprint retrieved 2026-07-23 and re-verified 2026-10-30:
 `CC94B39C77AE7342A68B89628A682D308D4E5E73`. Cloudflare announced a 2025 key
 rollover and removal of deprecated keys after 2026-04-30. On future rollover,
