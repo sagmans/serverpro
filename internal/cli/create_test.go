@@ -380,8 +380,8 @@ func TestCreateCommandWithTokenRelativeTailnetWaitsForExplicitPolicyOperation(t 
 	select {
 	case <-reachedProvision:
 		unlock()
-		<-done
-		t.Fatal("create bypassed tailnet policy lock")
+		// The command error explains how create got past the lock.
+		t.Fatalf("create bypassed tailnet policy lock: %v", <-done)
 	case <-time.After(serverOperationLockProbe):
 	}
 	unlock()

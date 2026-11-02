@@ -224,16 +224,19 @@ Go 1.27.3 and a local 1.27.2 must not run project gates.
 ### Go quality tools
 
 ```text
-https://github.com/golangci/golangci-lint/releases/tag/v2.14.0
-https://api.github.com/repos/golangci/golangci-lint/releases/tags/v2.14.0
+https://github.com/golangci/golangci-lint/releases/tag/v2.15.0
+https://api.github.com/repos/golangci/golangci-lint/releases/tags/v2.15.0
 https://golangci-lint.run/docs/product/migration-guide/
-https://github.com/golang/vuln/tree/v1.6.0
-https://api.github.com/repos/golang/vuln/git/ref/tags/v1.6.0
+https://github.com/golang/vuln/tree/v1.9.0
+https://api.github.com/repos/golang/vuln/git/ref/tags/v1.9.0
 ```
 
 Use: project-local lint and vulnerability scanner pins. Reviewed 2026-08-11:
-golangci-lint `v2.14.0` (bumped 2026-10-13 for Go 1.27 export data) is an immutable stable release; govulncheck `v1.6.0`
-is an exact official repository tag. Both require Go 1.25 or newer and support
+golangci-lint `v2.14.0` (bumped 2026-10-13 for Go 1.27 export data). Reviewed
+2026-11-02: golangci-lint moves to `v2.15.0` (published 2026-10-16) and
+govulncheck to `v1.9.0` (published 2026-10-11); both pass the seven-day age
+gate. golangci-lint `v2.15.0` is an immutable stable release; govulncheck
+`v1.9.0` is an exact official repository tag. Both require Go 1.25 or newer and support
 the Go 1.27.3 project toolchain.
 
 ### Hetzner Cloud API

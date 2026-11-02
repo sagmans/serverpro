@@ -255,8 +255,8 @@ func TestTailnetReconcileWaitsForMatchingTailnetPolicyOperation(t *testing.T) {
 	select {
 	case <-client.planCalled:
 		unlock()
-		<-done
-		t.Fatal("reconcile planned while matching tailnet lock was held")
+		// The command error explains how reconcile got past the lock.
+		t.Fatalf("reconcile planned while matching tailnet lock was held: %v", <-done)
 	case <-time.After(serverOperationLockProbe):
 	}
 	unlock()
