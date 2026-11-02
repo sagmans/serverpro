@@ -100,7 +100,7 @@ connector serverpro did not install from `pkg.cloudflare.com`: install and
 | `curl` | `8.5.0-2ubuntu10.16` |
 | `gnupg` | `2.4.4-2ubuntu17.6` |
 | `ufw` | `0.36.2-6` |
-| `apparmor` | `4.0.1really4.0.1-0ubuntu0.24.04.8` |
+| `apparmor` | `4.0.1really4.0.1-0ubuntu0.24.04.9` |
 | `unattended-upgrades` | `2.9.1+nmu4ubuntu1` |
 | `jq` | `1.7.1-3ubuntu0.24.04.2` |
 | `git` | `1:2.43.0-1ubuntu7.4` |

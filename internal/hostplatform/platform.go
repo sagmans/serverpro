@@ -32,7 +32,7 @@ const (
 	ufwPackage        = "ufw"
 	ufwVersion        = "0.36.2-6"
 	apparmorPackage   = "apparmor"
-	apparmorVersion   = "4.0.1really4.0.1-0ubuntu0.24.04.8"
+	apparmorVersion   = "4.0.1really4.0.1-0ubuntu0.24.04.9"
 	unattendedPackage = "unattended-upgrades"
 	unattendedVersion = "2.9.1+nmu4ubuntu1"
 	jqPackage         = "jq"

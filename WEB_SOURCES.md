@@ -582,7 +582,7 @@ Use: Ubuntu 24.04 LTS (`noble`) managed-host support, host hardening, and direct
 package minimums. Reviewed 2026-10-30 for amd64 and arm64: `ca-certificates`
 `20260816ubuntu0.24.04.1`, `curl` `8.5.0-2ubuntu10.16`, `gnupg`
 `2.4.4-2ubuntu17.6`, `ufw` `0.36.2-6`, `apparmor`
-`4.0.1really4.0.1-0ubuntu0.24.04.8`, `unattended-upgrades`
+`4.0.1really4.0.1-0ubuntu0.24.04.9` (re-reviewed 2026-11-02), `unattended-upgrades`
 `2.9.1+nmu4ubuntu1`, `jq` `1.7.1-3ubuntu0.24.04.2`, `git`
 `1:2.43.0-1ubuntu7.4`, `openssh-client` `1:9.6p1-3ubuntu13.20`, and `htop`
 `3.3.0-4build1`. These are reviewed floors; signed newer candidates remain
