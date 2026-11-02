@@ -63,7 +63,9 @@ the old global Pi and left no stage or handoff directories. The doctor check
 passed, a rerun installed nothing, and `pi --help` ran. A changed `undici`
 version made doctor fail, and the next run repaired it. A separate container
 proved that `npm ci` rejects a lockfile with a wrong integrity hash and that
-`npm install -g` ignores a shrinkwrap packed into a local tarball. New regression
+`npm install -g` ignores a shrinkwrap packed into a local tarball. Another
+container gave the target user an `.npmrc` with a dead registry, and the
+install still passed from `registry.npmjs.org`. New regression
 tests replace the repair tests and reject unreviewed lockfiles, unsafe manifest paths, a digest mismatch,
 dependency drift, a foreign `pi` link, and a wrong CLI version.
 The 2026-10-03 refresh repeated the complete managed user-tool installation

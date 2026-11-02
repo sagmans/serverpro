@@ -315,6 +315,14 @@ bootstrap_pi_bin() {
   printf '%s' "${bin}"
 }
 
+bootstrap_pi_registry() {
+  local registry
+  registry=$(required_env SERVERPRO_BOOTSTRAP_PI_REGISTRY) || return 1
+  # The value becomes an npm option, so only a plain HTTPS registry URL passes.
+  [[ ${registry} =~ ^https://[a-z0-9.-]+(/[A-Za-z0-9._-]+)*/$ ]] || { printf 'invalid Pi registry: %s\n' "${registry}" >&2; exit 1; }
+  printf '%s' "${registry}"
+}
+
 # write_pi_project materializes the reviewed install project in an existing
 # directory. The digest check runs on the decoded bytes, so a corrupt or
 # swapped manifest value fails before npm reads it.
@@ -360,20 +368,21 @@ pi_check_command() {
 # audited before it replaces the live project, so a failed run leaves the
 # previous Pi in place.
 pi_install_commands() {
-  local node_version="$1" handoff="$2" pi_tool directory bin node_root lib pi_root
+  local node_version="$1" handoff="$2" pi_tool directory bin registry node_root lib pi_root
   pi_tool=$(bootstrap_pi_tool) || return 1
   directory=$(bootstrap_pi_install_directory) || return 1
   bin=$(bootstrap_pi_bin) || return 1
+  registry=$(bootstrap_pi_registry) || return 1
   node_root="\$HOME/.local/share/mise/installs/node/${node_version}"
   lib="${node_root}/lib"
   pi_root="${lib}/${directory}"
   printf '%s\n' "pi_stage=\$(mktemp -d \"${pi_root}.stage.XXXXXX\"); trap 'rm -rf -- \"\${pi_stage:?}\"' EXIT"
   printf '%s\n' "cp -- \"${handoff}/package.json\" \"${handoff}/package-lock.json\" \"\${pi_stage}/\""
-  printf '%s\n' "(cd \"\${pi_stage}\" && \"\$HOME/.local/bin/mise\" exec -- npm ci --omit=dev --ignore-scripts --no-audit --no-fund)"
+  printf '%s\n' "(cd \"\${pi_stage}\" && \"\$HOME/.local/bin/mise\" exec -- npm ci --omit=dev --ignore-scripts --no-audit --no-fund --registry=${registry})"
   printf '%s\n' "test -f \"\${pi_stage}/node_modules/${pi_tool}/${bin}\""
   pi_lock_probe_command "\${pi_stage}"
   printf '\n'
-  printf '%s\n' "(cd \"\${pi_stage}\" && \"\$HOME/.local/bin/mise\" exec -- npm audit --omit=dev)"
+  printf '%s\n' "(cd \"\${pi_stage}\" && \"\$HOME/.local/bin/mise\" exec -- npm audit --omit=dev --registry=${registry})"
   # Older serverpro releases installed Pi with npm install -g; drop that copy so only the reviewed tree remains.
   printf '%s\n' "if test -e \"${lib}/node_modules/${pi_tool}\"; then \"\$HOME/.local/bin/mise\" exec -- npm uninstall -g --ignore-scripts ${pi_tool}; fi"
   printf '%s\n' "rm -rf -- \"${pi_root}.old\"; if test -e \"${pi_root}\"; then mv -- \"${pi_root}\" \"${pi_root}.old\"; fi; mv -- \"\${pi_stage}\" \"${pi_root}\"; rm -rf -- \"${pi_root}.old\""
@@ -785,6 +794,7 @@ validate_bootstrap_env() {
   bootstrap_pi_version >/dev/null
   bootstrap_pi_install_directory >/dev/null
   bootstrap_pi_bin >/dev/null
+  bootstrap_pi_registry >/dev/null
   bootstrap_sha256_env SERVERPRO_BOOTSTRAP_PI_LOCK_SHA256 >/dev/null
   pi_check_command "$(bootstrap_node_version)" "$(bootstrap_pi_version)" >/dev/null
   bootstrap_herdr_version >/dev/null

@@ -81,9 +81,12 @@ func TestPiManifestRejectsUnsafePaths(t *testing.T) {
 		"bin-absolute":        piBinEnv + "=/tmp/evil.js",
 		"bin-shell":           piBinEnv + "=dist/$(id).js",
 		"bad-digest":          piLockSHA256Env + "=not-a-digest",
+		"registry-plain-http": piRegistryEnv + "=http://registry.npmjs.org/",
+		"registry-shell":      piRegistryEnv + "=https://registry.npmjs.org/$(id)/",
+		"registry-option":     piRegistryEnv + "=--userconfig=/tmp/evil",
 	} {
 		t.Run(name, func(t *testing.T) {
-			code, _, _ := runHelper(t, `pi_check_command "$TEST_NODE_VERSION" "$TEST_PI_VERSION" >/dev/null`, append(manifestEnv(), override, "TEST_NODE_VERSION="+NodeVersion, "TEST_PI_VERSION="+PiVersion)...)
+			code, _, _ := runHelper(t, `pi_check_command "$TEST_NODE_VERSION" "$TEST_PI_VERSION" >/dev/null && pi_install_commands "$TEST_NODE_VERSION" /nonexistent >/dev/null`, append(manifestEnv(), override, "TEST_NODE_VERSION="+NodeVersion, "TEST_PI_VERSION="+PiVersion)...)
 			if code == 0 {
 				t.Fatalf("unsafe manifest value accepted: %q", override)
 			}

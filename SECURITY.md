@@ -382,8 +382,9 @@ install time. Serverpro owns the Pi lockfile instead. The binary embeds it and
 refuses to start unless it installs exactly the pinned Pi version, and unless
 every package is a production download from `registry.npmjs.org` with SHA-512
 integrity. Bootstrap verifies the lockfile digest, then installs it with
-`npm ci`, which rejects any integrity mismatch, with lifecycle scripts
-disabled and development dependencies omitted. Bootstrap and doctor check the
+`npm ci`, which rejects any integrity mismatch. Bootstrap passes the registry
+to npm, so a host or user `.npmrc` cannot redirect the downloads. Lifecycle scripts
+are disabled and development dependencies are omitted. Bootstrap and doctor check the
 lockfile digest and every installed package version from metadata only,
 without executing dependency code. Bootstrap also requires a clean runtime
 dependency audit before the new tree replaces the old one. Audit failure or

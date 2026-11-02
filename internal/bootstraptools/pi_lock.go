@@ -22,6 +22,9 @@ const (
 	piLockSHA256Env  = "SERVERPRO_BOOTSTRAP_PI_LOCK_SHA256"
 	piBinEnv         = "SERVERPRO_BOOTSTRAP_PI_BIN"
 	piLockProbeEnv   = "SERVERPRO_BOOTSTRAP_PI_LOCK_PROBE_BASE64"
+	// The registry is passed to npm explicitly so a host or user .npmrc
+	// cannot redirect the reviewed downloads to another origin.
+	piRegistryEnv = "SERVERPRO_BOOTSTRAP_PI_REGISTRY"
 
 	// PiInstallDirectory is the install project directory under the Node
 	// install's lib/. It sits next to npm's global lib/node_modules rather than
@@ -192,6 +195,7 @@ func piLockEnvPairs() [][2]string {
 		{piLockSHA256Env, piLock.sha256},
 		{piBinEnv, piLock.bin},
 		{piLockProbeEnv, base64.StdEncoding.EncodeToString([]byte(piLockProbe))},
+		{piRegistryEnv, piLockRegistry},
 	}
 }
 
