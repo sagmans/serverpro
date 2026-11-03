@@ -355,29 +355,35 @@ func TestAutomationNodeRunFailsClosedWhenNotReady(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := newAutomationFixture(t, tt.cli)
-			if tt.tags != nil {
-				f.node.Tags = tt.tags
-			}
-			host := tt.host
-			if host == "" {
-				host = testAutomationHostBase
-			}
-			_, err := f.run(t, host)
-			if !errors.Is(err, tt.wantErr) || !strings.Contains(err.Error(), tt.wantText) {
-				t.Fatalf("err = %v, want %v containing %q", err, tt.wantErr, tt.wantText)
-			}
-			other := ErrAutomationPeerNotReady
-			if errors.Is(tt.wantErr, ErrAutomationPeerNotReady) {
-				other = ErrAutomationNodeNotReady
-			}
-			if errors.Is(err, other) {
-				t.Fatalf("err = %v also matches %v; retry policy would misfire", err, other)
-			}
-			if _, statErr := os.Stat(filepath.Join(f.capture, "args")); !errors.Is(statErr, os.ErrNotExist) {
-				t.Fatalf("ssh ran although the target was not ready: %v", statErr)
-			}
+			assertAutomationNotReady(t, tt.cli, tt.tags, tt.host, tt.wantErr, tt.wantText)
 		})
+	}
+}
+
+// assertAutomationNotReady runs one not-ready case: the error carries the
+// expected sentinel and only that one, and ssh never started.
+func assertAutomationNotReady(t *testing.T, cli fakeAutomationCLI, tags []string, host string, wantErr error, wantText string) {
+	t.Helper()
+	f := newAutomationFixture(t, cli)
+	if tags != nil {
+		f.node.Tags = tags
+	}
+	if host == "" {
+		host = testAutomationHostBase
+	}
+	_, err := f.run(t, host)
+	if !errors.Is(err, wantErr) || !strings.Contains(err.Error(), wantText) {
+		t.Fatalf("err = %v, want %v containing %q", err, wantErr, wantText)
+	}
+	other := ErrAutomationPeerNotReady
+	if errors.Is(wantErr, ErrAutomationPeerNotReady) {
+		other = ErrAutomationNodeNotReady
+	}
+	if errors.Is(err, other) {
+		t.Fatalf("err = %v also matches %v; retry policy would misfire", err, other)
+	}
+	if _, statErr := os.Stat(filepath.Join(f.capture, "args")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("ssh ran although the target was not ready: %v", statErr)
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 
 	"github.com/sagmans/serverpro/internal/compute"
 	"github.com/sagmans/serverpro/internal/config"
+	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/doctor"
 	"github.com/sagmans/serverpro/internal/lifecycle"
 	"github.com/sagmans/serverpro/internal/redact"
@@ -103,38 +104,16 @@ func (a *app) runServerDoctor(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	var sudoPassword string
 	remoteTarget := st.Tailscale.Name != ""
-	if remoteTarget {
-		hasSudoEnv, err := sudoPasswordEnvSet(cfg)
-		if err != nil {
-			return err
-		}
-		if a.doctorFix || hasSudoEnv {
-			label := "remote admin sudo password"
-			if a.doctorFix {
-				label = "remote admin sudo password to set/use"
-			}
-			sudoPassword, err = a.resolveSudoPasswordWithLabel(cfg, label)
-			if err != nil {
-				return err
-			}
-			if a.doctorFix {
-				if err := lifecycle.ValidateAdminPassword(sudoPassword); err != nil {
-					return err
-				}
-			}
-		}
+	sudoPassword, err := a.doctorSudoPassword(cfg, remoteTarget)
+	if err != nil {
+		return err
 	}
 	doctorCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
-	report := a.doctorReport(doctorCtx, cfg, st, creds, sudoPassword)
-	if remoteTarget && !a.doctorFix && sudoPassword == "" && reportNeedsSudoPassword(report) {
-		sudoPassword, err = a.resolveSudoPassword(cfg)
-		if err != nil {
-			return err
-		}
-		report = a.retryDoctorSudoReport(doctorCtx, cfg, st, creds, report, sudoPassword)
+	report, err := a.doctorReportWithSudoRetry(doctorCtx, cfg, st, creds, sudoPassword, remoteTarget)
+	if err != nil {
+		return err
 	}
 	if err := a.writeDoctorReport(cfg, creds, report); err != nil {
 		return redact.New(a.redactionSecrets(creds)...).Error(err)
@@ -143,6 +122,49 @@ func (a *app) runServerDoctor(ctx context.Context, name string) error {
 		return errors.New("doctor failed")
 	}
 	return nil
+}
+
+// doctorSudoPassword asks for the sudo password before the run only when
+// it is needed up front: --fix sets or uses it, and a password in the
+// environment is used as given. A local target never needs one; a remote
+// read-only run asks later, only if a check reports a sudo failure.
+func (a *app) doctorSudoPassword(cfg config.Config, remoteTarget bool) (string, error) {
+	if !remoteTarget {
+		return "", nil
+	}
+	hasSudoEnv, err := sudoPasswordEnvSet(cfg)
+	if err != nil || (!a.doctorFix && !hasSudoEnv) {
+		return "", err
+	}
+	label := "remote admin sudo password"
+	if a.doctorFix {
+		label = "remote admin sudo password to set/use"
+	}
+	sudoPassword, err := a.resolveSudoPasswordWithLabel(cfg, label)
+	if err != nil {
+		return "", err
+	}
+	if a.doctorFix {
+		if err := lifecycle.ValidateAdminPassword(sudoPassword); err != nil {
+			return "", err
+		}
+	}
+	return sudoPassword, nil
+}
+
+// doctorReportWithSudoRetry runs doctor once, and asks for the sudo password
+// and retries only when a remote read-only run without one hit a sudo
+// failure, so a passing run never prompts.
+func (a *app) doctorReportWithSudoRetry(ctx context.Context, cfg config.Config, st state.State, creds credentials.Set, sudoPassword string, remoteTarget bool) (doctor.Report, error) {
+	report := a.doctorReport(ctx, cfg, st, creds, sudoPassword)
+	if !remoteTarget || a.doctorFix || sudoPassword != "" || !reportNeedsSudoPassword(report) {
+		return report, nil
+	}
+	sudoPassword, err := a.resolveSudoPassword(cfg)
+	if err != nil {
+		return report, err
+	}
+	return a.retryDoctorSudoReport(ctx, cfg, st, creds, report, sudoPassword), nil
 }
 
 func reportNeedsSudoPassword(report doctor.Report) bool {

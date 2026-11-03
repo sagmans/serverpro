@@ -222,6 +222,14 @@ func TestServerSSHPolicyAppliesAutomationRuleAndRecordsState(t *testing.T) {
 	if strings.Join(client.calls, ",") != "ensure,validate" || !slices.Equal(client.ensureSources, []string{mesh.AutomationSourceTag}) || !slices.Equal(client.lockHeld, []bool{true}) {
 		t.Fatalf("calls=%v sources=%v lockHeld=%v", client.calls, client.ensureSources, client.lockHeld)
 	}
+	assertAutomationSourceRecorded(t, stPath)
+}
+
+// assertAutomationSourceRecorded checks the state that reconcile and the
+// revoke check read: the source and tags are recorded, and the automation
+// tag owner is not, so reconcile can prune it later.
+func assertAutomationSourceRecorded(t *testing.T, stPath string) {
+	t.Helper()
 	got := loadSSHPolicyStateAt(t, stPath)
 	if got.PolicySSHAutomationSource != mesh.AutomationSourceTag || !got.PolicySSHRule || !slices.Equal(got.PolicySSHTags, []string{sshPolicyNSTag}) || !slices.Equal(got.PolicyTagOwners, []string{sshPolicyNSTag}) {
 		t.Fatalf("state = %+v", got)

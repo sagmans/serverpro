@@ -23,11 +23,8 @@ func (c Client) ValidateSSHPolicy(ctx context.Context, tags []string, adminUser,
 			continue
 		}
 		matched = true
-		if contains(rule.Users, "root") && rule.Action != sshActionCheck {
-			return fmt.Errorf("unsafe Tailscale SSH policy: root access to %v must use check mode", tags)
-		}
-		if contains(rule.Users, "autogroup:nonroot") && rule.Action != sshActionCheck {
-			return fmt.Errorf("unsafe Tailscale SSH policy: broad autogroup:nonroot access to %v requires check mode or explicit admin user %q", tags, adminUser)
+		if err := unsafeSSHRule(rule, tags, adminUser); err != nil {
+			return err
 		}
 		if contains(rule.Users, adminUser) || contains(rule.Users, "autogroup:nonroot") {
 			allowsAdmin = true
@@ -43,6 +40,21 @@ func (c Client) ValidateSSHPolicy(ctx context.Context, tags []string, adminUser,
 		return fmt.Errorf("tailnet SSH policy for %v does not allow admin user %q", tags, adminUser)
 	case automationSource != "" && !automationAllowed:
 		return fmt.Errorf("tailnet SSH policy for %v has no accept rule for admin user %q from %s", tags, adminUser, automationSource)
+	}
+	return nil
+}
+
+// unsafeSSHRule refuses a rule that lets root, or every nonroot user, in
+// without check mode: those logins must always ask for a fresh browser login.
+func unsafeSSHRule(rule SSHRule, tags []string, adminUser string) error {
+	if rule.Action == sshActionCheck {
+		return nil
+	}
+	if contains(rule.Users, "root") {
+		return fmt.Errorf("unsafe Tailscale SSH policy: root access to %v must use check mode", tags)
+	}
+	if contains(rule.Users, "autogroup:nonroot") {
+		return fmt.Errorf("unsafe Tailscale SSH policy: broad autogroup:nonroot access to %v requires check mode or explicit admin user %q", tags, adminUser)
 	}
 	return nil
 }

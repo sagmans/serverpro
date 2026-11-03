@@ -137,12 +137,7 @@ func sshPolicyFindings(rules []mesh.SSHRule, tags []string, adminUser, source st
 			// admin user) keeps access open that no config asks for.
 			findings = append(findings, sshPolicyFinding{text: fmt.Sprintf("other %s rule from %s for %v to %v", rule.Action, mesh.AutomationSourceTag, rule.Users, rule.Dst)})
 		}
-		if slices.Contains(rule.Users, sshUserRoot) && rule.Action != sshActionCheck {
-			findings = append(findings, sshPolicyFinding{text: fmt.Sprintf("root %s rule from %v", rule.Action, rule.Src), severe: true})
-		}
-		if rule.Action == sshActionAccept && grantsAdmin(rule.Users, adminUser) && !slices.Equal(rule.Src, []string{mesh.AutomationSourceTag}) {
-			findings = append(findings, sshPolicyFinding{text: fmt.Sprintf("accept rule for %v from %v, not from %s", rule.Users, rule.Src, mesh.AutomationSourceTag)})
-		}
+		findings = append(findings, sshRuleRiskFindings(rule, adminUser)...)
 	}
 	if !humanRule {
 		findings = append(findings, sshPolicyFinding{text: "human check rule for " + adminUser + " missing", fixable: true})
@@ -155,6 +150,20 @@ func sshPolicyFindings(rules []mesh.SSHRule, tags []string, adminUser, source st
 		// and admin user can own this shared rule. ssh-policy checks the
 		// registry before it revokes.
 		findings = append(findings, sshPolicyFinding{text: "automation accept rule for " + adminUser + " present but automation is off for this server; if no other server with these tags uses it, revoke it with serverpro server ssh-policy NAME", hint: tailnetSSHRevokeHint})
+	}
+	return findings
+}
+
+// sshRuleRiskFindings reports access that one rule opens without step-up
+// auth: root outside check mode (severe), and accept for the admin user from
+// any source other than the automation tag.
+func sshRuleRiskFindings(rule mesh.SSHRule, adminUser string) []sshPolicyFinding {
+	var findings []sshPolicyFinding
+	if slices.Contains(rule.Users, sshUserRoot) && rule.Action != sshActionCheck {
+		findings = append(findings, sshPolicyFinding{text: fmt.Sprintf("root %s rule from %v", rule.Action, rule.Src), severe: true})
+	}
+	if rule.Action == sshActionAccept && grantsAdmin(rule.Users, adminUser) && !slices.Equal(rule.Src, []string{mesh.AutomationSourceTag}) {
+		findings = append(findings, sshPolicyFinding{text: fmt.Sprintf("accept rule for %v from %v, not from %s", rule.Users, rule.Src, mesh.AutomationSourceTag)})
 	}
 	return findings
 }
