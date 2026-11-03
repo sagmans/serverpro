@@ -202,6 +202,14 @@ tag: Tailscale would then reject the policy write that revokes the rule.
 ],
 ```
 
+When two servers in one namespace use `ssh_tags` (USAGE.md, Separate
+servers in one namespace), also deny each admin user on the other
+server's tag. The test then fails a later edit that joins them again:
+
+```jsonc
+{"src": "tag:serverpro-automation", "dst": ["<server B tag>"], "deny": ["root", "<admin user of A>"]},
+```
+
 ## Official docs
 
 - Tailscale API: <https://tailscale.com/docs/reference/tailscale-api>

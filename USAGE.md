@@ -1179,8 +1179,8 @@ The write then stays live and recorded: fix the policy by hand and run
 the command again. When the live rules already match, it writes nothing
 and only records state.
 
-The `accept` rule is shared by every server with the same tags and admin
-user. `server create` and `doctor --fix` add it but never remove it. To
+The `accept` rule is shared by every server with the same SSH rule tags
+and admin user. `server create` and `doctor --fix` add it but never remove it. To
 revoke it, set `enabled: false` (`socket` and `cli` can stay) and run
 `server ssh-policy` again. The command removes the rule only when no other
 registered server on the tailnet records it. Otherwise it keeps the rule
@@ -1190,6 +1190,28 @@ records it.
 
 The node reaches a server only when a packet grant opens `tcp:22` from
 the tag. serverpro never writes packet rules.
+
+### Separate servers in one namespace
+
+Every server has the namespace tag, and a Tailscale SSH rule reaches every
+node that has any of its `dst` tags. So when two servers in one namespace
+have different admin users, the rules of each server also reach the other.
+Give each server its own tag and set `ssh_tags` to it. The rules then name
+only that tag, and doctor warns about a rule from the automation tag that
+still reaches the server through a shared tag.
+
+```yaml
+access:
+  tailscale:
+    tags: [tag:serverpro-mynamespace, tag:serverpro-mynamespace-webapp]
+    ssh_tags: [tag:serverpro-mynamespace-webapp]
+```
+
+Every `ssh_tags` entry must also be in `tags`. Empty means `tags`.
+serverpro does not move existing rules: add the tag to the device, write
+the new rules with `server ssh-policy`, then remove the old rules by hand.
+`server import` keeps `ssh_tags` from an existing config, but an import
+without one cannot restore it, so set it again.
 
 ## Reconcile tailnet-global policy
 

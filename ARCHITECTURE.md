@@ -288,8 +288,12 @@ access paths for app-owned deployment flows.
     provider `tailnet policy` check reads the policy file through the mesh
     snapshot and warns on allow-all packet rules. The provider
     `tailnet ssh policy` check compares the live SSH rules with config and
-    the state record of the automation source; `--fix` rewrites only the
-    serverpro rules, and the CLI stores the change in state.
+    the state record of the automation source. It scans every rule that
+    reaches the server through any device tag, but counts as its own only
+    the rules for `ssh_tags` (default: all tags), so a rule of another
+    server that reaches it through the shared namespace tag shows up.
+    `--fix` rewrites only the serverpro rules, and the CLI stores the
+    change in state.
 - Polling: `internal/poll`
   - Shared context-aware wait policy used by provider and lifecycle polling.
 - Mesh facade: `internal/mesh`

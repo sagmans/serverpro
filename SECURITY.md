@@ -246,10 +246,15 @@ default.
   agent offered. The target must be exactly one peer that carries a
   server tag. Keep the socket in a 0700 directory, run the node in
   userspace mode with no SOCKS5 or HTTP proxy, and grant the tag `tcp:22`
-  only. The `accept` rule is shared by servers with the same tags and
-  admin user, so turning automation off for one server does not revoke
-  it while another registered server records it. Doctor fails on a
-  missing `accept` rule and warns on a left-over or foreign one. To
+  only. The `accept` rule is shared by servers with the same SSH rule
+  tags and admin user, so turning automation off for one server does not
+  revoke it while another registered server records it. A rule reaches
+  every node with any of its `dst` tags, and all servers in a namespace
+  share the namespace tag, so separate servers in one namespace need
+  their own tag in `ssh_tags` (USAGE.md, Separate servers in one
+  namespace); config accepts only tags that the server itself carries.
+  Doctor fails on a missing `accept` rule and warns on a left-over or
+  foreign one, also one that reaches the server through a shared tag. To
   revoke for all, set `enabled: false` on every server that shares the
   rule, run `server ssh-policy` for each, then log the node out and
   remove its device.
