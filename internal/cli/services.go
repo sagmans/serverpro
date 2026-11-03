@@ -109,7 +109,7 @@ type doctorSSHPolicyFixer struct {
 	policy serverSSHPolicyClient
 }
 
-func (f doctorSSHPolicyFixer) EnsureServerproPolicy(ctx context.Context, _ []string, _, _, _ string) (mesh.PolicyChange, error) {
+func (f doctorSSHPolicyFixer) EnsureServerproPolicy(ctx context.Context, _, _ []string, _, _, _ string) (mesh.PolicyChange, error) {
 	if f.stPath == "" {
 		return mesh.PolicyChange{}, errDoctorFixNoStatePath
 	}

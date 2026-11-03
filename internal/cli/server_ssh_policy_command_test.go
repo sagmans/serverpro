@@ -51,7 +51,7 @@ type fakeSSHPolicyClient struct {
 	sourceAtRemove []string
 }
 
-func (f *fakeSSHPolicyClient) EnsureServerproPolicy(ctx context.Context, tags []string, adminUser, rootPolicy, automationSource string) (mesh.PolicyChange, error) {
+func (f *fakeSSHPolicyClient) EnsureServerproPolicy(ctx context.Context, tags, _ []string, adminUser, rootPolicy, automationSource string) (mesh.PolicyChange, error) {
 	f.calls = append(f.calls, "ensure")
 	f.ensureSources = append(f.ensureSources, automationSource)
 	if !slices.Equal(tags, []string{sshPolicyNSTag}) || adminUser != sshPolicyAdmin || rootPolicy != sshPolicyRoot {
@@ -70,7 +70,7 @@ func (f *fakeSSHPolicyClient) RemoveAutomationSSHRule(_ context.Context, tags []
 	return f.removeChange, nil
 }
 
-func (f *fakeSSHPolicyClient) ValidateSSHPolicy(context.Context, []string, string, string, string) error {
+func (f *fakeSSHPolicyClient) ValidateSSHPolicy(context.Context, []string, []string, string, string, string) error {
 	f.calls = append(f.calls, "validate")
 	return f.validateErr
 }
@@ -403,7 +403,7 @@ func TestDoctorSSHPolicyFixerUsesLockedWriteWithoutRevoke(t *testing.T) {
 	client := &fakeSSHPolicyClient{t: t, stPath: stPath, ensureChange: mesh.PolicyChange{SSHRule: true}}
 	fixer := doctorSSHPolicyFixer{cfg: cfg, stPath: stPath, policy: client}
 
-	change, err := fixer.EnsureServerproPolicy(context.Background(), []string{"tag:ignored"}, "ignored", "ignored", mesh.AutomationSourceTag)
+	change, err := fixer.EnsureServerproPolicy(context.Background(), []string{"tag:ignored"}, []string{"tag:ignored"}, "ignored", "ignored", mesh.AutomationSourceTag)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -425,7 +425,7 @@ func TestDoctorSSHPolicyFixerRefusesWithoutStatePath(t *testing.T) {
 	client := &fakeSSHPolicyClient{t: t}
 	fixer := doctorSSHPolicyFixer{cfg: cfg, policy: client}
 
-	if _, err := fixer.EnsureServerproPolicy(context.Background(), nil, "", "", ""); !errors.Is(err, errDoctorFixNoStatePath) {
+	if _, err := fixer.EnsureServerproPolicy(context.Background(), nil, nil, "", "", ""); !errors.Is(err, errDoctorFixNoStatePath) {
 		t.Fatalf("err = %v", err)
 	}
 	if len(client.calls) != 0 {

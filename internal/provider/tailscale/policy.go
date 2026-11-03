@@ -49,13 +49,16 @@ func (c Client) decodePolicyFile(ctx context.Context, into any) error {
 
 type ServerproPolicyChange = mesh.PolicyChange
 
-// EnsureServerproPolicy writes the serverpro tag owners, the human check rule
-// and, when automationSource is set, the automation accept rule. An empty
+// EnsureServerproPolicy writes the tag owners for every server tag, and the
+// human check rule and (when automationSource is set) the automation accept
+// rule for sshTags only. The two sets differ when a server narrows its rules
+// to its own tag, because all its tags still need an owner to enrol. An empty
 // automationSource leaves an existing accept rule alone: servers that share
-// the same tags and admin user share that rule, so one server with automation
-// off must not revoke it for the others. Revocation is RemoveAutomationSSHRule,
-// which only the caller that checked the registry may call.
-func (c Client) EnsureServerproPolicy(ctx context.Context, tags []string, adminUser, rootPolicy, automationSource string) (ServerproPolicyChange, error) {
+// the same SSH rule tags and admin user share that rule, so one server with
+// automation off must not revoke it for the others. Revocation is
+// RemoveAutomationSSHRule, which only the caller that checked the registry
+// may call.
+func (c Client) EnsureServerproPolicy(ctx context.Context, tags, sshTags []string, adminUser, rootPolicy, automationSource string) (ServerproPolicyChange, error) {
 	var change ServerproPolicyChange
 	if rootPolicy != "check-or-disabled" {
 		return change, fmt.Errorf("unsupported root policy %q", rootPolicy)
@@ -81,12 +84,12 @@ func (c Client) EnsureServerproPolicy(ctx context.Context, tags []string, adminU
 		return change, err
 	}
 	change.TagOwners = addedTags
-	addedSSHRule, err := doc.ensureSSHRule(tags, adminUser)
+	addedSSHRule, err := doc.ensureSSHRule(sshTags, adminUser)
 	if err != nil {
 		return change, err
 	}
 	change.SSHRule = addedSSHRule
-	change.AutomationSSHRule, change.AutomationSSHRuleRemoved, err = doc.ensureAutomationSSHRule(tags, adminUser, automationSource)
+	change.AutomationSSHRule, change.AutomationSSHRuleRemoved, err = doc.ensureAutomationSSHRule(sshTags, adminUser, automationSource)
 	if err != nil {
 		return change, err
 	}

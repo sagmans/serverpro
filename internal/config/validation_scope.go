@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -17,6 +18,9 @@ func (c Config) validateNamespaceScopes() error {
 	}
 	if !tailscaleTagsScopedToNamespace(c.Access.Tailscale.Tags, c.Namespace) {
 		return fmt.Errorf("access.tailscale.tags must include namespace %q", c.Namespace)
+	}
+	if err := validateSSHTags(c.Access.Tailscale.SSHTags, c.Access.Tailscale.Tags); err != nil {
+		return err
 	}
 	if !nameScopedToNamespace(c.Cloudflare.Tunnel.Name, c.Namespace) {
 		return fmt.Errorf("cloudflare.tunnel.name must be scoped to namespace %q", c.Namespace)
@@ -51,6 +55,23 @@ func tailscaleTagsScopedToNamespace(tags []string, namespace string) bool {
 		}
 	}
 	return false
+}
+
+// validateSSHTags allows only tags that the server itself carries, once each.
+// A tag outside Tags would point the admin rules at other nodes, which is the
+// cross-server reach that ssh_tags exists to prevent.
+func validateSSHTags(sshTags, tags []string) error {
+	seen := make(map[string]bool, len(sshTags))
+	for _, tag := range sshTags {
+		if !slices.Contains(tags, tag) {
+			return fmt.Errorf("access.tailscale.ssh_tags entry %q must also be in access.tailscale.tags", tag)
+		}
+		if seen[tag] {
+			return fmt.Errorf("access.tailscale.ssh_tags lists %q more than once", tag)
+		}
+		seen[tag] = true
+	}
+	return nil
 }
 
 func validTailscaleTag(tag string) bool {

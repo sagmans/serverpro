@@ -48,7 +48,7 @@ func TestEnsureServerproPolicyAddsTagOwnerAndSSHRule(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	change, err := NewWithHTTP("token", "-", ts.URL, ts.Client()).EnsureServerproPolicy(context.Background(), []string{"tag:serverpro-prod"}, "deploy", "check-or-disabled", "")
+	change, err := NewWithHTTP("token", "-", ts.URL, ts.Client()).EnsureServerproPolicy(context.Background(), []string{"tag:serverpro-prod"}, []string{"tag:serverpro-prod"}, "deploy", "check-or-disabled", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestEnsureServerproPolicyRejectsMutationWithoutETag(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	_, err := NewWithHTTP("token", "-", ts.URL, ts.Client()).EnsureServerproPolicy(context.Background(), []string{"tag:serverpro-prod"}, "deploy", "check-or-disabled", "")
+	_, err := NewWithHTTP("token", "-", ts.URL, ts.Client()).EnsureServerproPolicy(context.Background(), []string{"tag:serverpro-prod"}, []string{"tag:serverpro-prod"}, "deploy", "check-or-disabled", "")
 	if !errors.Is(err, ErrPolicyETagMissing) || policyPosts != 0 {
 		t.Fatalf("err=%v policyPosts=%d", err, policyPosts)
 	}
@@ -109,7 +109,7 @@ func TestEnsureServerproPolicyNoopsWhenManagedEntriesExist(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	change, err := NewWithHTTP("token", "-", ts.URL, ts.Client()).EnsureServerproPolicy(context.Background(), []string{"tag:serverpro-prod"}, "deploy", "check-or-disabled", "")
+	change, err := NewWithHTTP("token", "-", ts.URL, ts.Client()).EnsureServerproPolicy(context.Background(), []string{"tag:serverpro-prod"}, []string{"tag:serverpro-prod"}, "deploy", "check-or-disabled", "")
 	if err != nil {
 		t.Fatal(err)
 	}

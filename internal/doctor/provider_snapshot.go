@@ -83,12 +83,12 @@ func (c *snapshotTailscaleClient) SSHPolicy(ctx context.Context) ([]mesh.SSHRule
 }
 
 // EnsureServerproPolicy passes the repair through to the live client.
-func (c *snapshotTailscaleClient) EnsureServerproPolicy(ctx context.Context, tags []string, adminUser, rootPolicy, automationSource string) (mesh.PolicyChange, error) {
+func (c *snapshotTailscaleClient) EnsureServerproPolicy(ctx context.Context, tags, sshTags []string, adminUser, rootPolicy, automationSource string) (mesh.PolicyChange, error) {
 	source, ok := c.source.(TailnetSSHPolicyFixer)
 	if !ok {
 		return mesh.PolicyChange{}, errTailnetSSHPolicyUnsupported
 	}
-	return source.EnsureServerproPolicy(ctx, tags, adminUser, rootPolicy, automationSource)
+	return source.EnsureServerproPolicy(ctx, tags, sshTags, adminUser, rootPolicy, automationSource)
 }
 
 type snapshotCloudflareClient struct {

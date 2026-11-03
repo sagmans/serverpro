@@ -24,7 +24,7 @@ type exactPolicyTailscale struct {
 	source []string
 }
 
-func (f *exactPolicyTailscale) EnsureServerproPolicy(_ context.Context, _ []string, _, _, automationSource string) (mesh.PolicyChange, error) {
+func (f *exactPolicyTailscale) EnsureServerproPolicy(_ context.Context, _, _ []string, _, _, automationSource string) (mesh.PolicyChange, error) {
 	f.calls = append(f.calls, "ensure-policy")
 	f.source = append(f.source, automationSource)
 	return f.change, f.err
@@ -143,5 +143,19 @@ func TestEnsureTailscalePolicySkipsOrFailsWithoutRecord(t *testing.T) {
 	}
 	if len(saves.paths) != 0 || st.Tailscale.PolicySSHAutomationSource != "" {
 		t.Fatalf("failed write recorded: saves=%v state=%+v", saves.paths, st.Tailscale)
+	}
+}
+
+// A server that already owns its check rule records the rule tags of the
+// current config after a successful write, also when the write changed
+// nothing because the rule for ssh_tags was moved there by hand.
+func TestRecordTailscalePolicyChangeFollowsSSHTags(t *testing.T) {
+	cfg := policyTestConfig(true)
+	cfg.Access.Tailscale.Tags = []string{"tag:serverpro-prod", "tag:serverpro-prod-webapp"}
+	cfg.Access.Tailscale.SSHTags = []string{"tag:serverpro-prod-webapp"}
+	owned := state.State{Tailscale: state.TailscaleState{PolicySSHRule: true, PolicySSHTags: []string{"tag:serverpro-prod", "tag:serverpro-prod-webapp"}}}
+	RecordTailscalePolicyChange(&owned, cfg, mesh.PolicyChange{})
+	if !slices.Equal(owned.Tailscale.PolicySSHTags, []string{"tag:serverpro-prod-webapp"}) {
+		t.Fatalf("owned rule tags = %v", owned.Tailscale.PolicySSHTags)
 	}
 }

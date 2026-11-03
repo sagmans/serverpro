@@ -15,11 +15,14 @@ import (
 // serverSSHPolicyRow reports the rules that one ssh-policy run asked for and
 // what it changed, so an operator can audit a migration from the output.
 type serverSSHPolicyRow struct {
-	Status                   string   `json:"status"`
-	DryRun                   bool     `json:"dry_run,omitempty"`
-	Namespace                string   `json:"namespace"`
-	Server                   string   `json:"server"`
-	Tags                     []string `json:"tags"`
+	Status    string   `json:"status"`
+	DryRun    bool     `json:"dry_run,omitempty"`
+	Namespace string   `json:"namespace"`
+	Server    string   `json:"server"`
+	Tags      []string `json:"tags"`
+	// SSHTags is the destination of the rules, so the output shows when a
+	// server narrows them to its own tag.
+	SSHTags                  []string `json:"ssh_tags"`
 	AdminUser                string   `json:"admin_user"`
 	AutomationSource         string   `json:"automation_source,omitempty"`
 	TagOwnersAdded           []string `json:"tag_owners_added,omitempty"`
@@ -35,9 +38,9 @@ type serverSSHPolicyRow struct {
 // and the doctor repair need; services.go builds it, so this file stays
 // provider-neutral.
 type serverSSHPolicyClient interface {
-	EnsureServerproPolicy(ctx context.Context, tags []string, adminUser, rootPolicy, automationSource string) (mesh.PolicyChange, error)
+	EnsureServerproPolicy(ctx context.Context, tags, sshTags []string, adminUser, rootPolicy, automationSource string) (mesh.PolicyChange, error)
 	RemoveAutomationSSHRule(ctx context.Context, tags []string, adminUser string) (mesh.PolicyChange, error)
-	ValidateSSHPolicy(ctx context.Context, tags []string, adminUser, rootPolicy, automationSource string) error
+	ValidateSSHPolicy(ctx context.Context, tags, sshTags []string, adminUser, rootPolicy, automationSource string) error
 }
 
 // serverSSHPolicyCmd applies only the serverpro SSH rules for one server. It
@@ -55,7 +58,7 @@ func (a *app) runServerSSHPolicy(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	row := serverSSHPolicyRow{Namespace: cfg.Namespace, Server: targetServer(cfg.Server), Tags: cfg.Access.Tailscale.Tags, AdminUser: cfg.Admin.Username, AutomationSource: cfg.Access.Tailscale.AutomationSource()}
+	row := serverSSHPolicyRow{Namespace: cfg.Namespace, Server: targetServer(cfg.Server), Tags: cfg.Access.Tailscale.Tags, SSHTags: cfg.Access.Tailscale.SSHRuleTags(), AdminUser: cfg.Admin.Username, AutomationSource: cfg.Access.Tailscale.AutomationSource()}
 	if a.dryRun {
 		row.Status, row.DryRun = "planned", true
 		return writeJSON(a.stdout, row)
@@ -104,7 +107,7 @@ func applyServerSSHPolicy(ctx context.Context, cfg config.Config, stPath string,
 		return mesh.PolicyChange{}, nil, err
 	}
 	defer unlockTailnet()
-	change, err := client.EnsureServerproPolicy(ctx, ts.Tags, cfg.Admin.Username, ts.RootPolicy, ts.AutomationSource())
+	change, err := client.EnsureServerproPolicy(ctx, ts.Tags, ts.SSHRuleTags(), cfg.Admin.Username, ts.RootPolicy, ts.AutomationSource())
 	if err != nil {
 		return change, nil, err
 	}
@@ -122,14 +125,14 @@ func applyServerSSHPolicy(ctx context.Context, cfg config.Config, stPath string,
 			return change, nil, fmt.Errorf("decide whether to revoke the automation SSH rule for %s/%s: %w", cfg.Namespace, targetServer(cfg.Server), err)
 		}
 		if len(keptFor) == 0 {
-			removed, err := client.RemoveAutomationSSHRule(ctx, ts.Tags, cfg.Admin.Username)
+			removed, err := client.RemoveAutomationSSHRule(ctx, ts.SSHRuleTags(), cfg.Admin.Username)
 			if err != nil {
 				return change, nil, err
 			}
 			change.AutomationSSHRuleRemoved = removed.AutomationSSHRuleRemoved
 		}
 	}
-	return change, keptFor, client.ValidateSSHPolicy(ctx, ts.Tags, cfg.Admin.Username, ts.RootPolicy, ts.AutomationSource())
+	return change, keptFor, client.ValidateSSHPolicy(ctx, ts.Tags, ts.SSHRuleTags(), cfg.Admin.Username, ts.RootPolicy, ts.AutomationSource())
 }
 
 func recordSSHPolicyChange(stPath string, cfg config.Config, change mesh.PolicyChange) error {
@@ -140,7 +143,7 @@ func recordSSHPolicyChange(stPath string, cfg config.Config, change mesh.PolicyC
 }
 
 // automationRuleSharers lists the other registered servers whose state
-// records the automation source for the same tag set and admin user. Those
+// records the automation source for the same SSH rule tags and admin user. Those
 // servers share the one accept rule, so a revoke for this server would cut
 // them off. A server recorded on another tailnet does not share the rule.
 // Any unreadable registry, state or config fails closed: the caller then
@@ -170,7 +173,7 @@ func automationRuleSharers(cfg config.Config, tailnet string) ([]string, error) 
 		if err != nil {
 			return nil, fmt.Errorf("load registered server %s/%s config: %w", entry.Namespace, entry.Server, err)
 		}
-		if other.Admin.Username == cfg.Admin.Username && sameTagSet(other.Access.Tailscale.Tags, cfg.Access.Tailscale.Tags) {
+		if other.Admin.Username == cfg.Admin.Username && sameTagSet(other.Access.Tailscale.SSHRuleTags(), cfg.Access.Tailscale.SSHRuleTags()) {
 			sharers = append(sharers, entry.Namespace+"/"+entry.Server)
 		}
 	}

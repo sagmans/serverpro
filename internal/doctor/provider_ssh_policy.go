@@ -73,7 +73,7 @@ func checkTailnetSSHPolicy(ctx context.Context, cfg config.Config, st state.Stat
 		result.Remediation = "grant the Tailscale API token policy-file read access, then rerun doctor"
 		return result
 	}
-	findings := sshPolicyFindings(rules, ts.Tags, cfg.Admin.Username, ts.AutomationSource())
+	findings := sshPolicyFindings(rules, ts.Tags, ts.SSHRuleTags(), cfg.Admin.Username, ts.AutomationSource())
 	if recorded, want := st.Tailscale.PolicySSHAutomationSource, ts.AutomationSource(); recorded != want {
 		findings = append(findings, sshPolicyFinding{text: fmt.Sprintf("state records automation source %q, config asks for %q", recorded, want), fixable: true})
 	}
@@ -95,7 +95,7 @@ func repairTailnetSSHPolicy(ctx context.Context, cfg config.Config, client Tails
 	}
 	ts := cfg.Access.Tailscale
 	fixCtx, cancel := context.WithTimeout(ctx, tailnetSSHPolicyFixTimeout)
-	_, err := fixer.EnsureServerproPolicy(fixCtx, ts.Tags, cfg.Admin.Username, ts.RootPolicy, ts.AutomationSource())
+	_, err := fixer.EnsureServerproPolicy(fixCtx, ts.Tags, ts.SSHRuleTags(), cfg.Admin.Username, ts.RootPolicy, ts.AutomationSource())
 	cancel()
 	if err != nil {
 		return fail("provider", tailnetSSHPolicyCheckName, "repair failed: "+err.Error()+"; findings: "+findingsText(findings), tailnetSSHPolicyFixHint)
@@ -120,7 +120,11 @@ func splitFixable(findings []sshPolicyFinding) (fixed, remaining []sshPolicyFind
 	return fixed, remaining
 }
 
-func sshPolicyFindings(rules []mesh.SSHRule, tags []string, adminUser, source string) []sshPolicyFinding {
+// sshPolicyFindings scans every rule that reaches the server through any of
+// its device tags, because Tailscale applies a rule to every node with any
+// dst tag. Only the rules for sshTags count as this server's own; an
+// automation rule that reaches it through a shared tag is reported.
+func sshPolicyFindings(rules []mesh.SSHRule, tags, sshTags []string, adminUser, source string) []sshPolicyFinding {
 	var findings []sshPolicyFinding
 	humanRule, automationRule := false, false
 	for _, rule := range rules {
@@ -128,13 +132,14 @@ func sshPolicyFindings(rules []mesh.SSHRule, tags []string, adminUser, source st
 			continue
 		}
 		switch {
-		case isServerproCheckRule(rule, tags, adminUser):
+		case isServerproCheckRule(rule, sshTags, adminUser):
 			humanRule = true
-		case isAutomationAcceptRule(rule, tags, adminUser):
+		case isAutomationAcceptRule(rule, sshTags, adminUser):
 			automationRule = true
 		case slices.Contains(rule.Src, mesh.AutomationSourceTag):
-			// A rule from the automation tag in another shape (old tags or
-			// admin user) keeps access open that no config asks for.
+			// A rule from the automation tag in another shape (old tags,
+			// another server's tags or admin user) keeps access open that no
+			// config of this server asks for.
 			findings = append(findings, sshPolicyFinding{text: fmt.Sprintf("other %s rule from %s for %v to %v", rule.Action, mesh.AutomationSourceTag, rule.Users, rule.Dst)})
 		}
 		findings = append(findings, sshRuleRiskFindings(rule, adminUser)...)

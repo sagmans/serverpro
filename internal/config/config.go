@@ -82,10 +82,16 @@ type Access struct {
 }
 
 type Tailscale struct {
-	Enabled    bool     `yaml:"enabled" json:"enabled"`
-	SSH        bool     `yaml:"ssh" json:"ssh"`
-	Tailnet    string   `yaml:"tailnet" json:"tailnet"`
-	Tags       []string `yaml:"tags" json:"tags"`
+	Enabled bool     `yaml:"enabled" json:"enabled"`
+	SSH     bool     `yaml:"ssh" json:"ssh"`
+	Tailnet string   `yaml:"tailnet" json:"tailnet"`
+	Tags    []string `yaml:"tags" json:"tags"`
+	// SSHTags narrows the destination of the serverpro SSH rules to some of
+	// Tags. Every server carries the shared namespace tag, and a rule reaches
+	// every node that has any of its destination tags, so two servers in one
+	// namespace with different admin users need their own tag here to keep
+	// each other's SSH rules out. Empty means Tags.
+	SSHTags    []string `yaml:"ssh_tags,omitempty" json:"ssh_tags,omitempty"`
 	RootPolicy string   `yaml:"root_policy" json:"root_policy"`
 	// Automation is optional: an omitted section keeps the admin user on the
 	// human check rule only, so every SSH session needs a fresh browser login.
@@ -119,6 +125,16 @@ func (t Tailscale) AutomationSource() string {
 		return ""
 	}
 	return AutomationTailscaleTag
+}
+
+// SSHRuleTags is the destination of the human check rule and the automation
+// accept rule. Policy writes, the read-back, doctor and the shared-rule check
+// all use it, so they agree on which rule belongs to this server.
+func (t Tailscale) SSHRuleTags() []string {
+	if len(t.SSHTags) > 0 {
+		return t.SSHTags
+	}
+	return t.Tags
 }
 
 type Cloudflare struct {

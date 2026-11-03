@@ -22,13 +22,13 @@ func ensureTailscalePolicy(ctx context.Context, st *state.State, stPath string, 
 	if creds.Tailscale == "" {
 		return nil
 	}
-	change, err := c.EnsureServerproPolicy(ctx, cfg.Access.Tailscale.Tags, cfg.Admin.Username, cfg.Access.Tailscale.RootPolicy, cfg.Access.Tailscale.AutomationSource())
+	change, err := c.EnsureServerproPolicy(ctx, cfg.Access.Tailscale.Tags, cfg.Access.Tailscale.SSHRuleTags(), cfg.Admin.Username, cfg.Access.Tailscale.RootPolicy, cfg.Access.Tailscale.AutomationSource())
 	if err != nil {
 		return err
 	}
 	before := st.Tailscale
 	RecordTailscalePolicyChange(st, cfg, change)
-	if !change.Changed() && before.PolicySSHAutomationSource == st.Tailscale.PolicySSHAutomationSource && len(before.PolicySSHTags) == len(st.Tailscale.PolicySSHTags) {
+	if !change.Changed() && before.PolicySSHAutomationSource == st.Tailscale.PolicySSHAutomationSource && slices.Equal(before.PolicySSHTags, st.Tailscale.PolicySSHTags) {
 		return nil
 	}
 	return save(stPath, *st)
@@ -47,15 +47,18 @@ func RecordTailscalePolicyChange(st *state.State, cfg config.Config, change mesh
 	// records the source.
 	owners := slices.DeleteFunc(slices.Clone(change.TagOwners), func(tag string) bool { return tag == mesh.AutomationSourceTag })
 	st.Tailscale.PolicyTagOwners = appendMissingStrings(st.Tailscale.PolicyTagOwners, owners)
-	if change.SSHRule {
+	// A server that already owns its check rule follows its ssh_tags too: a
+	// successful write means the rule for those tags is in the policy now,
+	// also when an operator moved it there by hand.
+	if change.SSHRule || st.Tailscale.PolicySSHRule {
 		st.Tailscale.PolicySSHRule = true
-		st.Tailscale.PolicySSHTags = append([]string(nil), cfg.Access.Tailscale.Tags...)
+		st.Tailscale.PolicySSHTags = append([]string(nil), cfg.Access.Tailscale.SSHRuleTags()...)
 	}
 	st.Tailscale.PolicySSHAutomationSource = cfg.Access.Tailscale.AutomationSource()
 	// A server created before rule tracking gets its tags recorded here, so a
 	// later delete knows which accept rule it shares.
 	if st.Tailscale.PolicySSHAutomationSource != "" && len(st.Tailscale.PolicySSHTags) == 0 {
-		st.Tailscale.PolicySSHTags = append([]string(nil), cfg.Access.Tailscale.Tags...)
+		st.Tailscale.PolicySSHTags = append([]string(nil), cfg.Access.Tailscale.SSHRuleTags()...)
 	}
 }
 
@@ -90,7 +93,7 @@ func validateTailscaleSSHPolicy(ctx context.Context, c TailscaleClient, creds cr
 	if creds.Tailscale == "" {
 		return nil
 	}
-	return c.ValidateSSHPolicy(ctx, cfg.Access.Tailscale.Tags, cfg.Admin.Username, cfg.Access.Tailscale.RootPolicy, cfg.Access.Tailscale.AutomationSource())
+	return c.ValidateSSHPolicy(ctx, cfg.Access.Tailscale.Tags, cfg.Access.Tailscale.SSHRuleTags(), cfg.Admin.Username, cfg.Access.Tailscale.RootPolicy, cfg.Access.Tailscale.AutomationSource())
 }
 
 // waitTailscaleDevice binds create to the device this run enrolled. Bootstrap
