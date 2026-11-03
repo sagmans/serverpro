@@ -227,10 +227,30 @@ default.
   write and that runs one fixed action. See USAGE.md, Drift checks and
   Provider image accounts.
 - Tailnet packet rules are outside serverpro's ownership: serverpro edits only
-  its tag owners and SSH rule. Doctor warns when the tailnet policy lets every
+  its tag owners and SSH rules. Doctor warns when the tailnet policy lets every
   source reach every port, since UFW is then the only barrier between any
   tailnet device and every listening port. See `docs/tailscale-setup.md`,
   Recommended grants policy.
+- Automation SSH (`access.tailscale.automation`, off by default) trades
+  step-up login for unattended runs. Every process that can open the
+  node's LocalAPI socket gets admin SSH, and with it sudo through the
+  stored password, on every server whose rule names the tag, with no
+  browser login. Controls: the tag is fixed and config cannot name a
+  server tag as the source; the `accept` rule names only the admin user,
+  so root stays `check` or disabled; the human rule stays `check`; and
+  the read-back fails closed when a root rule is not `check`. The
+  transport uses `-F /dev/null`, `BatchMode`, and strict host keys from
+  the node's own peer status, the system `/usr/bin/ssh`, and no key or
+  agent offered. The target must be exactly one peer that carries a
+  server tag. Keep the socket in a 0700 directory, run the node in
+  userspace mode with no SOCKS5 or HTTP proxy, and grant the tag `tcp:22`
+  only. The `accept` rule is shared by servers with the same tags and
+  admin user, so turning automation off for one server does not revoke
+  it while another registered server records it. Doctor fails on a
+  missing `accept` rule and warns on a left-over or foreign one. To
+  revoke for all, set `enabled: false` on every server that shares the
+  rule, run `server ssh-policy` for each, then log the node out and
+  remove its device.
 - Tailnet DNS is part of the access path: with MagicDNS enabled, the tailnet
   must define global nameservers and enable Override DNS servers, or managed
   hosts can lose all public name resolution without any local change.

@@ -278,6 +278,10 @@ MYNAMESPACE_WEBAPP_SUDOPASS='use-a-long-remote-admin-password' \
   --non-interactive --yes
 ```
 
+Unattended runs against existing servers need SSH with no browser login.
+Set up the automation node in `docs/tailscale-setup.md`, Automation node,
+and read the tradeoff in SECURITY.md first.
+
 Catalog and provider checks can use an ephemeral provider token:
 
 ```sh

@@ -56,8 +56,10 @@ dig google.com         # NOERROR via 100.100.100.100
 
 ## Recommended grants policy
 
-serverpro writes only its tag owners and one `ssh` rule to the tailnet policy
-file. It never edits the packet rules (`acls` or `grants`). Those rules decide
+serverpro writes only its tag owners and its `ssh` rules to the tailnet
+policy file: one `check` rule, plus one `accept` rule when automation is
+on (see Automation node). It never edits the packet rules (`acls` or
+`grants`). Those rules decide
 which tailnet devices reach which ports on a managed server. A new tailnet
 starts with the default allow-all rule, so any tailnet device, including a
 compromised laptop, reaches every port that a server listens on. UFW is then the
@@ -145,6 +147,60 @@ An empty `"acls": []` denies all traffic, so doctor does not warn on it.
 Doctor reads a file with `grants` and no `acls` as grants only. Tailscale's
 docs do not say whether the default allow-all still applies to such a file:
 check the effective access in the admin console before you rely on it.
+
+## Automation node
+
+With `access.tailscale.automation`, serverpro runs non-interactive SSH
+through a second, tagged Tailscale node on the controller. Tailscale
+gives `accept` to that node, so no browser login stops a run. Your own
+device and `serverpro server ssh` keep `check`. Read the tradeoff in
+SECURITY.md before you turn it on.
+
+1. Install `tailscale` and `tailscaled` of the managed release (see
+   INSTALLATION.md) into a directory that only your user can write.
+2. Run `tailscaled` as your user in userspace mode. Put the state and
+   socket in a 0700 directory. Do not add `--socks5-server` or
+   `--outbound-http-proxy-listen`. On macOS, use a LaunchAgent:
+
+   ```sh
+   tailscaled --tun=userspace-networking --port=0 \
+     --statedir=$HOME/.local/state/serverpro-automation \
+     --socket=$HOME/.local/state/serverpro-automation/tailscaled.sock
+   ```
+
+3. Add the tag owner and a grant that opens only SSH from the tag:
+
+   ```jsonc
+   "tagOwners": {"tag:serverpro-automation": ["autogroup:admin"]},
+   "grants": [
+     {"src": ["tag:serverpro-automation"], "dst": ["tag:serverpro-server"], "ip": ["tcp:22"]},
+   ],
+   ```
+
+4. Create a single-use, pre-approved auth key for
+   `tag:serverpro-automation` with a short expiry. Join with the key in a
+   0600 file, so it is not in the process list:
+
+   ```sh
+   tailscale --socket=$HOME/.local/state/serverpro-automation/tailscaled.sock up \
+     --auth-key=file:/path/to/key --hostname=serverpro-automation \
+     --advertise-tags=tag:serverpro-automation --accept-dns=false --shields-up
+   ```
+
+5. Delete the key file. A tagged node has no key expiry by default.
+6. Set `access.tailscale.automation` in each server config and run
+   `serverpro server ssh-policy NAME` (USAGE.md, Automation SSH source).
+
+Add `sshTests` so that Tailscale rejects a later edit that gives root to
+the tag or drops `check` for people. Do not add an `accept` test for the
+tag: Tailscale would then reject the policy write that revokes the rule.
+
+```jsonc
+"sshTests": [
+  {"src": "tag:serverpro-automation", "dst": ["tag:serverpro-server"], "deny": ["root"]},
+  {"src": "<member login>", "dst": ["tag:serverpro-server"], "check": ["<admin user>"], "deny": ["root"]},
+],
+```
 
 ## Official docs
 

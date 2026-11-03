@@ -96,6 +96,7 @@ serverpro server list
 serverpro server status NAME
 serverpro server doctor NAME [--fix] [--full]
 serverpro server ssh NAME
+serverpro server ssh-policy NAME
 serverpro server discover -p PROVIDER [--server NAME] [--provider-id ID] [--include-unmanaged]
 serverpro server import [NAME]
 serverpro server start|stop|restart NAME
@@ -215,6 +216,24 @@ git:
 `network.egress.mode: restricted` permits only DNS, NTP, HTTP(S), outbound
 SSH (22/tcp, for git-over-SSH), Cloudflare Tunnel, and Tailscale egress;
 `open` allows all outbound traffic.
+
+`access.tailscale.automation` is optional and off by default. With
+`enabled: true`, serverpro writes a second SSH rule that gives `accept`
+(no browser login) to the admin user from `tag:serverpro-automation` only,
+and every non-interactive SSH session goes through that tagged node.
+`socket` and `cli` are the absolute paths of the node's LocalAPI socket
+and its `tailscale` binary. The human rule stays `check`, root stays
+`check` or disabled, and `server ssh` keeps your own device. The tag is
+fixed and must not be in `tags`. See Automation SSH source.
+
+```yaml
+access:
+  tailscale:
+    automation:
+      enabled: true
+      socket: /Users/me/.local/state/serverpro-automation/tailscaled.sock
+      cli: /Users/me/.local/share/serverpro-automation/bin/tailscale
+```
 
 `access.openssh: disabled` (the default, also when the key is missing) turns
 OpenSSH off on the server, so Tailscale SSH is the only admin path.
@@ -732,6 +751,7 @@ drop-in, `privileged accounts` removes the provider's own image accounts, and
 | `cloudflared ingress` | fail | Config ingress is `none`, but `cloudflared.service` is enabled or running, or the host state cannot be classified (for example a `cloudflared` process outside the service). A dormant package passes. Runs only with ingress `none`. |
 | `cloudflared apt pin` | fail | The serverpro apt pin for cloudflared is missing or changed. Runs only with ingress `cloudflare-tunnel`; `--fix` rewrites only the pin. |
 | `tailnet policy` (provider) | warn | The tailnet policy lets every source reach every port. See `docs/tailscale-setup.md`, Recommended grants policy. |
+| `tailnet ssh policy` (provider) | fail or warn | Compares the live SSH rules with config and state. Fail: the automation `accept` rule is missing while automation is on; a root rule is not `check`. Warn: the human `check` rule is missing; the automation `accept` rule is present while automation is off for this server (revoke with `server ssh-policy`, see Automation SSH source); a rule from the automation tag has another shape; another source has `accept` for the admin user or `autogroup:nonroot`; state records another automation source than config. `--fix` takes the tailnet policy lock, adds the missing serverpro rules, records state, and reads the policy back. It never revokes the shared `accept` rule. A root rule or a foreign rule needs a hand edit. |
 
 A probe that cannot read the host fails with "the read-only probe could not
 run". Drift is then unknown, so doctor does not report a pass. The
@@ -1136,6 +1156,40 @@ separates resolver failure from egress failure. The remote `egress positive`
 check passes on any HTTP answer from its targets, because sites may refuse
 datacenter addresses with 403 or 429. It fails only when a target gives no
 answer, and names that target in the evidence.
+
+## Automation SSH source
+
+Tailscale SSH `check` asks for a browser login every 12 hours, which stops
+unattended runs. Automation gives `accept` to one tagged node instead.
+Set up the node first (`docs/tailscale-setup.md`, Automation node). Then
+turn it on for an existing server:
+
+```sh
+# 1. Add access.tailscale.automation to the server config.
+# 2. Write the rule and record it in state. No host change.
+serverpro server ssh-policy webapp -n mynamespace
+# 3. Make sure that the new check passes without a browser prompt.
+serverpro server doctor webapp -n mynamespace
+```
+
+`server ssh-policy` writes only the serverpro SSH rules and tag owners,
+records the write in state, then reads the policy back. The command fails
+when the result is not safe, for example a root rule that is not `check`.
+The write then stays live and recorded: fix the policy by hand and run
+the command again. When the live rules already match, it writes nothing
+and only records state.
+
+The `accept` rule is shared by every server with the same tags and admin
+user. `server create` and `doctor --fix` add it but never remove it. To
+revoke it, set `enabled: false` (`socket` and `cli` can stay) and run
+`server ssh-policy` again. The command removes the rule only when no other
+registered server on the tailnet records it. Otherwise it keeps the rule
+and names those servers in `automation_rule_kept_for`. Delete and
+`tailnet reconcile` keep the automation tag while any registered server
+records it.
+
+The node reaches a server only when a packet grant opens `tcp:22` from
+the tag. serverpro never writes packet rules.
 
 ## Reconcile tailnet-global policy
 

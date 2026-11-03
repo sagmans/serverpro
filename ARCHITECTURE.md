@@ -286,7 +286,10 @@ access paths for app-owned deployment flows.
     the operator's commands, a workload that a reboot would drop names the
     operator's command, and doctor never reboots. The
     provider `tailnet policy` check reads the policy file through the mesh
-    snapshot and warns on allow-all packet rules.
+    snapshot and warns on allow-all packet rules. The provider
+    `tailnet ssh policy` check compares the live SSH rules with config and
+    the state record of the automation source; `--fix` rewrites only the
+    serverpro rules, and the CLI stores the change in state.
 - Polling: `internal/poll`
   - Shared context-aware wait policy used by provider and lifecycle polling.
 - Mesh facade: `internal/mesh`
