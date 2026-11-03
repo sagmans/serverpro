@@ -32,6 +32,11 @@ rather than leaving a gap. A doc that drifts from code is worse than no doc.
 - Never edit the generic hook files copied from the template; repo checks go in
   `.githooks/<hook>.d/`.
 
+Commit messages follow `.githooks/GIT_CONVENTION.md`, which `commit-msg` and
+`pre-push` enforce. The generic checks need gitleaks, osv-scanner, semgrep,
+lizard and markdownlint-cli2, plus actionlint and zizmor when a push changes
+workflow files. A missing tool blocks the hook.
+
 ## Document Index
 
 - `AGENTS.md` — agent document index. (this file)
