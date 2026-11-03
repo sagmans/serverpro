@@ -237,7 +237,9 @@ default.
   stored password, on every server whose rule names the tag, with no
   browser login. Controls: the tag is fixed and config cannot name a
   server tag as the source; the `accept` rule names only the admin user,
-  so root stays `check` or disabled; the human rule stays `check`; and
+  so root stays `check` or disabled; config and the policy write refuse
+  `root` as the admin user while automation is on, before any write; the
+  human rule stays `check`; and
   the read-back fails closed when a root rule is not `check`. The
   transport uses `-F /dev/null`, `BatchMode`, and strict host keys from
   the node's own peer status, the system `/usr/bin/ssh`, and no key or

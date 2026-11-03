@@ -110,6 +110,11 @@ func (r SSHRule) MarshalJSON() ([]byte, error) {
 // every server of that namespace log in to another one without step-up auth.
 const AutomationSourceTag = "tag:serverpro-automation"
 
+// RootSSHUser is the one login that the automation accept rule must never
+// name: root stays check or disabled, so a stolen automation node cannot
+// reach root without a browser login.
+const RootSSHUser = "root"
+
 // ServerproPolicyOwner is the source of the human check rule and the owner of
 // every tag that serverpro adds, so only tailnet admins can apply them.
 const ServerproPolicyOwner = "autogroup:admin"

@@ -117,3 +117,14 @@ func TestValidateRejectsAutomationTagAsServerTag(t *testing.T) {
 		}
 	}
 }
+
+// The accept rule names the admin user, so root as the admin user would let
+// the automation node reach root with no browser login. Validation must stop
+// that config before any policy write.
+func TestValidateRejectsRootAdminWithAutomation(t *testing.T) {
+	cfg := automationConfig()
+	cfg.Admin.Username = "root"
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "admin.username must not be root") {
+		t.Fatalf("err = %v", err)
+	}
+}

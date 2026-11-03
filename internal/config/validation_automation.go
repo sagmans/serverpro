@@ -3,14 +3,20 @@ package config
 import (
 	"fmt"
 	"path/filepath"
+
+	"github.com/sagmans/serverpro/internal/mesh"
 )
 
 // validateTailscaleAutomation keeps the automation accept rule narrow. The
 // paths go into an ssh ProxyCommand that a shell parses, so only plain path
 // characters are allowed (deny by default), and the automation tag can never
-// also be a server tag.
+// also be a server tag. Root as the admin user is refused, because the accept
+// rule names the admin user and would then skip check mode for root.
 func (c Config) validateTailscaleAutomation() error {
 	a := c.Access.Tailscale.Automation
+	if a.Enabled && c.Admin.Username == mesh.RootSSHUser {
+		return fmt.Errorf("admin.username must not be %s while access.tailscale.automation is enabled: the accept rule would skip check mode for root", mesh.RootSSHUser)
+	}
 	for _, tag := range c.Access.Tailscale.Tags {
 		if tag == AutomationTailscaleTag {
 			return fmt.Errorf("access.tailscale.tags must not include %s: that tag is the automation SSH source", AutomationTailscaleTag)

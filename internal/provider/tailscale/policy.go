@@ -63,6 +63,11 @@ func (c Client) EnsureServerproPolicy(ctx context.Context, tags []string, adminU
 	if automationSource != "" && automationSource != mesh.AutomationSourceTag {
 		return change, fmt.Errorf("unsupported automation SSH source %q: only %s is allowed", automationSource, mesh.AutomationSourceTag)
 	}
+	// Refused before the policy read: the read-back runs only after the
+	// write, so a root accept rule would already be live when it failed.
+	if automationSource != "" && adminUser == mesh.RootSSHUser {
+		return change, fmt.Errorf("refused automation SSH accept rule for %s: root must stay check or disabled", mesh.RootSSHUser)
+	}
 	doc, etag, err := c.policyDocument(ctx)
 	if err != nil {
 		return change, err

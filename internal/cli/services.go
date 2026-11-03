@@ -92,10 +92,16 @@ func (a *app) newServerSSHPolicyClient(token, tailnet string) serverSSHPolicyCli
 	return tailscale.New(token, tailnet)
 }
 
+// errDoctorFixNoStatePath stops a doctor --fix policy repair that has no
+// state file to record the change in.
+var errDoctorFixNoStatePath = errors.New("doctor --fix cannot repair the tailnet SSH policy without a server state path")
+
 // doctorSSHPolicyFixer gives doctor --fix the same locked, recorded and
 // validated write as ssh-policy. It embeds the live client for every read,
 // and overrides only the write that doctor calls. Doctor never revokes the
-// shared accept rule; that needs the registry check in ssh-policy.
+// shared accept rule; that needs the registry check in ssh-policy. With no
+// state path the repair is refused, so it never falls back to an unlocked,
+// unrecorded write.
 type doctorSSHPolicyFixer struct {
 	tailscale.Client
 	cfg    config.Config
@@ -104,6 +110,9 @@ type doctorSSHPolicyFixer struct {
 }
 
 func (f doctorSSHPolicyFixer) EnsureServerproPolicy(ctx context.Context, _ []string, _, _, _ string) (mesh.PolicyChange, error) {
+	if f.stPath == "" {
+		return mesh.PolicyChange{}, errDoctorFixNoStatePath
+	}
 	change, _, err := applyServerSSHPolicy(ctx, f.cfg, f.stPath, f.policy, false)
 	return change, err
 }
@@ -303,7 +312,7 @@ func (a *app) doctorReport(ctx context.Context, cfg config.Config, st state.Stat
 		clients.Compute, accountRef, err = a.serverProviderAccount(st)
 		tsClient := tailscale.New(creds.Tailscale, cfg.Access.Tailscale.Tailnet)
 		clients.Tailscale = tsClient
-		if a.doctorFix && a.doctorStatePath != "" {
+		if a.doctorFix {
 			clients.Tailscale = doctorSSHPolicyFixer{Client: tsClient, cfg: cfg, stPath: a.doctorStatePath, policy: a.newServerSSHPolicyClient(creds.Tailscale, cfg.Access.Tailscale.Tailnet)}
 		}
 		clients.Cloudflare = cloudflare.New(creds.Cloudflare, cfg.Cloudflare.AccountID)

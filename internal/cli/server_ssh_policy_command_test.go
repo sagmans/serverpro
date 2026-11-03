@@ -410,6 +410,21 @@ func TestDoctorSSHPolicyFixerUsesLockedWriteWithoutRevoke(t *testing.T) {
 	}
 }
 
+// Without a state path the repair could not record what it wrote, so it
+// must refuse before any policy call instead of an unrecorded write.
+func TestDoctorSSHPolicyFixerRefusesWithoutStatePath(t *testing.T) {
+	cfg, _ := writeSSHPolicyFixture(t, true, state.TailscaleState{})
+	client := &fakeSSHPolicyClient{t: t}
+	fixer := doctorSSHPolicyFixer{cfg: cfg, policy: client}
+
+	if _, err := fixer.EnsureServerproPolicy(context.Background(), nil, "", "", ""); !errors.Is(err, errDoctorFixNoStatePath) {
+		t.Fatalf("err = %v", err)
+	}
+	if len(client.calls) != 0 {
+		t.Fatalf("calls = %v", client.calls)
+	}
+}
+
 // Unattended sessions must go through the tagged node only when config opts
 // in; otherwise the operator's own device (and its check rule) is used. The
 // node also gets the server tags, so it can refuse a peer outside them.

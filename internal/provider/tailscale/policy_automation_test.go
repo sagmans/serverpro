@@ -281,6 +281,20 @@ func TestEnsureServerproPolicyRejectsOtherAutomationSource(t *testing.T) {
 	}
 }
 
+// The read-back runs only after the write, so a root accept rule would be
+// live before it failed. The refusal must come before any API call.
+func TestEnsureServerproPolicyRejectsRootAutomationAdmin(t *testing.T) {
+	api, client := newAutomationPolicyAPI(t, `{"ssh":[]}`)
+
+	_, err := client.EnsureServerproPolicy(context.Background(), []string{automationTestTag}, mesh.RootSSHUser, automationTestRoot, mesh.AutomationSourceTag)
+	if err == nil || !strings.Contains(err.Error(), "refused automation SSH accept rule for root") {
+		t.Fatalf("err = %v", err)
+	}
+	if len(api.requests) != 0 {
+		t.Fatalf("requests = %v", api.requests)
+	}
+}
+
 // Doctor compares rules from the admin console, which stores HuJSON, so the
 // SSH read must accept comments and keep every typed rule field.
 func TestSSHPolicyReadsHuJSONRules(t *testing.T) {
