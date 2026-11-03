@@ -28,7 +28,8 @@ counterpart on DigitalOcean. Confirm current catalog availability before create.
 
 Reviewed 2026-10-30. Stable releases normally require seven days of age.
 Tailscale, Docker Engine, Buildx, Compose, mise, Node.js, uv, gh, and sem use explicitly
-approved security exceptions; `WEB_SOURCES.md` records the release dates and advisories. Node.js
+approved security exceptions; `WEB_SOURCES.md` records the release dates and
+advisories. Node.js
 stays on the supported 24 LTS line with its bundled npm.
 
 Docker bootstrap prefers a signed apt Buildx package at or above its security
@@ -254,7 +255,8 @@ on the managed host.
 floors, newer apt candidates, Tailscale client/daemon drift, and cloudflared
 floor drift when ingress is enabled. Its first remote check validates the actual
 supported platform; failure disables every `--fix` mutation. On supported hosts,
-`--fix` refreshes and upgrades the general managed package/tool paths; Tailscale repair delays its daemon restart until the
+`--fix` refreshes and upgrades the general managed package/tool paths; Tailscale
+repair delays its daemon restart until the
 updating Tailscale SSH command returns. Cloudflared remains ingress-owned and is
 diagnosed but not upgraded by generic bootstrap repair. See `USAGE.md` for the
 operator flow.

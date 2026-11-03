@@ -129,7 +129,8 @@ access paths for app-owned deployment flows.
   - First-boot hardening user data with a defense-in-depth Ubuntu
     24.04/codename/architecture check, pre-install base-package candidate floors,
     post-install verification, an unattended-upgrades drop-in that turns on
-    unused-kernel removal and keeps automatic reboots off, and architecture-scoped checksum-verified
+    unused-kernel removal and keeps automatic reboots off, and
+    architecture-scoped checksum-verified
     Tailscale static binaries. Live provider image validation remains the
     authoritative pre-mutation host gate because cloud-init module failures do
     not globally cancel later modules.
@@ -226,7 +227,8 @@ access paths for app-owned deployment flows.
     masked unit OpenSSH off leaves takes no job but stop. A unit masked while
     its sshd still runs gets SIGHUP through `systemctl kill`, because systemd
     drops a reload job for it and reports success. A running daemon is also
-    reloaded when nothing changed, in case an earlier reload failed. Last, it confirms every managed value through
+    reloaded when nothing changed, in case an earlier reload failed. Last, it
+    confirms every managed value through
     `sshd -T` and fails, naming the values, when a lower-numbered drop-in or
     a `Match`-scoped `Include` hides them. Checks the repair can change (the
     later sshd settings, `sshd units`, and `listening ports`) declare it in
@@ -242,7 +244,8 @@ access paths for app-owned deployment flows.
     Package/tool and generic fixable-check failures (including cloudflared)
     retain the check's own captured output without duplicating output already
     present in SSH errors. The batch error itself still carries only the
-    command index and exit status, so scripts and credentials stay out of it. The CLI redacts complete failure evidence
+    command index and exit status, so scripts and credentials stay out of it.
+    The CLI redacts complete failure evidence
     before report serialization bounds it to 4 KiB with a head/tail excerpt.
     Server doctor and create share an output boundary that saves this complete
     report in a private temporary directory. Default JSON output contains
@@ -253,9 +256,10 @@ access paths for app-owned deployment flows.
     Drift checks compare the live host with what config and provisioning
     promised: restricted egress, OpenSSH off, pending reboot, reboot
     survivability, unattended-upgrades
-    options, privileged accounts, metadata user-data password hash, Tailscale operator, Serve and Funnel,
+    options, privileged accounts, metadata user-data password hash, Tailscale
+    operator, Serve and Funnel,
     runtime sysctl, and a live cloudflared connector while ingress is `none`.
-    Each probe prints `fail: ` or `warn: ` lines and exits 0 when it could read
+    Each probe prints `fail:` or `warn:` lines and exits 0 when it could read
     the host, so a probe that never ran (non-zero exit) fails instead of
     passing. The privileged accounts probe is the one graded in Go: the host
     prints sudo's own parse of the rules (`lifecycle.SudoersPolicyCommand`),
@@ -274,7 +278,8 @@ access paths for app-owned deployment flows.
     after the same remote ingress read (`lifecycle.CheckTunnelSSHIngress`,
     run as a guard right before the repair with the live Cloudflare client),
     reboot survivability re-runs `rebootgate.InstallScript` for `install:`
-    findings only, the unattended-upgrades drop-in is rewritten from the function that
+    findings only, the unattended-upgrades drop-in is rewritten from the
+    function that
     renders it for cloud-init, and privileged accounts removes the accounts
     the compute adapter declares as image accounts. Every other finding needs
     an operator decision; a pending reboot names the gated reboot window or
@@ -394,7 +399,8 @@ flowchart LR
 3. Prompt for ingress; default `none`.
 4. Validate the compute provider token, refetch the selected location's catalog,
    reject a missing or unsupported image before provider mutation, and validate
-   Tailscale access. Long create stages emit fixed-vocabulary phase, elapsed-time, and attempt events
+   Tailscale access. Long create stages emit fixed-vocabulary phase,
+   elapsed-time, and attempt events
    to stderr while stdout remains the final JSON report.
 5. Ensure the shared Tailscale policy and checkpoint its tracked changes.
 6. Before creating a Cloudflare tunnel, adopt the one exact account-wide name
@@ -492,7 +498,8 @@ Server deletion owns only server-scoped compute, Tailscale device/auth-key, and
 Cloudflare tunnels proven `created` by serverpro. After remote cleanup, it
 removes canonical config, credentials, state, import marker, adjacent server
 locks, and the empty credential directory, then removes registry authority last.
-Custom config and state paths remain operator-owned and are preserved. Adopted, imported, and legacy
+Custom config and state paths remain operator-owned and are preserved. Adopted,
+imported, and legacy
 unknown-provenance tunnels remain external. DigitalOcean validates the tracked
 Droplet and firewall before its first provider mutation. Historical firewalls
 using broad ownership-tag selectors are deletion-compatible only when their
@@ -506,7 +513,8 @@ state identity fails closed when policy evidence exists. Reconciliation removes
 only exact serverpro tag-owner shapes and stale destinations from recognized SSH
 rules. Tags referenced as owners by retained definitions remain policy
 dependencies and cannot be removed. Destination rewrites preserve unmodeled
-SSH-rule fields so future API fields survive reconciliation. Apply refetches policy and devices, aborts unless
+SSH-rule fields so future API fields survive reconciliation. Apply refetches
+policy and devices, aborts unless
 the removal plan still exactly matches the approved preview, validates the
 edited document, and posts with its ETag. A missing ETag aborts every policy
 mutation before publication.
@@ -547,7 +555,8 @@ coalesce, conflicts fail closed, and canonical writes remove every legacy key.
 Unrelated provider-specific data stays inside opaque provider state fields.
 Per-server state mutations use adjacent advisory locks
 and read-modify-write updates so concurrent status, ingress, and cleanup
-checkpoints preserve one another. Config, credential, state, and server-operation writers hold a shared
+checkpoints preserve one another. Config, credential, state, and
+server-operation writers hold a shared
 local-artifact guard. Existing-server workflows that can publish those artifacts
 also hold the namespace lock shared. Successful delete holds that namespace lock
 exclusively, releases its server-operation lock, acquires the artifact guard
@@ -637,7 +646,8 @@ never replaced.
 - GitHub access levels are explicit operator choices: `none`, read-only
   `deploy-key`, or full-development `account-key`. Full development requires a
   PAT. Secrets (PAT, private keys) never persist in config or state, though the
-  PAT does persist as stored operator auth in the server-scoped credential file; the
+  PAT does persist as stored operator auth in the server-scoped credential file;
+  the
   non-secret `git` section records exact identity, signing, access, and deploy
   repository scope needed for diagnosis and safe access-mode reconciliation.
 - Compute provider, location, size, and image are explicit operator choices.
@@ -655,7 +665,9 @@ never replaced.
   when request DTOs are marshaled; account names/scopes remain serializable.
 - Redacted error messages preserve their wrapped cause so cancellation,
   sentinel, and typed error handling remain reliable without exposing secrets.
-- Sudo passwords and bootstrap data are secrets: bootstrap data is never persisted, and the admin sudo password reaches disk only while `admin.store_console_password` is enabled (default on).
+- Sudo passwords and bootstrap data are secrets: bootstrap data is never
+  persisted, and the admin sudo password reaches disk only while
+  `admin.store_console_password` is enabled (default on).
 - Lifecycle progress uses fixed phase names only; tokens, passwords, hashes,
   bootstrap data, and target identifiers never enter progress events.
 - Delete and power operations use state-known IDs and identity checks.

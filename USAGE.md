@@ -46,11 +46,17 @@ widen support. `INSTALLATION.md` owns the full tool and package version matrix.
 
 Persistent flags are command-scoped; each command's `--help` shows only flags
 that command accepts. `--config` is accepted only by
-`server create`, `server doctor`, and `server bootstrap`. `--state` is accepted only by:
+`server create`, `server doctor`, and `server bootstrap`.
+`--state` is accepted only by:
+
+<!-- The usage contract test matches each item below as one line. -->
+<!-- markdownlint-disable MD013 -->
 
 - `server create`, `server status`, `server doctor`, `server ssh`
 - `server delete`, `server start`, `server stop`, `server restart`
 - `server bootstrap`, `server ingress add`, `server ingress list`, and `server ingress remove`
+
+<!-- markdownlint-enable MD013 -->
 
 Doctor and the final doctor phase of `server create` print a JSON summary.
 The summary lists only `warn`, `fail`, and `skip` results, plus counts and
@@ -296,7 +302,8 @@ Live
 create verifies that exact image, and that the location offers the selected
 size, against the current selected-location catalog before the first provider
 mutation. A rerun that resumes a server already recorded in state skips the
-size check, since it orders nothing new. During live create, every externally visible policy, tunnel, auth-key, compute, and device
+size check, since it orders nothing new. During live create, every externally
+visible policy, tunnel, auth-key, compute, and device
 mutation is checkpointed. A failed create reports its lifecycle phase and known
 non-secret resource IDs; rerun create to resume from durable checkpoints or use
 `server delete` to clean tracked resources, including access policies recorded
@@ -311,7 +318,8 @@ missing or renamed; the error lists the device IDs. Older devices with the same
 name are ignored. Remove the unexpected devices in the Tailscale admin console,
 then rerun create. If the recorded device was replaced on purpose (deleted and
 re-enrolled with a new node ID), rebind state with
-`serverpro server import --force --with-tailscale`. Doctor reports the same conflicts on the `tailscale node`
+`serverpro server import --force --with-tailscale`. Doctor reports the same
+conflicts on the `tailscale node`
 check with code `tailscale_device_identity` and skips all remote checks and
 repairs, including `--fix`, until the conflict is resolved. A definitive checkpoint
 failure deletes only the tunnel created by that attempt, never an adopted one.
@@ -513,7 +521,8 @@ the device lost its tags, import refuses to record an untagged device while
 namespace tags are configured: doctor would reject it on every run. Tag the
 device in the admin console, then rerun. With `--with-cloudflare`, a matched
 tunnel is recorded with provenance `imported` and enabled in connector-only
-mode, the only tunnel mode config validation accepts. Forced import repairs the invalid
+mode, the only tunnel mode config validation accepts. Forced import repairs the
+invalid
 disabled-Tailscale config written by earlier releases and preserves existing
 service tokens when replacements are omitted. Vultr supplies its attached
 firewall-group ID; Hetzner and
@@ -541,7 +550,8 @@ Cloudflare snapshot per run and sends read-only host checks in one remote batch.
 That baseline first checks the actual managed-host OS, codename, and architecture,
 then checks exact managed pins, the Tailscale client and running daemon, and
 updates visible in the existing apt cache; it does not refresh package metadata.
-A platform failure disables every requested `--fix` action. If sudo authentication requires a prompt, only remote inventory/checks
+A platform failure disables every requested `--fix` action. If sudo
+authentication requires a prompt, only remote inventory/checks
 rerun; provider and local results remain from the original report.
 Failed package, tool, and other fixable remote checks include the check's own
 command output in `evidence`.
@@ -555,7 +565,8 @@ first. If its output says `restoring the previous files FAILED` or `they fail
 sshd -t too`, keep the current session open and fix the named files until
 `sshd -t` passes. After it runs, the remaining sshd checks, `sshd units`, and
 `listening ports` read the host again instead of reusing the start-of-run
-baseline, and a check it did not settle fails without running it again. The `sshd units` check reports an `ssh.socket` or `ssh.service` that
+baseline, and a check it did not settle fails without running it again. The
+`sshd units` check reports an `ssh.socket` or `ssh.service` that
 is failed, or enabled but not running; `--fix` clears the failure and starts
 the unit the host enables. Masked units pass: with OpenSSH off, both units are
 masked, and `--fix` never starts them. The sshd hardening checks still check
@@ -595,11 +606,12 @@ artifacts and unrecognized plugin overrides before execution. Repair retains
 the reviewed binary when apt is below its floor, then returns to a safe apt
 package once available. Operator-owned overrides require operator action;
 repair does not delete them. Tailscale daemon restart is delayed until the updating
-SSH command returns, then doctor waits and rechecks it. When ingress is enabled, doctor verifies cloudflared is active and at or above
+SSH command returns, then doctor waits and rechecks it. When ingress is enabled,
+doctor verifies cloudflared is active and at or above
 its reviewed `2026.10.6` package floor. A failed `cloudflared` check names one
 reason: the package is not installed, its package status, the installed version
 below the floor, a missing install receipt, a connector that is "not the build
-serverpro installed from https://pkg.cloudflare.com/cloudflared", or the service
+serverpro installed from <https://pkg.cloudflare.com/cloudflared>", or the service
 state from `systemctl is-active`. The receipt is
 `/var/lib/serverpro/cloudflared.receipt`. Hosts provisioned before it existed
 report it missing until `--fix` reinstalls the connector once.
@@ -609,8 +621,9 @@ It upgrades from the Cloudflare apt repository that provisioning trusted, then
 enables and restarts the service. A connector from `dpkg -i`, another
 repository, or an edited binary is reinstalled from Cloudflare, also when it is
 newer. When no version is offered only by Cloudflare, the repair stops with
-"no cloudflared version is offered only by https://pkg.cloudflare.com/cloudflared";
-remove the other source that offers it. It does not change the tunnel token. It fails
+"no cloudflared version is offered only by <https://pkg.cloudflare.com/cloudflared>";
+remove the other source that offers it. It does not change the tunnel token. It
+fails
 with a "reprovision the server" message when the service unit, token file,
 pinned keyring, or exact apt source line is missing or changed.
 
@@ -642,7 +655,8 @@ lists or unattended upgrades installing packages, and prints a
 past that budget, the step fails with apt's lock error and
 `apt package lists stayed locked for 300 seconds; another apt run still holds them`;
 rerun once the other apt run finishes. Repository and other apt errors fail at
-once with apt's own output. Bootstrap reruns managed host-tool setup through Tailscale SSH with
+once with apt's own output. Bootstrap reruns managed host-tool setup through
+Tailscale SSH with
 password-required sudo. The default `all` target
 installs the full managed toolset; run `serverpro server bootstrap --help` for
 the canonical list and pinned versions. Focused targets stay `git`, `docker`,
@@ -666,9 +680,11 @@ Rust `1.99.1` through `core:rust` with the default rustc, Cargo, rustfmt, Clippy
 and docs profile. Doctor checks those exact versions and all Rust
 default-profile components. Wrong Node/npm state forces same-version Node
 replacement; `pi` and `all` reinstall Pi afterward because its global npm
-package belongs to that Node installation. It also installs tmux `3.7c`, gh `2.103.3`, rg
+package belongs to that Node installation. It also installs tmux `3.7c`, gh
+`2.103.3`, rg
 `15.2.0`, fd `10.5.0`, ast-grep `0.51.0`, sem `0.29.0`, and inspect `0.1.1`.
-ast-grep, sem, and inspect use checksum-pinned GitHub release assets; inspect's bare binary
+ast-grep, sem, and inspect use checksum-pinned GitHub release assets; inspect's
+bare binary
 digest is checked before execution. On existing hosts, `all` removes the active
 deprecated `sg` mise key before managing `ast-grep`; mise prunes the old install
 when unused.
@@ -905,7 +921,8 @@ such as `/usr/bin/docker`, `systemctl`, or a shell still fails, also behind
 a symlink or a Debian alternative such as `editor`: give the account a
 root-owned wrapper script that it cannot write and that runs one fixed
 action. The wrapper and every directory above it must be root-owned and not
-writable by group or others, or the rule fails too. If the rule grants `ALL`, limit it to those commands and run
+writable by group or others, or the rule fails too. If the rule grants `ALL`,
+limit it to those commands and run
 `visudo -c`.
 
 ### Reboots and kernel cleanup
@@ -1136,7 +1153,8 @@ SERVERPRO_TAILSCALE_TOKEN='...' \
 ```
 
 Interactive runs prompt for the token when neither `SERVERPRO_TAILSCALE_TOKEN`
-nor legacy fallback `TAILSCALE_API_TOKEN` is set. The TAILNET argument must name a stable
+nor legacy fallback `TAILSCALE_API_TOKEN` is set. The TAILNET argument must name
+a stable
 identity; the token-relative `-` alias is rejected. Registered state carrying
 policy evidence must also contain an explicit identity. Existing token-relative
 state can be migrated by setting the explicit tailnet in config and rerunning
@@ -1188,9 +1206,11 @@ treat missing tracked compute resources as already deleted.
 Canonical local server artifacts are removed only after provider deletion succeeds.
 The dry-run plan lists them in `local_cleanup`: config, credentials, state,
 import marker, and adjacent server lock files. The empty canonical credential
-directory is also removed. Custom `--config` and `--state` paths and their locks are preserved because
+directory is also removed. Custom `--config` and `--state` paths and their locks
+are preserved because
 serverpro does not own those locations. The registry entry is removed last;
-a local cleanup failure retains it for diagnosis and recovery. Provider resources are
+a local cleanup failure retains it for diagnosis and recovery. Provider
+resources are
 validated before the first provider DELETE. For DigitalOcean servers created
 before dedicated per-server firewall tags, cleanup accepts only the exact
 historical ownership selectors and first proves through live Droplet inventory
@@ -1237,12 +1257,14 @@ credentials.json holds service tokens (`server_provider_token`,
 `tailscale_token`, `cloudflare_token`) and stored operator auth
 (`admin_sudo_password`, `github_pat`, optional `tailscale_auth_key`) as
 plaintext `0600`; a stored `tailscale_auth_key` is never used, because
-serverpro always mints its own short-lived tagged bootstrap key. The sudo password resolves from in-process cache, then the
+serverpro always mints its own short-lived tagged bootstrap key. The sudo
+password resolves from in-process cache, then the
 `<NAMESPACE>_<SERVER>_SUDOPASS` env var, then credentials.json, then a prompt;
 prompted or env values are stored unless `admin.store_console_password: false`.
 The GitHub PAT prompted during full development access setup is stored only
 after the remote accepted it, then reused on later runs; a rejected PAT is not
-recorded, so the next run asks for a working one instead of retrying it. Configs written before schema stamping carry a tool-forced
+recorded, so the next run asks for a working one instead of retrying it. Configs
+written before schema stamping carry a tool-forced
 `store_console_password: false`; loading one migrates it to stored, and any
 later config save records `schema_version: 1`. A stamped explicit `false` stays
 runtime-only.

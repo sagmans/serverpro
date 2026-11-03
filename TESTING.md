@@ -50,7 +50,8 @@ refreshed apt metadata. Candidate preflight rejected Buildx `0.37.1` against
 the patched `0.37.2` floor before installation. The initial Pi audit found
 shrinkwrapped `brace-expansion@5.0.9`. A later disposable Ubuntu run exercised
 the production local repair, Pi help, idempotence, and rejection of dependency drift.
-Repair restored `5.0.12` and the reviewed integrity; the runtime audit found zero vulnerabilities.
+Repair restored `5.0.12` and the reviewed integrity; the runtime audit found
+zero vulnerabilities.
 Its regression tests rejected old versions, changed lock metadata, wrong integrity,
 and a missing shrinkwrap without executing dependency code. Since 2026-10-30
 they covered brace-expansion and undici separately, rejected unsafe repair manifest
@@ -66,7 +67,8 @@ proved that `npm ci` rejects a lockfile with a wrong integrity hash and that
 `npm install -g` ignores a shrinkwrap packed into a local tarball. Another
 container gave the target user an `.npmrc` with a dead registry, and the
 install still passed from `registry.npmjs.org`. New regression
-tests replace the repair tests and reject unreviewed lockfiles, unsafe manifest paths, a digest mismatch,
+tests replace the repair tests and reject unreviewed lockfiles, unsafe manifest
+paths, a digest mismatch,
 dependency drift, a foreign `pi` link, and a wrong CLI version.
 The 2026-10-03 refresh repeated the complete managed user-tool installation
 with mise `2026.10.0` and uv `0.12.19` in disposable Ubuntu arm64.
@@ -253,6 +255,7 @@ earlier fix left that sshd on its old config; the current fix sent SIGHUP and
 sshd logged its restart under the same main PID. On a masked, stopped unit
 `systemctl try-reload-or-restart` exits 0, and `reload-or-restart` fails with
 "Unit ssh.service is masked."
+
 - When the SSH client was killed during candidate validation with a TTY, the
   hangup trap removed the temp directory and left the live config unchanged.
   Without a TTY the repair received no signal and completed with a valid
@@ -291,7 +294,8 @@ The container has no systemd. A `systemctl` stub stood in only for
 `is-active`, `enable`, and `restart`, and its `restart` ran the upgraded
 binary's `--version` first. Real unit activation was not verified. The live
 create journey's `doctor --fix` meets a current connector, so it does not
-exercise this repair; confirm it on an affected host. Without the stub, the check printed the
+exercise this repair; confirm it on an affected host. Without the stub, the
+check printed the
 `systemctl: not found` error as the service state. A batched doctor run with
 captured output showed the old bare `remote batch command N failed with status
 1` evidence now followed by the check's own reason.
@@ -346,10 +350,10 @@ configured source.
 - The same without the pin: apt chose `2099.1.0` and the gate rejected it.
 - Cloudflare source removed, pin kept: apt chose `2099.1.0` and the gate
   rejected it, so the pin alone excludes no source.
-- After the repair installed `2026.10.0`, the table showed ` *** 2026.10.0
-  990`, the Cloudflare source, and `100 /var/lib/dpkg/status`. The origin
-  check accepted it. With the local repository offering the same version
-  again, it rejected it.
+- After the repair installed `2026.10.0`, the table showed
+  `*** 2026.10.0 990`, the Cloudflare source, and `100 /var/lib/dpkg/status`.
+  The origin check accepted it. With the local repository offering the same
+  version again, it rejected it.
 - With a newer `2099.1.0` from the local repository installed, apt kept it as
   candidate despite the pin and the origin check rejected it. The gate still
   passed, because a connector at or above the floor needs no install. The gate
@@ -1195,7 +1199,7 @@ mode, exit 2 before any paid call. The order lives once, in
 every scenario except `create` and `delete` is skipped when no server is ready.
 
 | Scenario | Proves |
-|---|---|
+| --- | --- |
 | `create` | Create (or a resume in keep mode) ends with a passing doctor report. |
 | `status`, `doctor`, `bootstrap` | Status row identity, passing doctor, idempotent `git` bootstrap. |
 | `fix` | `server doctor --fix` passes, then plain doctor passes. |
@@ -1213,8 +1217,10 @@ positive integers. The keep-mode home is compared by physical path, so `.`,
 a directory above it. Before a throwaway run, provider discovery in the dogfood
 namespace must find no servers; after every run, including one ended by a
 signal, it reports any still listed. A second signal during teardown is ignored
-so the fallback delete always finishes. Every judged command's `PASS` or `FAIL` line ends with its wall time, so a slow
-scenario can be traced to the step that spent it. The summary lists each scenario's result and
+so the fallback delete always finishes. Every judged command's `PASS` or `FAIL`
+line ends with its wall time, so a slow
+scenario can be traced to the step that spent it. The summary lists each
+scenario's result and
 duration, the server's compute and node IDs and age, and warns when a kept server
 reaches `SERVERPRO_DOGFOOD_MAX_AGE_HOURS` (default 24). The identity scenario
 and power reboot check reach the host with the local `tailscale ssh`, so the
@@ -1229,10 +1235,14 @@ wrong-identity, invalid-catalog, and invalid-inventory outputs fail. It also
 proves every provider command path, destructive opt-in guard, Cloudflare token
 transport, and exact fallback cleanup payload/error retention. Fake `tailscale`
 and `curl` binaries extend it to scenario selection, the full ordered run, keep
-mode reuse and deletion, the kept-server age warning, the kept-state collision guard, leftover preflight, delete
-after interruption and after a second signal during teardown, home aliases, an SSH hang cut off by the timeout, the sudo command shape, decoy failures with teardown, a recorded-node swap, an
+mode reuse and deletion, the kept-server age warning, the kept-state collision
+guard, leftover preflight, delete
+after interruption and after a second signal during teardown, home aliases, an
+SSH hang cut off by the timeout, the sudo command shape, decoy failures with
+teardown, a recorded-node swap, an
 import failed row hidden behind exit zero, prompted inputs with masking, backspace
-editing, sudo retries, and required-value exhaustion, and secrets absent from every argv and
+editing, sudo retries, and required-value exhaustion, and secrets absent from
+every argv and
 artifact. Both run through `make test-dogfood-live-selftest` as part of
 `make check`, and `make lint-shell` (also in `make check`) lints every harness
 shell file.
@@ -1321,9 +1331,14 @@ anything else is a real unit-test gap to close before the next capability lands.
 1. Add the new command/package/use case to this matrix in the same change.
 2. Add the smallest unit test before implementation.
 3. Add fake-client integration coverage for every provider/service boundary.
-4. Add or extend a compiled-binary e2e case in `scripts/test-cli-no-token-surface.sh` and map its passing label in `scripts/cli-surface-dispositions.tsv` when the behavior can run without live APIs. Extend `internal/e2e` when provider lifecycle composition changes.
-5. Add a guarded live dogfood case in `scripts/test-dogfood-live.sh` when real provider behavior is part of the capability.
-6. Update `README.md`, `USAGE.md`, `ARCHITECTURE.md`, `SECURITY.md`, or `DEVELOPMENT.md` only when the owning behavior or workflow changes.
+4. Add or extend a compiled-binary e2e case in
+   `scripts/test-cli-no-token-surface.sh` and map its passing label in
+   `scripts/cli-surface-dispositions.tsv` when the behavior can run without live
+   APIs. Extend `internal/e2e` when provider lifecycle composition changes.
+5. Add a guarded live dogfood case in `scripts/test-dogfood-live.sh` when real
+   provider behavior is part of the capability.
+6. Update `README.md`, `USAGE.md`, `ARCHITECTURE.md`, `SECURITY.md`, or
+   `DEVELOPMENT.md` only when the owning behavior or workflow changes.
 
 No capability is complete until this file names its test evidence or its
 explicitly accepted gap.

@@ -20,7 +20,8 @@ minimums instead: after repository refresh, needed signed candidates must meet
 the floor before package scripts run, installed results are verified, and newer
 security updates remain valid and are never downgraded. The one exception is a
 cloudflared connector that serverpro did not install: the cloudflared install
-and repair replace it with the Cloudflare build, even when it is newer. This avoids freezing security fixes while ensuring every
+and repair replace it with the Cloudflare build, even when it is newer. This
+avoids freezing security fixes while ensuring every
 previously unversioned direct dependency has an enforced baseline.
 
 ## Report a vulnerability
@@ -236,7 +237,8 @@ default.
 
 ## Credentials and secrets
 
-Provider and service credentials plus stored operator auth live in server-scoped files:
+Provider and service credentials plus stored operator auth live in server-scoped
+files:
 
 ```text
 ~/.config/serverpro/namespaces/<namespace>/servers/<server>/credentials.json
@@ -249,7 +251,8 @@ sudo password (`admin_sudo_password`, gated by `admin.store_console_password`,
 default on, `false` keeps it runtime-only), the GitHub fine-grained PAT
 (`github_pat`, redeployable to a GitHub-rejected remote `gh` credential by
 `serverpro server doctor --fix`), and an optional user-supplied Tailscale auth key
-(`tailscale_auth_key`, refused at provision time). Sudo-password resolution order is: in-process cache,
+(`tailscale_auth_key`, refused at provision time). Sudo-password resolution
+order is: in-process cache,
 `<NAMESPACE>_<SERVER>_SUDOPASS` env var, stored file, prompt; prompted or
 env-supplied values are persisted when the flag is on. Unstamped legacy
 configs migrate their tool-forced `false` to stored on load; `schema_version: 1`
@@ -284,7 +287,8 @@ message stays masked. Sudo passwords may now persist in credentials.json per
 the stored-operator-auth model above; every other handling rule is unchanged.
 serverpro always creates short-lived tagged Tailscale keys itself, and a
 stored user-supplied auth key is refused rather than used because its
-namespace scope cannot be verified; the value is never logged or exported. Doctor remote batching base64-frames command output and reports
+namespace scope cannot be verified; the value is never logged or exported.
+Doctor remote batching base64-frames command output and reports
 nonzero status without copying command text or output into batch errors.
 Per-command, decoded-aggregate, and transport byte ceilings return typed errors
 before hostile output can grow memory without bound. Read commands come from an
@@ -328,13 +332,16 @@ without one get this secure default.
 
 ## Supply-chain verification
 
-The 2026-10-03 managed-tool review, refreshed 2026-10-22 and 2026-10-30, selects stable releases at least seven days
+The 2026-10-03 managed-tool review, refreshed 2026-10-22 and 2026-10-30, selects
+stable releases at least seven days
 old, except explicitly approved fixes for disclosed vulnerabilities. Tailscale
 `1.104.4`, Docker Engine `29.9.2`, Buildx `0.38.1`, Compose `5.6.1`, mise `2026.10.24`,
-Node.js `24.22.1`, uv `0.13.5`, gh `2.103.3`, and sem `0.29.0` use those exceptions; `WEB_SOURCES.md` records the evidence. The age
+Node.js `24.22.1`, uv `0.13.5`, gh `2.103.3`, and sem `0.29.0` use those
+exceptions; `WEB_SOURCES.md` records the evidence. The age
 threshold governs release selection. Signed apt candidates can be newer.
 The serverpro-owned Pi lockfile is generated under seven days through npm’s
-`--min-release-age` option, with each exemption recorded in `WEB_SOURCES.md`. containerd `2.4.2` meets seven days and
+`--min-release-age` option, with each exemption recorded in `WEB_SOURCES.md`.
+containerd `2.4.2` meets seven days and
 fixes `CVE-2026-95839`, `GHSA-8647-2jxj-p2rc`, and `GHSA-hc94-p972-ch66`.
 Docker Engine, Buildx, and Compose are rebuilt with Go releases that reject
 the eight revoked eMudhra intermediate certificates (`CVE-2026-111943`).
@@ -360,7 +367,8 @@ compromised eMudhra CAs from its bundled roots.
 `MISE_SAFE=1` skips mise’s trust check; never use it to inspect untrusted projects.
 
 Buildx `0.38.1` is in Docker’s Noble apt repository for both supported
-architectures at review time. The fallback stays for hosts whose apt candidate is older. Bootstrap instead permits only the reviewed
+architectures at review time. The fallback stays for hosts whose apt candidate
+is older. Bootstrap instead permits only the reviewed
 official binary with a Go-owned architecture-specific SHA-256. It verifies
 the digest before execution and before Docker package scripts. Vulnerable
 `0.37.1` is never installed as the fallback. All other apt preflights remain.
@@ -384,7 +392,8 @@ every package is a production download from `registry.npmjs.org` with SHA-512
 integrity. Bootstrap verifies the lockfile digest, then installs it with
 `npm ci`, which rejects any integrity mismatch. Bootstrap passes the registry
 to npm, so a host or user `.npmrc` cannot redirect the downloads. Lifecycle scripts
-are disabled and development dependencies are omitted. Bootstrap and doctor check the
+are disabled and development dependencies are omitted. Bootstrap and doctor
+check the
 lockfile digest and every installed package version from metadata only,
 without executing dependency code. Bootstrap also requires a clean runtime
 dependency audit before the new tree replaces the old one. Audit failure or
@@ -406,12 +415,14 @@ Managed host tools install through integrity-checked sources, not
   `aqua:astral-sh/uv` backend. That registry entry advertises release SHA-256
   and GitHub-attestation verification; doctor verifies the exact version.
 - Rust `1.99.1` is pinned and installed through mise's `core:rust` backend with
-  the default rustup profile. Doctor verifies rustc, Cargo, rustfmt, Clippy, and Rust
+  the default rustup profile. Doctor verifies rustc, Cargo, rustfmt, Clippy, and
+  Rust
   docs. rustup downloads over HTTPS, but its official security documentation
   states download signatures are not yet enforced; this remains a trust
   boundary despite the exact version pin.
 - ast-grep `0.51.0`, sem `0.29.0`, and inspect `0.1.1` are installed from exact
-  mise GitHub backends and versions. Their x86_64/arm64 release assets are pinned by reviewed
+  mise GitHub backends and versions. Their x86_64/arm64 release assets are
+  pinned by reviewed
   SHA-256 values; unsupported architectures fail before mutation. Doctor checks
   exact ast-grep and sem version output. Existing active `sg` mise configuration
   is removed through mise's config-aware `unuse` operation without invoking the
@@ -539,7 +550,8 @@ serverpro retains local state and registry authority for a safe retry.
 
 Canonical config, credentials, state, import markers, and adjacent server locks
 are removed only after provider deletion succeeds. Custom config and state
-paths remain operator-owned. Config, credential, state, and server-operation writers share
+paths remain operator-owned. Config, credential, state, and server-operation
+writers share
 a root-scoped local-artifact guard. Existing-server publishing workflows also
 hold the namespace lock shared; delete holds it exclusively and takes the
 artifact guard exclusively before cleanup so a stale managed writer cannot
