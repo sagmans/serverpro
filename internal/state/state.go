@@ -56,6 +56,10 @@ type TailscaleState struct {
 	PolicyTagOwners  []string  `json:"policy_tag_owners,omitempty"`
 	PolicySSHRule    bool      `json:"policy_ssh_rule,omitempty"`
 	PolicySSHTags    []string  `json:"policy_ssh_tags,omitempty"`
+	// PolicySSHAutomationSource records the tag that serverpro gave accept
+	// access to the admin user. Doctor compares the live rule with it, and
+	// tailnet reconcile keeps that tag owner while the record exists.
+	PolicySSHAutomationSource string `json:"policy_ssh_automation_source,omitempty"`
 }
 
 type CloudflareTunnelProvenance string

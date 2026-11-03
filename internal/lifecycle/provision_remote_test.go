@@ -3,6 +3,7 @@ package lifecycle
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/credentials"
 	"github.com/sagmans/serverpro/internal/rebootgate"
+	"github.com/sagmans/serverpro/internal/remote"
 	"github.com/sagmans/serverpro/internal/state"
 	"github.com/sagmans/serverpro/internal/tunnel"
 )
@@ -108,6 +110,30 @@ func TestWaitRemoteFailsFastOnSudoAuthError(t *testing.T) {
 	}
 	if r.calls != 1 {
 		t.Fatalf("wrong sudo password should not be retried, calls=%d", r.calls)
+	}
+}
+
+func TestWaitRemoteFailsFastOnAutomationNodeNotReady(t *testing.T) {
+	// WHY: a down or untagged automation node does not heal while create
+	// waits, so retrying would only hide the real cause behind a timeout.
+	r := &errorRemote{err: fmt.Errorf("%w: backend state %q", remote.ErrAutomationNodeNotReady, "Stopped")}
+	err := waitRemoteWithPoll(context.Background(), r, "deploy", "prod-01", func(context.Context) error {
+		t.Fatal("node fault must not reach the poll wait")
+		return nil
+	})
+	if !errors.Is(err, remote.ErrAutomationNodeNotReady) || r.calls != 1 {
+		t.Fatalf("calls=%d error=%v", r.calls, err)
+	}
+}
+
+func TestWaitRemoteRetriesAutomationPeerNotReady(t *testing.T) {
+	// WHY: a new server joins the netmap and gets host keys some seconds
+	// after create, so a peer fault must be waited out, not fatal.
+	peerErr := fmt.Errorf("%w: no peer %s", remote.ErrAutomationPeerNotReady, "prod-01")
+	r := &sequenceRemote{errors: []error{peerErr, peerErr, nil}}
+	err := waitRemoteWithPoll(context.Background(), r, "deploy", "prod-01", func(context.Context) error { return nil })
+	if err != nil || r.calls != 3 {
+		t.Fatalf("calls=%d error=%v", r.calls, err)
 	}
 }
 

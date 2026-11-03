@@ -85,7 +85,7 @@ func (f *fakeTailscale) DeleteAuthKey(_ context.Context, keyID string) error {
 	return f.deleteErr
 }
 
-func (f *fakeTailscale) EnsureServerproPolicy(_ context.Context, tags []string, _ string, _ string) (tailscale.ServerproPolicyChange, error) {
+func (f *fakeTailscale) EnsureServerproPolicy(_ context.Context, tags []string, _ string, _ string, _ string) (tailscale.ServerproPolicyChange, error) {
 	f.calls = append(f.calls, "ensure-policy")
 	if f.policyErr != nil {
 		return tailscale.ServerproPolicyChange{}, f.policyErr
@@ -96,7 +96,7 @@ func (f *fakeTailscale) EnsureServerproPolicy(_ context.Context, tags []string, 
 	return tailscale.ServerproPolicyChange{TagOwners: tags, SSHRule: true}, nil
 }
 
-func (f *fakeTailscale) ValidateSSHPolicy(context.Context, []string, string, string) error {
+func (f *fakeTailscale) ValidateSSHPolicy(context.Context, []string, string, string, string) error {
 	f.calls = append(f.calls, "validate-policy")
 	return nil
 }

@@ -5,6 +5,7 @@ func (c Config) Validate() error {
 		c.validateRequired,
 		c.validateResourceNames,
 		c.validateNamespaceScopes,
+		c.validateTailscaleAutomation,
 		c.validateMVPConstraints,
 		c.validateAdminUsername,
 		c.validateGit,

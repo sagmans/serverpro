@@ -13,7 +13,7 @@ func TestValidateSSHPolicyRejectsBroadNonrootAccept(t *testing.T) {
 		_, _ = w.Write([]byte(`{"ssh":[{"action":"accept","src":["autogroup:member"],"dst":["tag:serverpro-server"],"users":["autogroup:nonroot"]}]}`))
 	}))
 	defer ts.Close()
-	err := NewWithHTTP("token", "-", ts.URL, ts.Client()).ValidateSSHPolicy(context.Background(), []string{"tag:serverpro-server"}, "deploy", "check-or-disabled")
+	err := NewWithHTTP("token", "-", ts.URL, ts.Client()).ValidateSSHPolicy(context.Background(), []string{"tag:serverpro-server"}, "deploy", "check-or-disabled", "")
 	if err == nil {
 		t.Fatal("expected unsafe policy error")
 	}
@@ -27,7 +27,7 @@ func TestValidateSSHPolicyAcceptsExplicitAdminUser(t *testing.T) {
 		_, _ = w.Write([]byte(`{"ssh":[{"action":"accept","src":["group:sre"],"dst":["tag:serverpro-server"],"users":["deploy"]}]}`))
 	}))
 	defer ts.Close()
-	if err := NewWithHTTP("token", "-", ts.URL, ts.Client()).ValidateSSHPolicy(context.Background(), []string{"tag:serverpro-server"}, "deploy", "check-or-disabled"); err != nil {
+	if err := NewWithHTTP("token", "-", ts.URL, ts.Client()).ValidateSSHPolicy(context.Background(), []string{"tag:serverpro-server"}, "deploy", "check-or-disabled", ""); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -47,13 +47,13 @@ func TestValidateSSHPolicyAcceptsHuJSONPolicy(t *testing.T) {
 		}`))
 	}))
 	defer ts.Close()
-	if err := NewWithHTTP("token", "-", ts.URL, ts.Client()).ValidateSSHPolicy(context.Background(), []string{"tag:serverpro-server"}, "deploy", "check-or-disabled"); err != nil {
+	if err := NewWithHTTP("token", "-", ts.URL, ts.Client()).ValidateSSHPolicy(context.Background(), []string{"tag:serverpro-server"}, "deploy", "check-or-disabled", ""); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestValidateSSHPolicyRejectsUnsupportedRootPolicy(t *testing.T) {
-	err := NewWithHTTP("token", "-", "http://unused", nil).ValidateSSHPolicy(context.Background(), []string{"tag:serverpro-server"}, "deploy", "allow")
+	err := NewWithHTTP("token", "-", "http://unused", nil).ValidateSSHPolicy(context.Background(), []string{"tag:serverpro-server"}, "deploy", "allow", "")
 	if err == nil || !strings.Contains(err.Error(), "unsupported root policy") {
 		t.Fatalf("ValidateSSHPolicy() error = %v", err)
 	}

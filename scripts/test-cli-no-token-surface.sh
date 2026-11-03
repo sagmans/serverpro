@@ -443,6 +443,8 @@ run_fail_grep "server doctor fix dry-run guard" '--fix cannot be used with --dry
 run_fail_grep "server doctor token guard" 'missing credentials: \[server provider API token' "$bin" --non-interactive -n mynamespace server doctor webapp
 run_ok_grep "server ssh dry-run" 'tailscale' "$bin" --non-interactive --dry-run -n mynamespace server ssh webapp
 skip_case "server ssh live" "requires tailscale SSH/session and remote host"
+run_ok_grep "server ssh-policy dry-run" '"status": "planned"' "$bin" --non-interactive --dry-run -n mynamespace server ssh-policy webapp
+skip_case "server ssh-policy live" "writes the tailnet-global policy file"
 
 for target in all git docker mise node pi; do
 	run_ok_grep "server bootstrap dry-run $target" "\"target\": \"$target\"" "$bin" --non-interactive --dry-run -n mynamespace server bootstrap webapp "$target"

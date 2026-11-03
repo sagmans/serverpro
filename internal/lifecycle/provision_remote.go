@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -66,6 +67,10 @@ func waitRemoteWithPoll(ctx context.Context, r remote.Runner, user, host string,
 			return nil
 		} else if sudoAuthError(err) {
 			return fmt.Errorf("tailscale SSH sudo validation failed: %w", err)
+		} else if errors.Is(err, remote.ErrAutomationNodeNotReady) {
+			// A down, untagged or misconfigured automation node does not
+			// heal while create waits, so stop now with the real cause.
+			return fmt.Errorf("tailscale SSH validation failed: %w", err)
 		}
 		if err := poll.Wait(ctx, wait, remotePollInterval); err != nil {
 			return fmt.Errorf("tailscale SSH validation failed: %w", err)

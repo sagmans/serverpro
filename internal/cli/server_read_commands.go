@@ -94,10 +94,11 @@ func (a *app) runServerDoctor(ctx context.Context, name string) error {
 		return err
 	}
 	defer unlockWorkflow()
-	cfg, _, st, err = a.loadConfigAndStateForServer(name)
+	cfg, stPath, st, err := a.loadConfigAndStateForServer(name)
 	if err != nil {
 		return err
 	}
+	a.doctorStatePath = stPath
 	creds, _, err := a.ensureCredentials(cfg)
 	if err != nil {
 		return err

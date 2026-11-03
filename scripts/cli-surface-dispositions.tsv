@@ -29,6 +29,7 @@ serverpro server import	server import token guard
 serverpro server list	server list fixture
 serverpro server restart	server restart dry-run
 serverpro server ssh	server ssh dry-run
+serverpro server ssh-policy	server ssh-policy dry-run
 serverpro server start	server start dry-run
 serverpro server status	server status token guard
 serverpro server stop	server stop dry-run

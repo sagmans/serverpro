@@ -72,6 +72,25 @@ func (c *snapshotTailscaleClient) PacketPolicy(ctx context.Context) (mesh.Packet
 	return c.policy, c.policyErr
 }
 
+// SSHPolicy is read live, not cached: the check reads it once per run, and a
+// cached copy would hide a write that another command made since.
+func (c *snapshotTailscaleClient) SSHPolicy(ctx context.Context) ([]mesh.SSHRule, error) {
+	source, ok := c.source.(TailnetSSHPolicyClient)
+	if !ok {
+		return nil, errTailnetSSHPolicyUnsupported
+	}
+	return source.SSHPolicy(ctx)
+}
+
+// EnsureServerproPolicy passes the repair through to the live client.
+func (c *snapshotTailscaleClient) EnsureServerproPolicy(ctx context.Context, tags []string, adminUser, rootPolicy, automationSource string) (mesh.PolicyChange, error) {
+	source, ok := c.source.(TailnetSSHPolicyFixer)
+	if !ok {
+		return mesh.PolicyChange{}, errTailnetSSHPolicyUnsupported
+	}
+	return source.EnsureServerproPolicy(ctx, tags, adminUser, rootPolicy, automationSource)
+}
+
 type snapshotCloudflareClient struct {
 	source CloudflareClient
 	once   sync.Once

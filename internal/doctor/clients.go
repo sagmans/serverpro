@@ -30,6 +30,18 @@ type TailnetPacketPolicyClient interface {
 	PacketPolicy(context.Context) (mesh.PacketPolicy, error)
 }
 
+// TailnetSSHPolicyClient reads the tailnet SSH rules. It is optional like the
+// packet policy read, and a separate method for the same reason.
+type TailnetSSHPolicyClient interface {
+	SSHPolicy(context.Context) ([]mesh.SSHRule, error)
+}
+
+// TailnetSSHPolicyFixer is the policy write that provision uses. doctor --fix
+// calls it, so a repair leaves the same rules as a create.
+type TailnetSSHPolicyFixer interface {
+	EnsureServerproPolicy(context.Context, []string, string, string, string) (mesh.PolicyChange, error)
+}
+
 // PublicSSHProbe separates orchestration tests from real public-network access.
 type PublicSSHProbe func(context.Context, string) error
 

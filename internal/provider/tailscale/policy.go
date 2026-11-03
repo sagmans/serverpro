@@ -17,6 +17,12 @@ func (c Client) Policy(ctx context.Context) (Policy, error) {
 	return p, err
 }
 
+// SSHPolicy reads only the ssh section for doctor's rule comparison.
+func (c Client) SSHPolicy(ctx context.Context) ([]mesh.SSHRule, error) {
+	p, err := c.Policy(ctx)
+	return p.SSH, err
+}
+
 // PacketPolicy reads the acls and grants sections so doctor can flag an
 // allow-all tailnet. It shares Policy's read so both see the same HuJSON
 // normalization; it is read-only and never needs the policy ETag.
@@ -43,16 +49,29 @@ func (c Client) decodePolicyFile(ctx context.Context, into any) error {
 
 type ServerproPolicyChange = mesh.PolicyChange
 
-func (c Client) EnsureServerproPolicy(ctx context.Context, tags []string, adminUser, rootPolicy string) (ServerproPolicyChange, error) {
+// EnsureServerproPolicy writes the serverpro tag owners, the human check rule
+// and, when automationSource is set, the automation accept rule. An empty
+// automationSource leaves an existing accept rule alone: servers that share
+// the same tags and admin user share that rule, so one server with automation
+// off must not revoke it for the others. Revocation is RemoveAutomationSSHRule,
+// which only the caller that checked the registry may call.
+func (c Client) EnsureServerproPolicy(ctx context.Context, tags []string, adminUser, rootPolicy, automationSource string) (ServerproPolicyChange, error) {
 	var change ServerproPolicyChange
 	if rootPolicy != "check-or-disabled" {
 		return change, fmt.Errorf("unsupported root policy %q", rootPolicy)
+	}
+	if automationSource != "" && automationSource != mesh.AutomationSourceTag {
+		return change, fmt.Errorf("unsupported automation SSH source %q: only %s is allowed", automationSource, mesh.AutomationSourceTag)
 	}
 	doc, etag, err := c.policyDocument(ctx)
 	if err != nil {
 		return change, err
 	}
-	addedTags, err := doc.ensureTagOwners(tags)
+	ownedTags := append([]string(nil), tags...)
+	if automationSource != "" {
+		ownedTags = append(ownedTags, automationSource)
+	}
+	addedTags, err := doc.ensureTagOwners(ownedTags)
 	if err != nil {
 		return change, err
 	}
@@ -62,14 +81,38 @@ func (c Client) EnsureServerproPolicy(ctx context.Context, tags []string, adminU
 		return change, err
 	}
 	change.SSHRule = addedSSHRule
-	if len(change.TagOwners) == 0 && !change.SSHRule {
-		return change, nil
+	change.AutomationSSHRule, change.AutomationSSHRuleRemoved, err = doc.ensureAutomationSSHRule(tags, adminUser, automationSource)
+	if err != nil {
+		return change, err
+	}
+	return change, c.publishPolicyChange(ctx, doc, etag, change)
+}
+
+// RemoveAutomationSSHRule revokes the automation accept rule for these tags
+// and admin user. The caller must first make sure that no other registered
+// server records the same rule, because the rule is shared by tag set.
+func (c Client) RemoveAutomationSSHRule(ctx context.Context, tags []string, adminUser string) (ServerproPolicyChange, error) {
+	var change ServerproPolicyChange
+	doc, etag, err := c.policyDocument(ctx)
+	if err != nil {
+		return change, err
+	}
+	change.AutomationSSHRuleRemoved, err = doc.removeAutomationSSHRule(tags, adminUser)
+	if err != nil {
+		return change, err
+	}
+	return change, c.publishPolicyChange(ctx, doc, etag, change)
+}
+
+// publishPolicyChange validates and posts a document only when it changed, so
+// a run against a policy that already matches makes no write and keeps the
+// operator's HuJSON comments.
+func (c Client) publishPolicyChange(ctx context.Context, doc policyDocument, etag string, change ServerproPolicyChange) error {
+	if !change.Changed() {
+		return nil
 	}
 	if err := c.validatePolicyDocument(ctx, doc); err != nil {
-		return change, err
+		return err
 	}
-	if err := c.postPolicyDocument(ctx, doc, etag); err != nil {
-		return change, err
-	}
-	return change, nil
+	return c.postPolicyDocument(ctx, doc, etag)
 }

@@ -22,19 +22,41 @@ func ensureTailscalePolicy(ctx context.Context, st *state.State, stPath string, 
 	if creds.Tailscale == "" {
 		return nil
 	}
-	change, err := c.EnsureServerproPolicy(ctx, cfg.Access.Tailscale.Tags, cfg.Admin.Username, cfg.Access.Tailscale.RootPolicy)
+	change, err := c.EnsureServerproPolicy(ctx, cfg.Access.Tailscale.Tags, cfg.Admin.Username, cfg.Access.Tailscale.RootPolicy, cfg.Access.Tailscale.AutomationSource())
 	if err != nil {
 		return err
 	}
-	if len(change.TagOwners) == 0 && !change.SSHRule {
+	before := st.Tailscale
+	RecordTailscalePolicyChange(st, cfg, change)
+	if !change.Changed() && before.PolicySSHAutomationSource == st.Tailscale.PolicySSHAutomationSource && len(before.PolicySSHTags) == len(st.Tailscale.PolicySSHTags) {
 		return nil
 	}
-	st.Tailscale.PolicyTagOwners = appendMissingStrings(st.Tailscale.PolicyTagOwners, change.TagOwners)
+	return save(stPath, *st)
+}
+
+// RecordTailscalePolicyChange stores a successful serverpro policy write.
+// Provision, ssh-policy and the doctor repair share it, so state tells
+// reconcile and doctor the same story whichever command wrote the policy.
+// The recorded automation source follows config after every successful
+// write, also when the rule already existed (a hand-made migration or a rule
+// that another server with the same tags wrote), because reconcile protects
+// the automation tag by this record.
+func RecordTailscalePolicyChange(st *state.State, cfg config.Config, change mesh.PolicyChange) {
+	// The automation tag owner is protected by PolicySSHAutomationSource, so it
+	// stays out of PolicyTagOwners: reconcile can then prune it once no server
+	// records the source.
+	owners := slices.DeleteFunc(slices.Clone(change.TagOwners), func(tag string) bool { return tag == mesh.AutomationSourceTag })
+	st.Tailscale.PolicyTagOwners = appendMissingStrings(st.Tailscale.PolicyTagOwners, owners)
 	if change.SSHRule {
 		st.Tailscale.PolicySSHRule = true
 		st.Tailscale.PolicySSHTags = append([]string(nil), cfg.Access.Tailscale.Tags...)
 	}
-	return save(stPath, *st)
+	st.Tailscale.PolicySSHAutomationSource = cfg.Access.Tailscale.AutomationSource()
+	// A server created before rule tracking gets its tags recorded here, so a
+	// later delete knows which accept rule it shares.
+	if st.Tailscale.PolicySSHAutomationSource != "" && len(st.Tailscale.PolicySSHTags) == 0 {
+		st.Tailscale.PolicySSHTags = append([]string(nil), cfg.Access.Tailscale.Tags...)
+	}
 }
 
 // tailscaleAuthKey mints the one-off bootstrap key through the Tailscale API.
@@ -68,7 +90,7 @@ func validateTailscaleSSHPolicy(ctx context.Context, c TailscaleClient, creds cr
 	if creds.Tailscale == "" {
 		return nil
 	}
-	return c.ValidateSSHPolicy(ctx, cfg.Access.Tailscale.Tags, cfg.Admin.Username, cfg.Access.Tailscale.RootPolicy)
+	return c.ValidateSSHPolicy(ctx, cfg.Access.Tailscale.Tags, cfg.Admin.Username, cfg.Access.Tailscale.RootPolicy, cfg.Access.Tailscale.AutomationSource())
 }
 
 // waitTailscaleDevice binds create to the device this run enrolled. Bootstrap

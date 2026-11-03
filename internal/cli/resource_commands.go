@@ -25,6 +25,7 @@ func (a *app) serverCmd() *cobra.Command {
 		a.serverStatusCmd(),
 		a.serverDoctorCmd(),
 		a.serverSSHCmd(),
+		a.serverSSHPolicyCmd(),
 		a.serverDiscoverCmd(),
 		a.serverImportCmd(),
 		a.serverDeleteCmd(),

@@ -43,6 +43,10 @@ type app struct {
 	selectServerMatch func([]string) (string, bool, error)
 	now               func() time.Time
 	services          serviceHooks
+
+	// doctorStatePath lets the doctor --fix policy repair record state right
+	// after its write, inside the tailnet lock.
+	doctorStatePath string
 }
 
 const (

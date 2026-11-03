@@ -103,8 +103,21 @@ func (c Client) serverproPolicyReconcilePlan(ctx context.Context, protectedTags 
 	return plan, doc, etag, nil
 }
 
+// plannedServerproSSHRule recognizes the two rule shapes that serverpro
+// writes: the human check rule and the automation accept rule. When the
+// automation tag itself is stale, the whole accept rule goes, because a rule
+// whose source has no tag owner fails policy validation.
 func plannedServerproSSHRule(rule SSHRule, removable map[string]bool) (SSHRule, bool) {
-	if rule.Action != "check" || !sameStringSet(rule.Src, []string{serverproPolicyOwner}) || len(rule.Dst) == 0 || len(rule.Users) != 1 || rule.Users[0] == "" {
+	if len(rule.Dst) == 0 || len(rule.Users) != 1 || rule.Users[0] == "" {
+		return SSHRule{}, false
+	}
+	switch {
+	case rule.Action == sshActionCheck && sameStringSet(rule.Src, []string{serverproPolicyOwner}):
+	case rule.Action == sshActionAccept && sameStringSet(rule.Src, []string{mesh.AutomationSourceTag}) && rule.Users[0] != "root":
+		if removable[mesh.AutomationSourceTag] {
+			return rule, true
+		}
+	default:
 		return SSHRule{}, false
 	}
 	stale := make([]string, 0, len(rule.Dst))

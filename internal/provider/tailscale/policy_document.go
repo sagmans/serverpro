@@ -3,11 +3,13 @@ package tailscale
 import (
 	"encoding/json"
 	"sort"
+
+	"github.com/sagmans/serverpro/internal/mesh"
 )
 
 type policyDocument map[string]json.RawMessage
 
-const serverproPolicyOwner = "autogroup:admin"
+const serverproPolicyOwner = mesh.ServerproPolicyOwner
 
 func (d policyDocument) ensureTagOwners(tags []string) ([]string, error) {
 	owners, err := d.tagOwners()

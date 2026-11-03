@@ -131,7 +131,13 @@ func registeredTailnetTags(tailnet string) ([]string, error) {
 func stateTailnetPolicyTags(st state.TailscaleState) []string {
 	tags := append([]string{}, st.Tags...)
 	tags = append(tags, st.PolicyTagOwners...)
-	return append(tags, st.PolicySSHTags...)
+	tags = append(tags, st.PolicySSHTags...)
+	// The automation tag stays while any server records an accept rule from
+	// it, even when the automation node is offline or not enrolled yet.
+	if st.PolicySSHAutomationSource != "" {
+		tags = append(tags, st.PolicySSHAutomationSource)
+	}
+	return tags
 }
 
 func (a *app) tailnetToken() (string, error) {

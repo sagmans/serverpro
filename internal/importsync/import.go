@@ -195,6 +195,7 @@ func enrichImportArtifacts(ctx context.Context, candidate Candidate, opts Import
 			tailscaleState.PolicyTagOwners = append([]string(nil), opts.existingState.Tailscale.PolicyTagOwners...)
 			tailscaleState.PolicySSHRule = opts.existingState.Tailscale.PolicySSHRule
 			tailscaleState.PolicySSHTags = append([]string(nil), opts.existingState.Tailscale.PolicySSHTags...)
+			tailscaleState.PolicySSHAutomationSource = opts.existingState.Tailscale.PolicySSHAutomationSource
 		}
 		tailscaleState.Tailnet = cfg.Access.Tailscale.Tailnet
 		st.Tailscale = tailscaleState

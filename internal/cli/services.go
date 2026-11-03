@@ -30,6 +30,7 @@ type preflightCloudflareClient interface {
 type serviceHooks struct {
 	preflight                      func(context.Context, config.Config, credentials.Set) error
 	preflightTailscaleClient       func(string, string) preflightTailscaleClient
+	serverSSHPolicyClient          func(string, string) serverSSHPolicyClient
 	preflightCloudflareClient      func(string, string) preflightCloudflareClient
 	runProvision                   func(context.Context, config.Config, string, compute.Account, credentials.Set, string) (state.State, error)
 	provisionClients               func(lifecycle.Clients) lifecycle.Clients
@@ -79,6 +80,32 @@ func (a *app) tailnetPolicyClient(token, tailnet string) tailnetPolicyClient {
 		return a.services.tailnetPolicyClient(token, tailnet)
 	}
 	return tailscale.New(token, tailnet)
+}
+
+// newServerSSHPolicyClient keeps the Tailscale adapter import in the adapter
+// registration files, as the provider boundary test requires. Tests replace
+// it through serviceHooks, so no test needs a live API.
+func (a *app) newServerSSHPolicyClient(token, tailnet string) serverSSHPolicyClient {
+	if a.services.serverSSHPolicyClient != nil {
+		return a.services.serverSSHPolicyClient(token, tailnet)
+	}
+	return tailscale.New(token, tailnet)
+}
+
+// doctorSSHPolicyFixer gives doctor --fix the same locked, recorded and
+// validated write as ssh-policy. It embeds the live client for every read,
+// and overrides only the write that doctor calls. Doctor never revokes the
+// shared accept rule; that needs the registry check in ssh-policy.
+type doctorSSHPolicyFixer struct {
+	tailscale.Client
+	cfg    config.Config
+	stPath string
+	policy serverSSHPolicyClient
+}
+
+func (f doctorSSHPolicyFixer) EnsureServerproPolicy(ctx context.Context, _ []string, _, _, _ string) (mesh.PolicyChange, error) {
+	change, _, err := applyServerSSHPolicy(ctx, f.cfg, f.stPath, f.policy, false)
+	return change, err
 }
 
 func wireImportEnrichers(opts *importsync.ImportOptions) {
@@ -164,7 +191,7 @@ func (a *app) runProvision(ctx context.Context, cfg config.Config, stPath string
 		Compute:    provider,
 		Tailscale:  tailscale.New(creds.Tailscale, cfg.Access.Tailscale.Tailnet),
 		Cloudflare: cloudflare.New(creds.Cloudflare, cfg.Cloudflare.AccountID),
-		Remote:     remote.TailscaleSSH{SudoPassword: sudoPassword},
+		Remote:     remoteRunner(cfg, sudoPassword),
 	}
 	if a.services.provisionClients != nil {
 		clients = a.services.provisionClients(clients)
@@ -183,63 +210,63 @@ func (a *app) bootstrapTools(ctx context.Context, cfg config.Config, st state.St
 	if a.services.bootstrapTools != nil {
 		return a.services.bootstrapTools(ctx, cfg, st, sudoPassword, target)
 	}
-	return lifecycle.BootstrapTools(ctx, remote.TailscaleSSH{SudoPassword: sudoPassword}, cfg, st, target)
+	return lifecycle.BootstrapTools(ctx, remoteRunner(cfg, sudoPassword), cfg, st, target)
 }
 
 func (a *app) generateGitDeployKey(ctx context.Context, cfg config.Config, st state.State, sudoPassword, repoURL string) (string, error) {
 	if a.services.generateGitDeployKey != nil {
 		return a.services.generateGitDeployKey(ctx, cfg, st, sudoPassword, repoURL)
 	}
-	return lifecycle.GenerateGitDeployKey(ctx, remote.TailscaleSSH{SudoPassword: sudoPassword}, cfg, st, repoURL)
+	return lifecycle.GenerateGitDeployKey(ctx, remoteRunner(cfg, sudoPassword), cfg, st, repoURL)
 }
 
 func (a *app) verifyGitDeployAccess(ctx context.Context, cfg config.Config, st state.State, sudoPassword, repoURL string) error {
 	if a.services.verifyGitDeployAccess != nil {
 		return a.services.verifyGitDeployAccess(ctx, cfg, st, sudoPassword, repoURL)
 	}
-	return lifecycle.VerifyGitDeployAccess(ctx, remote.TailscaleSSH{SudoPassword: sudoPassword}, cfg, st, repoURL)
+	return lifecycle.VerifyGitDeployAccess(ctx, remoteRunner(cfg, sudoPassword), cfg, st, repoURL)
 }
 
 func (a *app) setupGitAccountKey(ctx context.Context, cfg config.Config, st state.State, sudoPassword string) (string, error) {
 	if a.services.setupGitAccountKey != nil {
 		return a.services.setupGitAccountKey(ctx, cfg, st, sudoPassword)
 	}
-	return lifecycle.SetupGitAccountKey(ctx, remote.TailscaleSSH{SudoPassword: sudoPassword}, cfg, st)
+	return lifecycle.SetupGitAccountKey(ctx, remoteRunner(cfg, sudoPassword), cfg, st)
 }
 
 func (a *app) verifyGitHubSSH(ctx context.Context, cfg config.Config, st state.State, sudoPassword string) error {
 	if a.services.verifyGitHubSSH != nil {
 		return a.services.verifyGitHubSSH(ctx, cfg, st, sudoPassword)
 	}
-	return lifecycle.VerifyGitHubSSH(ctx, remote.TailscaleSSH{SudoPassword: sudoPassword}, cfg, st)
+	return lifecycle.VerifyGitHubSSH(ctx, remoteRunner(cfg, sudoPassword), cfg, st)
 }
 
 func (a *app) configureGitIdentity(ctx context.Context, cfg config.Config, st state.State, sudoPassword string) error {
 	if a.services.configureGitIdentity != nil {
 		return a.services.configureGitIdentity(ctx, cfg, st, sudoPassword)
 	}
-	return lifecycle.ConfigureGitIdentity(ctx, remote.TailscaleSSH{SudoPassword: sudoPassword}, cfg, st)
+	return lifecycle.ConfigureGitIdentity(ctx, remoteRunner(cfg, sudoPassword), cfg, st)
 }
 
 func (a *app) setupGitSigningKey(ctx context.Context, cfg config.Config, st state.State, sudoPassword string) (string, error) {
 	if a.services.setupGitSigningKey != nil {
 		return a.services.setupGitSigningKey(ctx, cfg, st, sudoPassword)
 	}
-	return lifecycle.SetupGitSigningKey(ctx, remote.TailscaleSSH{SudoPassword: sudoPassword}, cfg, st)
+	return lifecycle.SetupGitSigningKey(ctx, remoteRunner(cfg, sudoPassword), cfg, st)
 }
 
 func (a *app) setupGitHubCLI(ctx context.Context, cfg config.Config, st state.State, sudoPassword, pat string) error {
 	if a.services.setupGitHubCLI != nil {
 		return a.services.setupGitHubCLI(ctx, cfg, st, sudoPassword, pat)
 	}
-	return lifecycle.SetupGitHubCLI(ctx, remote.TailscaleSSH{SudoPassword: sudoPassword}, cfg, st, pat)
+	return lifecycle.SetupGitHubCLI(ctx, remoteRunner(cfg, sudoPassword), cfg, st, pat)
 }
 
 func (a *app) retryDoctorSudoReport(ctx context.Context, cfg config.Config, st state.State, creds credentials.Set, existing doctor.Report, sudoPassword string) doctor.Report {
 	if a.services.retryDoctorSudoReport != nil {
 		return a.services.retryDoctorSudoReport(ctx, cfg, st, creds, existing, sudoPassword)
 	}
-	return doctor.RetryRemote(ctx, cfg, st, existing, remote.TailscaleSSH{SudoPassword: sudoPassword}, a.withDoctorProviderFacts(st, doctor.Options{SudoPassword: sudoPassword, GitHubPAT: creds.GitHubPAT})).Redact(a.redactionSecrets(creds)...)
+	return doctor.RetryRemote(ctx, cfg, st, existing, remoteRunner(cfg, sudoPassword), a.withDoctorProviderFacts(st, doctor.Options{SudoPassword: sudoPassword, GitHubPAT: creds.GitHubPAT})).Redact(a.redactionSecrets(creds)...)
 }
 
 // withDoctorProviderFacts adds what the server's compute provider declares
@@ -274,12 +301,28 @@ func (a *app) doctorReport(ctx context.Context, cfg config.Config, st state.Stat
 		clients, accountRef, err = a.services.doctorClients(ctx, cfg, st, creds, sudoPassword)
 	} else {
 		clients.Compute, accountRef, err = a.serverProviderAccount(st)
-		clients.Tailscale = tailscale.New(creds.Tailscale, cfg.Access.Tailscale.Tailnet)
+		tsClient := tailscale.New(creds.Tailscale, cfg.Access.Tailscale.Tailnet)
+		clients.Tailscale = tsClient
+		if a.doctorFix && a.doctorStatePath != "" {
+			clients.Tailscale = doctorSSHPolicyFixer{Client: tsClient, cfg: cfg, stPath: a.doctorStatePath, policy: a.newServerSSHPolicyClient(creds.Tailscale, cfg.Access.Tailscale.Tailnet)}
+		}
 		clients.Cloudflare = cloudflare.New(creds.Cloudflare, cfg.Cloudflare.AccountID)
-		clients.Remote = remote.TailscaleSSH{SudoPassword: sudoPassword}
+		clients.Remote = remoteRunner(cfg, sudoPassword)
 	}
 	if err != nil {
 		return doctor.Report{Results: []doctor.Result{{Status: doctor.Fail, Scope: "provider", Name: "compute provider", Evidence: err.Error()}}}
 	}
 	return doctor.RunWithOptions(ctx, cfg, st, creds, clients, a.withDoctorProviderFacts(st, doctor.Options{Fix: a.doctorFix, SudoPassword: sudoPassword, ComputeAccount: accountRef})).Redact(a.redactionSecrets(creds)...)
+}
+
+// remoteRunner picks the SSH transport from config. With automation on,
+// every non-interactive session goes through the tagged node, so the accept
+// rule applies and no check-mode browser login can stall the run. The
+// interactive "server ssh" shell keeps the operator's own device on purpose.
+func remoteRunner(cfg config.Config, sudoPassword string) remote.TailscaleSSH {
+	runner := remote.TailscaleSSH{SudoPassword: sudoPassword}
+	if automation := cfg.Access.Tailscale.Automation; automation.Enabled {
+		runner.Automation = &remote.AutomationNode{CLI: automation.CLI, Socket: automation.Socket, Tags: cfg.Access.Tailscale.Tags}
+	}
+	return runner
 }

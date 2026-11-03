@@ -25,6 +25,10 @@ const defaultTailscaleSSHTimeout = 2 * time.Minute
 type TailscaleSSH struct {
 	Timeout      time.Duration
 	SudoPassword string
+	// Automation, when set, sends every session through the tagged automation
+	// node instead of the operator's own device, so the accept rule applies
+	// and no browser login can block an unattended run.
+	Automation *AutomationNode
 }
 
 func (r TailscaleSSH) Run(ctx context.Context, user, host, script string) (string, error) {
@@ -55,7 +59,11 @@ func (r TailscaleSSH) RunWithInput(ctx context.Context, user, host, script, inpu
 }
 
 func (r TailscaleSSH) runWithInputLimit(ctx context.Context, user, host, script, input string, outputLimit int) (string, error) {
-	return runTailscaleSSHWithOutputLimit(ctx, r.Timeout, sudoSSHArgs(user, host), sudoPayloadWithInput(script, input, r.SudoPassword), outputLimit)
+	payload := sudoPayloadWithInput(script, input, r.SudoPassword)
+	if r.Automation != nil {
+		return r.Automation.run(ctx, r.Timeout, user, host, remoteShellCommand(sudoBootstrapCommand()), payload, outputLimit)
+	}
+	return runTailscaleSSHWithOutputLimit(ctx, r.Timeout, sudoSSHArgs(user, host), payload, outputLimit)
 }
 
 func runTailscaleSSH(ctx context.Context, timeout time.Duration, args []string, stdin string) (string, error) {
@@ -63,6 +71,12 @@ func runTailscaleSSH(ctx context.Context, timeout time.Duration, args []string, 
 }
 
 func runTailscaleSSHWithOutputLimit(ctx context.Context, timeout time.Duration, args []string, stdin string, outputLimit int) (string, error) {
+	return runSSHCommandWithOutputLimit(ctx, timeout, "tailscale ssh", "tailscale", args, stdin, outputLimit)
+}
+
+// runSSHCommandWithOutputLimit is the one place that runs a local SSH client,
+// so both transports share the deadline, the output ceiling and the error text.
+func runSSHCommandWithOutputLimit(ctx context.Context, timeout time.Duration, label, name string, args []string, stdin string, outputLimit int) (string, error) {
 	var cancel context.CancelFunc
 	if timeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, timeout)
@@ -70,7 +84,7 @@ func runTailscaleSSHWithOutputLimit(ctx context.Context, timeout time.Duration, 
 		ctx, cancel = contextWithDefaultTimeout(ctx, defaultTailscaleSSHTimeout)
 	}
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "tailscale", args...)
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdin = strings.NewReader(stdin)
 	out := &commandOutputBuffer{limit: outputLimit}
 	cmd.Stdout = out
@@ -80,7 +94,7 @@ func runTailscaleSSHWithOutputLimit(ctx context.Context, timeout time.Duration, 
 		return "", out.limitErr
 	}
 	if err != nil {
-		return out.String(), fmt.Errorf("tailscale ssh failed: %w: %s", err, out.String())
+		return out.String(), fmt.Errorf("%s failed: %w: %s", label, err, out.String())
 	}
 	return out.String(), nil
 }

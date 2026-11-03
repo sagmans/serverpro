@@ -167,7 +167,7 @@ type validationFailTailscale struct {
 	err error
 }
 
-func (f *validationFailTailscale) ValidateSSHPolicy(context.Context, []string, string, string) error {
+func (f *validationFailTailscale) ValidateSSHPolicy(context.Context, []string, string, string, string) error {
 	return f.err
 }
 

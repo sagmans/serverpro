@@ -104,9 +104,29 @@ func (r SSHRule) MarshalJSON() ([]byte, error) {
 	return json.Marshal(fields)
 }
 
+// AutomationSourceTag is the one tag that the serverpro automation node
+// carries. It is fixed, not configurable, so that no config can name a server
+// tag (or any other tag) as an accept source: a server tag there would let
+// every server of that namespace log in to another one without step-up auth.
+const AutomationSourceTag = "tag:serverpro-automation"
+
+// ServerproPolicyOwner is the source of the human check rule and the owner of
+// every tag that serverpro adds, so only tailnet admins can apply them.
+const ServerproPolicyOwner = "autogroup:admin"
+
 type PolicyChange struct {
 	TagOwners []string
 	SSHRule   bool
+	// AutomationSSHRule and AutomationSSHRuleRemoved report the accept rule
+	// for the tagged automation source, so state records only what this run
+	// wrote or took away.
+	AutomationSSHRule        bool
+	AutomationSSHRuleRemoved bool
+}
+
+// Changed reports whether the policy document needs a write.
+func (c PolicyChange) Changed() bool {
+	return len(c.TagOwners) > 0 || c.SSHRule || c.AutomationSSHRule || c.AutomationSSHRuleRemoved
 }
 
 type PolicyReconcilePlan struct {

@@ -1,5 +1,7 @@
 package config
 
+import "github.com/sagmans/serverpro/internal/mesh"
+
 type Config struct {
 	// SchemaVersion stamps the writing build so legacy files with tool-forced
 	// field values can be migrated without guessing operator intent.
@@ -85,6 +87,38 @@ type Tailscale struct {
 	Tailnet    string   `yaml:"tailnet" json:"tailnet"`
 	Tags       []string `yaml:"tags" json:"tags"`
 	RootPolicy string   `yaml:"root_policy" json:"root_policy"`
+	// Automation is optional: an omitted section keeps the admin user on the
+	// human check rule only, so every SSH session needs a fresh browser login.
+	Automation TailscaleAutomation `yaml:"automation,omitempty" json:"automation,omitzero"`
+}
+
+// AutomationTailscaleTag is the accept source of the automation node. The
+// value lives in mesh so the provider and config cannot disagree on it.
+const AutomationTailscaleTag = mesh.AutomationSourceTag
+
+// TailscaleAutomation lets unattended runs (doctor, bootstrap, git setup)
+// reach the admin user without the check-mode browser login. The access comes
+// only from a separate tagged node on the operator machine, so human devices
+// keep the check rule and root keeps check mode.
+type TailscaleAutomation struct {
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// Socket is the LocalAPI socket of the tagged tailscaled. It must be an
+	// absolute path because it goes into the ssh ProxyCommand.
+	Socket string `yaml:"socket" json:"socket"`
+	// CLI is the tailscale binary that talks to Socket. It is explicit because
+	// the binary on PATH can be a wrapper for the desktop app, which does not
+	// talk to a second tailscaled.
+	CLI string `yaml:"cli" json:"cli"`
+}
+
+// AutomationSource is the SSH accept source that this config asks for, or ""
+// when automation is off. Policy writes and doctor share it so that both
+// derive the same rule from the same config.
+func (t Tailscale) AutomationSource() string {
+	if !t.Automation.Enabled {
+		return ""
+	}
+	return AutomationTailscaleTag
 }
 
 type Cloudflare struct {
