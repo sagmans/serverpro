@@ -50,7 +50,7 @@ type sshPolicyFixer struct {
 	calls  []ensureCall
 }
 
-func (f *sshPolicyFixer) EnsureServerproPolicy(ctx context.Context, tags, _ []string, adminUser, rootPolicy, automationSource string) (mesh.PolicyChange, error) {
+func (f *sshPolicyFixer) EnsureServerproPolicy(ctx context.Context, tags, _ []string, adminUser, rootPolicy, automationSource, _ string) (mesh.PolicyChange, error) {
 	call := ensureCall{tags: slices.Clone(tags), adminUser: adminUser, rootPolicy: rootPolicy, automationSource: automationSource}
 	if deadline, ok := ctx.Deadline(); ok {
 		call.budget = time.Until(deadline)

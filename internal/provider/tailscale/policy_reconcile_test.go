@@ -157,7 +157,7 @@ func TestPlanServerproPolicyReconcilePlansRecognizedMixedDestinationsAndSortsOwn
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(plan.TagOwners, ",") != "tag:serverpro-a,tag:serverpro-z" || len(plan.SSHRules) != 1 || strings.Join(plan.SSHRules[0].Dst, ",") != "tag:serverpro-a" {
+	if strings.Join(plan.TagOwners, ",") != "tag:serverpro-a,tag:serverpro-z" || len(plan.SSHRules) != 2 || strings.Join(plan.SSHRules[0].Dst, ",") != "tag:serverpro-a" || plan.SSHRules[1].Action != sshActionAccept {
 		t.Fatalf("plan=%+v", plan)
 	}
 }

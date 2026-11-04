@@ -22,7 +22,7 @@ func ensureTailscalePolicy(ctx context.Context, st *state.State, stPath string, 
 	if creds.Tailscale == "" {
 		return nil
 	}
-	change, err := c.EnsureServerproPolicy(ctx, cfg.Access.Tailscale.Tags, cfg.Access.Tailscale.SSHRuleTags(), cfg.Admin.Username, cfg.Access.Tailscale.RootPolicy, cfg.Access.Tailscale.AutomationSource())
+	change, err := c.EnsureServerproPolicy(ctx, cfg.Access.Tailscale.Tags, cfg.Access.Tailscale.SSHRuleTags(), cfg.Admin.Username, cfg.Access.Tailscale.RootPolicy, cfg.Access.Tailscale.AutomationSource(), cfg.Access.Tailscale.HumanSSHAction())
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func validateTailscaleSSHPolicy(ctx context.Context, c TailscaleClient, creds cr
 	if creds.Tailscale == "" {
 		return nil
 	}
-	return c.ValidateSSHPolicy(ctx, cfg.Access.Tailscale.Tags, cfg.Access.Tailscale.SSHRuleTags(), cfg.Admin.Username, cfg.Access.Tailscale.RootPolicy, cfg.Access.Tailscale.AutomationSource())
+	return c.ValidateSSHPolicy(ctx, cfg.Access.Tailscale.Tags, cfg.Access.Tailscale.SSHRuleTags(), cfg.Admin.Username, cfg.Access.Tailscale.RootPolicy, cfg.Access.Tailscale.AutomationSource(), cfg.Access.Tailscale.HumanSSHAction())
 }
 
 // waitTailscaleDevice binds create to the device this run enrolled. Bootstrap

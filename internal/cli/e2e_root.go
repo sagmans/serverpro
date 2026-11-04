@@ -165,11 +165,11 @@ func (e2eTailscale) CreateAuthKey(context.Context, []string, time.Duration) (mes
 
 func (e2eTailscale) DeleteAuthKey(context.Context, string) error { return nil }
 
-func (e2eTailscale) EnsureServerproPolicy(context.Context, []string, []string, string, string, string) (mesh.PolicyChange, error) {
+func (e2eTailscale) EnsureServerproPolicy(context.Context, []string, []string, string, string, string, string) (mesh.PolicyChange, error) {
 	return mesh.PolicyChange{}, nil
 }
 
-func (e2eTailscale) ValidateSSHPolicy(context.Context, []string, []string, string, string, string) error {
+func (e2eTailscale) ValidateSSHPolicy(context.Context, []string, []string, string, string, string, string) error {
 	return nil
 }
 

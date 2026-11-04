@@ -50,18 +50,26 @@ func (c Client) decodePolicyFile(ctx context.Context, into any) error {
 type ServerproPolicyChange = mesh.PolicyChange
 
 // EnsureServerproPolicy writes the tag owners for every server tag, and the
-// human check rule and (when automationSource is set) the automation accept
-// rule for sshTags only. The two sets differ when a server narrows its rules
+// human rule with humanAction and (when automationSource is set) the automation
+// accept rule for sshTags only. The two sets differ when a server narrows its rules
 // to its own tag, because all its tags still need an owner to enrol. An empty
 // automationSource leaves an existing accept rule alone: servers that share
 // the same SSH rule tags and admin user share that rule, so one server with
 // automation off must not revoke it for the others. Revocation is
 // RemoveAutomationSSHRule, which only the caller that checked the registry
 // may call.
-func (c Client) EnsureServerproPolicy(ctx context.Context, tags, sshTags []string, adminUser, rootPolicy, automationSource string) (ServerproPolicyChange, error) {
+func (c Client) EnsureServerproPolicy(ctx context.Context, tags, sshTags []string, adminUser, rootPolicy, automationSource, humanAction string) (ServerproPolicyChange, error) {
 	var change ServerproPolicyChange
 	if rootPolicy != "check-or-disabled" {
 		return change, fmt.Errorf("unsupported root policy %q", rootPolicy)
+	}
+	if humanAction != sshActionCheck && humanAction != sshActionAccept {
+		return change, fmt.Errorf("unsupported human SSH action %q", humanAction)
+	}
+	// Refused before the policy read, for the same reason as the automation
+	// check below: the read-back would see a root accept rule only once live.
+	if humanAction == sshActionAccept && adminUser == mesh.RootSSHUser {
+		return change, fmt.Errorf("refused human SSH accept rule for %s: root must stay check or disabled", mesh.RootSSHUser)
 	}
 	if automationSource != "" && automationSource != mesh.AutomationSourceTag {
 		return change, fmt.Errorf("unsupported automation SSH source %q: only %s is allowed", automationSource, mesh.AutomationSourceTag)
@@ -84,7 +92,7 @@ func (c Client) EnsureServerproPolicy(ctx context.Context, tags, sshTags []strin
 		return change, err
 	}
 	change.TagOwners = addedTags
-	addedSSHRule, err := doc.ensureSSHRule(sshTags, adminUser)
+	addedSSHRule, err := doc.ensureSSHRule(sshTags, adminUser, humanAction)
 	if err != nil {
 		return change, err
 	}

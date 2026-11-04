@@ -115,9 +115,17 @@ const AutomationSourceTag = "tag:serverpro-automation"
 // reach root without a browser login.
 const RootSSHUser = "root"
 
-// ServerproPolicyOwner is the source of the human check rule and the owner of
-// every tag that serverpro adds, so only tailnet admins can apply them.
+// ServerproPolicyOwner is the source of the human rule and the owner of every
+// tag that serverpro adds, so only tailnet admins can apply them.
 const ServerproPolicyOwner = "autogroup:admin"
+
+// Tailscale SSH rule actions that serverpro writes. Config, the policy write
+// and doctor share them, so all three agree on what the human rule must be.
+// check asks for a recent browser login; accept does not.
+const (
+	SSHActionCheck  = "check"
+	SSHActionAccept = "accept"
+)
 
 type PolicyChange struct {
 	TagOwners []string

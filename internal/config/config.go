@@ -93,6 +93,10 @@ type Tailscale struct {
 	// each other's SSH rules out. Empty means Tags.
 	SSHTags    []string `yaml:"ssh_tags,omitempty" json:"ssh_tags,omitempty"`
 	RootPolicy string   `yaml:"root_policy" json:"root_policy"`
+	// HumanSSH is the action of the human SSH rule: check (the default) or
+	// accept. accept removes the browser login for the admin user from every
+	// tailnet admin device. Root is never affected: it has no accept rule.
+	HumanSSH string `yaml:"human_ssh,omitempty" json:"human_ssh,omitempty"`
 	// Automation is optional: an omitted section keeps the admin user on the
 	// human check rule only, so every SSH session needs a fresh browser login.
 	Automation TailscaleAutomation `yaml:"automation,omitempty" json:"automation,omitzero"`
@@ -127,7 +131,17 @@ func (t Tailscale) AutomationSource() string {
 	return AutomationTailscaleTag
 }
 
-// SSHRuleTags is the destination of the human check rule and the automation
+// HumanSSHAction is the action that this config asks for on the human SSH
+// rule. An empty value means check, so a config saved before the key existed
+// keeps step-up auth.
+func (t Tailscale) HumanSSHAction() string {
+	if t.HumanSSH == "" {
+		return mesh.SSHActionCheck
+	}
+	return t.HumanSSH
+}
+
+// SSHRuleTags is the destination of the human rule and the automation
 // accept rule. Policy writes, the read-back, doctor and the shared-rule check
 // all use it, so they agree on which rule belongs to this server.
 func (t Tailscale) SSHRuleTags() []string {

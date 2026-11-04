@@ -21,13 +21,13 @@ const (
 	// tailnetSSHPolicyFixTimeout also covers the wait for the tailnet policy
 	// lock, a create or reconcile on the same tailnet can hold it.
 	tailnetSSHPolicyFixTimeout = time.Minute
-	tailnetSSHPolicyFixHint    = "run serverpro server doctor NAME --fix; it rewrites only the serverpro check and automation accept rules"
+	tailnetSSHPolicyFixHint    = "run serverpro server doctor NAME --fix; it rewrites only the serverpro human and automation rules"
 	// tailnetSSHForeignHint covers rules that serverpro did not write. Doctor
 	// never edits them, because the policy is shared by the whole tailnet.
-	tailnetSSHForeignHint = "edit the tailnet policy by hand: give accept to the admin user only from " + mesh.AutomationSourceTag + ", and keep root on check"
+	tailnetSSHForeignHint = "edit the tailnet policy by hand: give accept to the admin user only from " + mesh.AutomationSourceTag + " or, with access.tailscale.human_ssh: accept, from " + mesh.ServerproPolicyOwner + ", and keep root on check"
 	tailnetSSHRevokeHint  = "if no other server with these tags and admin user has automation on, run serverpro server ssh-policy NAME"
-	sshActionCheck        = "check"
-	sshActionAccept       = "accept"
+	sshActionCheck        = mesh.SSHActionCheck
+	sshActionAccept       = mesh.SSHActionAccept
 	sshUserRoot           = "root"
 	sshUserNonRoot        = "autogroup:nonroot"
 )
@@ -47,7 +47,7 @@ type sshPolicyFinding struct {
 }
 
 // checkTailnetSSHPolicy compares the live SSH rules for this server's tags
-// with what config and state ask for: the human check rule, the automation
+// with what config and state ask for: the human rule, the automation
 // accept rule only when automation is on, and root on check. It runs before
 // the remote checks so that --fix can add a missing accept rule before the
 // first unattended session needs it. The fixer that the CLI gives doctor
@@ -73,7 +73,7 @@ func checkTailnetSSHPolicy(ctx context.Context, cfg config.Config, st state.Stat
 		result.Remediation = "grant the Tailscale API token policy-file read access, then rerun doctor"
 		return result
 	}
-	findings := sshPolicyFindings(rules, ts.Tags, ts.SSHRuleTags(), cfg.Admin.Username, ts.AutomationSource())
+	findings := sshPolicyFindings(rules, ts.Tags, ts.SSHRuleTags(), cfg.Admin.Username, ts.AutomationSource(), ts.HumanSSHAction())
 	if recorded, want := st.Tailscale.PolicySSHAutomationSource, ts.AutomationSource(); recorded != want {
 		findings = append(findings, sshPolicyFinding{text: fmt.Sprintf("state records automation source %q, config asks for %q", recorded, want), fixable: true})
 	}
@@ -95,7 +95,7 @@ func repairTailnetSSHPolicy(ctx context.Context, cfg config.Config, client Tails
 	}
 	ts := cfg.Access.Tailscale
 	fixCtx, cancel := context.WithTimeout(ctx, tailnetSSHPolicyFixTimeout)
-	_, err := fixer.EnsureServerproPolicy(fixCtx, ts.Tags, ts.SSHRuleTags(), cfg.Admin.Username, ts.RootPolicy, ts.AutomationSource())
+	_, err := fixer.EnsureServerproPolicy(fixCtx, ts.Tags, ts.SSHRuleTags(), cfg.Admin.Username, ts.RootPolicy, ts.AutomationSource(), ts.HumanSSHAction())
 	cancel()
 	if err != nil {
 		return fail("provider", tailnetSSHPolicyCheckName, "repair failed: "+err.Error()+"; findings: "+findingsText(findings), tailnetSSHPolicyFixHint)
@@ -124,28 +124,26 @@ func splitFixable(findings []sshPolicyFinding) (fixed, remaining []sshPolicyFind
 // its device tags, because Tailscale applies a rule to every node with any
 // dst tag. Only the rules for sshTags count as this server's own; an
 // automation rule that reaches it through a shared tag is reported.
-func sshPolicyFindings(rules []mesh.SSHRule, tags, sshTags []string, adminUser, source string) []sshPolicyFinding {
+func sshPolicyFindings(rules []mesh.SSHRule, tags, sshTags []string, adminUser, source, humanAction string) []sshPolicyFinding {
 	var findings []sshPolicyFinding
 	humanRule, automationRule := false, false
 	for _, rule := range rules {
 		if !sshRuleTargets(rule, tags) {
 			continue
 		}
-		switch {
-		case isServerproCheckRule(rule, sshTags, adminUser):
-			humanRule = true
-		case isAutomationAcceptRule(rule, sshTags, adminUser):
-			automationRule = true
-		case slices.Contains(rule.Src, mesh.AutomationSourceTag):
-			// A rule from the automation tag in another shape (old tags,
-			// another server's tags or admin user) keeps access open that no
-			// config of this server asks for.
-			findings = append(findings, sshPolicyFinding{text: fmt.Sprintf("other %s rule from %s for %v to %v", rule.Action, mesh.AutomationSourceTag, rule.Users, rule.Dst)})
+		human := isServerproHumanRule(rule, sshTags, adminUser)
+		automation := isAutomationAcceptRule(rule, sshTags, adminUser)
+		humanRule = humanRule || human
+		automationRule = automationRule || automation
+		findings = append(findings, sshOwnRuleFindings(rule, human, automation, adminUser, humanAction)...)
+		// The human accept rule has its own finding, and a root admin user
+		// stays reported, because config refuses that combination.
+		if !human || rule.Action != sshActionAccept || adminUser == sshUserRoot {
+			findings = append(findings, sshRuleRiskFindings(rule, adminUser)...)
 		}
-		findings = append(findings, sshRuleRiskFindings(rule, adminUser)...)
 	}
 	if !humanRule {
-		findings = append(findings, sshPolicyFinding{text: "human check rule for " + adminUser + " missing", fixable: true})
+		findings = append(findings, sshPolicyFinding{text: "human " + humanAction + " rule for " + adminUser + " missing", fixable: true})
 	}
 	switch {
 	case source != "" && !automationRule:
@@ -157,6 +155,33 @@ func sshPolicyFindings(rules []mesh.SSHRule, tags, sshTags []string, adminUser, 
 		findings = append(findings, sshPolicyFinding{text: "automation accept rule for " + adminUser + " present but automation is off for this server; if no other server with these tags uses it, revoke it with serverpro server ssh-policy NAME", hint: tailnetSSHRevokeHint})
 	}
 	return findings
+}
+
+// sshOwnRuleFindings compares one rule that reaches the server with what the
+// config of this server asks for.
+func sshOwnRuleFindings(rule mesh.SSHRule, human, automation bool, adminUser, humanAction string) []sshPolicyFinding {
+	switch {
+	case automation:
+		return nil
+	case human:
+		if rule.Action == humanAction {
+			return nil
+		}
+		// An accept rule that config does not ask for opens access without
+		// step-up auth, so it fails; the reverse only asks a person for a
+		// browser login.
+		return []sshPolicyFinding{{text: fmt.Sprintf("human rule for %s is %s, config asks for %s", adminUser, rule.Action, humanAction), fixable: true, severe: rule.Action == sshActionAccept}}
+	case slices.Contains(rule.Src, mesh.AutomationSourceTag):
+		// A rule from the automation tag in another shape (old tags, another
+		// server's tags or admin user) keeps access open that no config of
+		// this server asks for.
+		return []sshPolicyFinding{{text: fmt.Sprintf("other %s rule from %s for %v to %v", rule.Action, mesh.AutomationSourceTag, rule.Users, rule.Dst)}}
+	case humanAction == sshActionAccept && rule.Action == sshActionCheck && grantsAdmin(rule.Users, adminUser):
+		// Tailscale applies check rules before accept rules, so this rule can
+		// bring back the browser login that config turned off.
+		return []sshPolicyFinding{{text: fmt.Sprintf("check rule for %v from %v can ask for a browser login", rule.Users, rule.Src)}}
+	}
+	return nil
 }
 
 // sshRuleRiskFindings reports access that one rule opens without step-up
@@ -185,8 +210,10 @@ func sshRuleTargets(rule mesh.SSHRule, tags []string) bool {
 	return slices.ContainsFunc(rule.Dst, func(dst string) bool { return slices.Contains(tags, dst) })
 }
 
-func isServerproCheckRule(rule mesh.SSHRule, tags []string, adminUser string) bool {
-	return rule.Action == sshActionCheck && sameSet(rule.Src, []string{mesh.ServerproPolicyOwner}) && sameSet(rule.Dst, tags) && sameSet(rule.Users, []string{adminUser})
+// isServerproHumanRule matches the human rule with either action, so a rule
+// with the wrong action reports as that and not as a missing rule.
+func isServerproHumanRule(rule mesh.SSHRule, tags []string, adminUser string) bool {
+	return (rule.Action == sshActionCheck || rule.Action == sshActionAccept) && sameSet(rule.Src, []string{mesh.ServerproPolicyOwner}) && sameSet(rule.Dst, tags) && sameSet(rule.Users, []string{adminUser})
 }
 
 func isAutomationAcceptRule(rule mesh.SSHRule, tags []string, adminUser string) bool {
@@ -231,9 +258,10 @@ func findingsText(findings []sshPolicyFinding) string {
 }
 
 func sshPolicyIntent(cfg config.Config) string {
+	human := cfg.Access.Tailscale.HumanSSHAction() + " rule for " + cfg.Admin.Username
 	source := cfg.Access.Tailscale.AutomationSource()
 	if source == "" {
-		return "check rule for " + cfg.Admin.Username + "; automation off"
+		return human + "; automation off"
 	}
-	return "check rule for " + cfg.Admin.Username + "; accept from " + source
+	return human + "; accept from " + source
 }

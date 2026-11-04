@@ -51,7 +51,7 @@ type fakeSSHPolicyClient struct {
 	sourceAtRemove []string
 }
 
-func (f *fakeSSHPolicyClient) EnsureServerproPolicy(ctx context.Context, tags, _ []string, adminUser, rootPolicy, automationSource string) (mesh.PolicyChange, error) {
+func (f *fakeSSHPolicyClient) EnsureServerproPolicy(ctx context.Context, tags, _ []string, adminUser, rootPolicy, automationSource, _ string) (mesh.PolicyChange, error) {
 	f.calls = append(f.calls, "ensure")
 	f.ensureSources = append(f.ensureSources, automationSource)
 	if !slices.Equal(tags, []string{sshPolicyNSTag}) || adminUser != sshPolicyAdmin || rootPolicy != sshPolicyRoot {
@@ -70,7 +70,7 @@ func (f *fakeSSHPolicyClient) RemoveAutomationSSHRule(_ context.Context, tags []
 	return f.removeChange, nil
 }
 
-func (f *fakeSSHPolicyClient) ValidateSSHPolicy(context.Context, []string, []string, string, string, string) error {
+func (f *fakeSSHPolicyClient) ValidateSSHPolicy(context.Context, []string, []string, string, string, string, string) error {
 	f.calls = append(f.calls, "validate")
 	return f.validateErr
 }
@@ -216,7 +216,7 @@ func TestServerSSHPolicyAppliesAutomationRuleAndRecordsState(t *testing.T) {
 	if !slices.Equal(built, []string{sshPolicyToken + "@" + config.TokenDefaultTailnet}) {
 		t.Fatalf("client built with %v", built)
 	}
-	if row.Status != "applied" || row.DryRun || !row.CheckRuleAdded || !row.AutomationSSHRuleAdded || row.AutomationSSHRuleRemoved || len(row.AutomationSSHRuleKeptFor) != 0 {
+	if row.Status != "applied" || row.DryRun || !row.HumanRuleChanged || !row.AutomationSSHRuleAdded || row.AutomationSSHRuleRemoved || len(row.AutomationSSHRuleKeptFor) != 0 {
 		t.Fatalf("row = %+v", row)
 	}
 	if strings.Join(client.calls, ",") != "ensure,validate" || !slices.Equal(client.ensureSources, []string{mesh.AutomationSourceTag}) || !slices.Equal(client.lockHeld, []bool{true}) {
@@ -403,7 +403,7 @@ func TestDoctorSSHPolicyFixerUsesLockedWriteWithoutRevoke(t *testing.T) {
 	client := &fakeSSHPolicyClient{t: t, stPath: stPath, ensureChange: mesh.PolicyChange{SSHRule: true}}
 	fixer := doctorSSHPolicyFixer{cfg: cfg, stPath: stPath, policy: client}
 
-	change, err := fixer.EnsureServerproPolicy(context.Background(), []string{"tag:ignored"}, []string{"tag:ignored"}, "ignored", "ignored", mesh.AutomationSourceTag)
+	change, err := fixer.EnsureServerproPolicy(context.Background(), []string{"tag:ignored"}, []string{"tag:ignored"}, "ignored", "ignored", mesh.AutomationSourceTag, "check")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -425,7 +425,7 @@ func TestDoctorSSHPolicyFixerRefusesWithoutStatePath(t *testing.T) {
 	client := &fakeSSHPolicyClient{t: t}
 	fixer := doctorSSHPolicyFixer{cfg: cfg, policy: client}
 
-	if _, err := fixer.EnsureServerproPolicy(context.Background(), nil, nil, "", "", ""); !errors.Is(err, errDoctorFixNoStatePath) {
+	if _, err := fixer.EnsureServerproPolicy(context.Background(), nil, nil, "", "", "", "check"); !errors.Is(err, errDoctorFixNoStatePath) {
 		t.Fatalf("err = %v", err)
 	}
 	if len(client.calls) != 0 {

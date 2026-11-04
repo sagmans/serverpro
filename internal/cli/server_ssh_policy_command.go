@@ -22,11 +22,14 @@ type serverSSHPolicyRow struct {
 	Tags      []string `json:"tags"`
 	// SSHTags is the destination of the rules, so the output shows when a
 	// server narrows them to its own tag.
-	SSHTags                  []string `json:"ssh_tags"`
-	AdminUser                string   `json:"admin_user"`
-	AutomationSource         string   `json:"automation_source,omitempty"`
+	SSHTags          []string `json:"ssh_tags"`
+	AdminUser        string   `json:"admin_user"`
+	AutomationSource string   `json:"automation_source,omitempty"`
+	// HumanAction is the action that config asks for on the human rule, so a
+	// migration shows which step-up auth stays.
+	HumanAction              string   `json:"human_action"`
 	TagOwnersAdded           []string `json:"tag_owners_added,omitempty"`
-	CheckRuleAdded           bool     `json:"check_rule_added,omitempty"`
+	HumanRuleChanged         bool     `json:"human_rule_changed,omitempty"`
 	AutomationSSHRuleAdded   bool     `json:"automation_rule_added,omitempty"`
 	AutomationSSHRuleRemoved bool     `json:"automation_rule_removed,omitempty"`
 	// AutomationSSHRuleKeptFor names the registered servers that still use
@@ -38,9 +41,9 @@ type serverSSHPolicyRow struct {
 // and the doctor repair need; services.go builds it, so this file stays
 // provider-neutral.
 type serverSSHPolicyClient interface {
-	EnsureServerproPolicy(ctx context.Context, tags, sshTags []string, adminUser, rootPolicy, automationSource string) (mesh.PolicyChange, error)
+	EnsureServerproPolicy(ctx context.Context, tags, sshTags []string, adminUser, rootPolicy, automationSource, humanAction string) (mesh.PolicyChange, error)
 	RemoveAutomationSSHRule(ctx context.Context, tags []string, adminUser string) (mesh.PolicyChange, error)
-	ValidateSSHPolicy(ctx context.Context, tags, sshTags []string, adminUser, rootPolicy, automationSource string) error
+	ValidateSSHPolicy(ctx context.Context, tags, sshTags []string, adminUser, rootPolicy, automationSource, humanAction string) error
 }
 
 // serverSSHPolicyCmd applies only the serverpro SSH rules for one server. It
@@ -58,7 +61,7 @@ func (a *app) runServerSSHPolicy(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	row := serverSSHPolicyRow{Namespace: cfg.Namespace, Server: targetServer(cfg.Server), Tags: cfg.Access.Tailscale.Tags, SSHTags: cfg.Access.Tailscale.SSHRuleTags(), AdminUser: cfg.Admin.Username, AutomationSource: cfg.Access.Tailscale.AutomationSource()}
+	row := serverSSHPolicyRow{Namespace: cfg.Namespace, Server: targetServer(cfg.Server), Tags: cfg.Access.Tailscale.Tags, SSHTags: cfg.Access.Tailscale.SSHRuleTags(), AdminUser: cfg.Admin.Username, AutomationSource: cfg.Access.Tailscale.AutomationSource(), HumanAction: cfg.Access.Tailscale.HumanSSHAction()}
 	if a.dryRun {
 		row.Status, row.DryRun = "planned", true
 		return writeJSON(a.stdout, row)
@@ -87,7 +90,7 @@ func (a *app) runServerSSHPolicy(ctx context.Context, name string) error {
 		return err
 	}
 	row.Status = "applied"
-	row.TagOwnersAdded, row.CheckRuleAdded = change.TagOwners, change.SSHRule
+	row.TagOwnersAdded, row.HumanRuleChanged = change.TagOwners, change.SSHRule
 	row.AutomationSSHRuleAdded, row.AutomationSSHRuleRemoved = change.AutomationSSHRule, change.AutomationSSHRuleRemoved
 	row.AutomationSSHRuleKeptFor = keptFor
 	return writeJSON(a.stdout, row)
@@ -107,7 +110,7 @@ func applyServerSSHPolicy(ctx context.Context, cfg config.Config, stPath string,
 		return mesh.PolicyChange{}, nil, err
 	}
 	defer unlockTailnet()
-	change, err := client.EnsureServerproPolicy(ctx, ts.Tags, ts.SSHRuleTags(), cfg.Admin.Username, ts.RootPolicy, ts.AutomationSource())
+	change, err := client.EnsureServerproPolicy(ctx, ts.Tags, ts.SSHRuleTags(), cfg.Admin.Username, ts.RootPolicy, ts.AutomationSource(), ts.HumanSSHAction())
 	if err != nil {
 		return change, nil, err
 	}
@@ -132,7 +135,7 @@ func applyServerSSHPolicy(ctx context.Context, cfg config.Config, stPath string,
 			change.AutomationSSHRuleRemoved = removed.AutomationSSHRuleRemoved
 		}
 	}
-	return change, keptFor, client.ValidateSSHPolicy(ctx, ts.Tags, ts.SSHRuleTags(), cfg.Admin.Username, ts.RootPolicy, ts.AutomationSource())
+	return change, keptFor, client.ValidateSSHPolicy(ctx, ts.Tags, ts.SSHRuleTags(), cfg.Admin.Username, ts.RootPolicy, ts.AutomationSource(), ts.HumanSSHAction())
 }
 
 func recordSSHPolicyChange(stPath string, cfg config.Config, change mesh.PolicyChange) error {

@@ -23,7 +23,7 @@ func TestEnsureServerproPolicyNarrowsRulesToSSHTags(t *testing.T) {
 	api, client := newAutomationPolicyAPI(t, `{"ssh":[]}`)
 	tags := []string{sshTagsTestNamespaceTag, sshTagsTestOwnTag}
 
-	change, err := client.EnsureServerproPolicy(context.Background(), tags, []string{sshTagsTestOwnTag}, automationTestAdmin, automationTestRoot, mesh.AutomationSourceTag)
+	change, err := client.EnsureServerproPolicy(context.Background(), tags, []string{sshTagsTestOwnTag}, automationTestAdmin, automationTestRoot, mesh.AutomationSourceTag, "check")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestValidateSSHPolicyScansEveryDeviceTag(t *testing.T) {
 				_, _ = w.Write([]byte(`{"ssh":[` + tc.rules + `]}`))
 			}))
 			defer srv.Close()
-			err := NewWithHTTP("token", "-", srv.URL, srv.Client()).ValidateSSHPolicy(context.Background(), tags, []string{sshTagsTestOwnTag}, "deploy", automationTestRoot, mesh.AutomationSourceTag)
+			err := NewWithHTTP("token", "-", srv.URL, srv.Client()).ValidateSSHPolicy(context.Background(), tags, []string{sshTagsTestOwnTag}, "deploy", automationTestRoot, mesh.AutomationSourceTag, "check")
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatal(err)

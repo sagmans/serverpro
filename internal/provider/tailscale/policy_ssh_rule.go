@@ -6,25 +6,44 @@ import (
 	"github.com/sagmans/serverpro/internal/mesh"
 )
 
-// Tailscale SSH rule actions that serverpro writes. check asks for a recent
-// browser login; accept does not.
 const (
-	sshActionCheck  = "check"
-	sshActionAccept = "accept"
+	sshActionCheck  = mesh.SSHActionCheck
+	sshActionAccept = mesh.SSHActionAccept
 )
 
-func (d policyDocument) ensureSSHRule(tags []string, adminUser string) (bool, error) {
+// ensureSSHRule makes the human rule for these tags carry action. It changes
+// the action in place, so fields that serverpro does not model stay, and it
+// drops other copies: Tailscale applies check rules before accept rules, so a
+// left-over check copy would keep the browser login after a change to accept.
+func (d policyDocument) ensureSSHRule(tags []string, adminUser, action string) (bool, error) {
 	rules, err := d.sshRules()
 	if err != nil {
 		return false, err
 	}
+	out := make([]SSHRule, 0, len(rules)+1)
+	found, changed := false, false
 	for _, rule := range rules {
-		if serverproSSHRuleMatches(rule, tags, adminUser) {
-			return false, nil
+		if !serverproSSHRuleMatches(rule, tags, adminUser) {
+			out = append(out, rule)
+			continue
 		}
+		if found {
+			changed = true
+			continue
+		}
+		found = true
+		changed = changed || rule.Action != action
+		rule.Action = action
+		out = append(out, rule)
 	}
-	rules = append(rules, serverproSSHRule(tags, adminUser))
-	return true, d.setSSHRules(rules)
+	if !found {
+		out = append(out, serverproSSHRule(tags, adminUser, action))
+		changed = true
+	}
+	if !changed {
+		return false, nil
+	}
+	return true, d.setSSHRules(out)
 }
 
 func (d policyDocument) sshRules() ([]SSHRule, error) {
@@ -105,14 +124,17 @@ func (d policyDocument) removeAutomationSSHRule(tags []string, adminUser string)
 	return true, d.setSSHRules(out)
 }
 
-// serverproSSHRule is the human rule. It stays check mode in every config, so
-// a person on an admin device always does a fresh browser login.
-func serverproSSHRule(tags []string, adminUser string) SSHRule {
-	return SSHRule{Action: sshActionCheck, Src: []string{serverproPolicyOwner}, Dst: append([]string(nil), tags...), Users: []string{adminUser}}
+// serverproSSHRule is the human rule. Its action comes from config: check by
+// default, so a person on an admin device does a fresh browser login, or accept
+// when the operator gave up that step-up auth.
+func serverproSSHRule(tags []string, adminUser, action string) SSHRule {
+	return SSHRule{Action: action, Src: []string{serverproPolicyOwner}, Dst: append([]string(nil), tags...), Users: []string{adminUser}}
 }
 
+// serverproSSHRuleMatches recognizes the human rule with either action, so a
+// config change rewrites the rule instead of adding a second one.
 func serverproSSHRuleMatches(rule SSHRule, tags []string, adminUser string) bool {
-	return rule.Action == sshActionCheck && sameStringSet(rule.Src, []string{serverproPolicyOwner}) && sameStringSet(rule.Dst, tags) && sameStringSet(rule.Users, []string{adminUser})
+	return (rule.Action == sshActionCheck || rule.Action == sshActionAccept) && sameStringSet(rule.Src, []string{serverproPolicyOwner}) && sameStringSet(rule.Dst, tags) && sameStringSet(rule.Users, []string{adminUser})
 }
 
 // automationSSHRule gives accept to the admin user only, never root, and only

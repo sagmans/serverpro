@@ -13,6 +13,9 @@ import (
 // also be a server tag. Root as the admin user is refused, because the accept
 // rule names the admin user and would then skip check mode for root.
 func (c Config) validateTailscaleAutomation() error {
+	if err := c.validateHumanSSH(); err != nil {
+		return err
+	}
 	a := c.Access.Tailscale.Automation
 	if a.Enabled && c.Admin.Username == mesh.RootSSHUser {
 		return fmt.Errorf("admin.username must not be %s while access.tailscale.automation is enabled: the accept rule would skip check mode for root", mesh.RootSSHUser)
@@ -33,6 +36,23 @@ func (c Config) validateTailscaleAutomation() error {
 		}
 	}
 	return nil
+}
+
+// validateHumanSSH allows only the two actions that serverpro can match later
+// (deny by default). Root as the admin user is refused with accept, because the
+// rule names the admin user and would then skip check mode for root.
+func (c Config) validateHumanSSH() error {
+	switch c.Access.Tailscale.HumanSSH {
+	case "", mesh.SSHActionCheck:
+		return nil
+	case mesh.SSHActionAccept:
+		if c.Admin.Username == mesh.RootSSHUser {
+			return fmt.Errorf("admin.username must not be %s while access.tailscale.human_ssh is %s: the rule would skip check mode for root", mesh.RootSSHUser, mesh.SSHActionAccept)
+		}
+		return nil
+	default:
+		return fmt.Errorf("access.tailscale.human_ssh must be %s or %s", mesh.SSHActionCheck, mesh.SSHActionAccept)
+	}
 }
 
 // safeProxyCommandPath allows only characters that no shell treats as special,

@@ -103,21 +103,19 @@ func (c Client) serverproPolicyReconcilePlan(ctx context.Context, protectedTags 
 	return plan, doc, etag, nil
 }
 
-// plannedServerproSSHRule recognizes the two rule shapes that serverpro
-// writes: the human check rule and the automation accept rule. When the
+// plannedServerproSSHRule recognizes the rule shapes that serverpro writes: the
+// human rule with either action and the automation accept rule. When the
 // automation tag itself is stale, the whole accept rule goes, because a rule
 // whose source has no tag owner fails policy validation.
 func plannedServerproSSHRule(rule SSHRule, removable map[string]bool) (SSHRule, bool) {
 	if len(rule.Dst) == 0 || len(rule.Users) != 1 || rule.Users[0] == "" {
 		return SSHRule{}, false
 	}
-	switch {
-	case rule.Action == sshActionCheck && sameStringSet(rule.Src, []string{serverproPolicyOwner}):
-	case rule.Action == sshActionAccept && sameStringSet(rule.Src, []string{mesh.AutomationSourceTag}) && rule.Users[0] != "root":
-		if removable[mesh.AutomationSourceTag] {
-			return rule, true
-		}
-	default:
+	automation := isAutomationRuleShape(rule)
+	if automation && removable[mesh.AutomationSourceTag] {
+		return rule, true
+	}
+	if !automation && !isHumanRuleShape(rule) {
 		return SSHRule{}, false
 	}
 	stale := make([]string, 0, len(rule.Dst))
@@ -132,6 +130,19 @@ func plannedServerproSSHRule(rule SSHRule, removable map[string]bool) (SSHRule, 
 	planned := rule
 	planned.Dst = stale
 	return planned, true
+}
+
+// isHumanRuleShape never counts a root accept rule as serverpro's, because
+// serverpro refuses to write one: that rule is the operator's to review.
+func isHumanRuleShape(rule SSHRule) bool {
+	if !sameStringSet(rule.Src, []string{serverproPolicyOwner}) {
+		return false
+	}
+	return rule.Action == sshActionCheck || (rule.Action == sshActionAccept && rule.Users[0] != mesh.RootSSHUser)
+}
+
+func isAutomationRuleShape(rule SSHRule) bool {
+	return rule.Action == sshActionAccept && sameStringSet(rule.Src, []string{mesh.AutomationSourceTag}) && rule.Users[0] != mesh.RootSSHUser
 }
 
 func rewritePlannedSSHRules(doc policyDocument, planned []SSHRule) error {

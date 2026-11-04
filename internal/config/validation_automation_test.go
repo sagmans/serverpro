@@ -3,6 +3,8 @@ package config
 import (
 	"strings"
 	"testing"
+
+	"github.com/sagmans/serverpro/internal/mesh"
 )
 
 const (
@@ -29,6 +31,13 @@ func TestTailscaleAutomationSource(t *testing.T) {
 	off.Automation.Enabled = false
 	if got := off.AutomationSource(); got != "" {
 		t.Fatalf("disabled source = %q", got)
+	}
+	if got := off.HumanSSHAction(); got != mesh.SSHActionCheck {
+		t.Fatalf("HumanSSHAction() = %q, want the default %q", got, mesh.SSHActionCheck)
+	}
+	off.HumanSSH = mesh.SSHActionAccept
+	if got := off.HumanSSHAction(); got != mesh.SSHActionAccept {
+		t.Fatalf("HumanSSHAction() = %q, want %q", got, mesh.SSHActionAccept)
 	}
 }
 

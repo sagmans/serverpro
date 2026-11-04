@@ -24,7 +24,7 @@ type exactPolicyTailscale struct {
 	source []string
 }
 
-func (f *exactPolicyTailscale) EnsureServerproPolicy(_ context.Context, _, _ []string, _, _, automationSource string) (mesh.PolicyChange, error) {
+func (f *exactPolicyTailscale) EnsureServerproPolicy(_ context.Context, _, _ []string, _, _, automationSource, _ string) (mesh.PolicyChange, error) {
 	f.calls = append(f.calls, "ensure-policy")
 	f.source = append(f.source, automationSource)
 	return f.change, f.err

@@ -88,7 +88,7 @@ func TestEnsureServerproPolicyRefusesWriteWhenValidationReportsFailure(t *testin
 			}))
 			defer ts.Close()
 
-			_, err := NewWithHTTP("token", "-", ts.URL, ts.Client()).EnsureServerproPolicy(context.Background(), []string{"tag:serverpro-prod"}, []string{"tag:serverpro-prod"}, "deploy", "check-or-disabled", "")
+			_, err := NewWithHTTP("token", "-", ts.URL, ts.Client()).EnsureServerproPolicy(context.Background(), []string{"tag:serverpro-prod"}, []string{"tag:serverpro-prod"}, "deploy", "check-or-disabled", "", "check")
 			var validationErr *PolicyValidationError
 			if !errors.As(err, &validationErr) || policyPosts != 0 {
 				t.Fatalf("err=%v policyPosts=%d", err, policyPosts)

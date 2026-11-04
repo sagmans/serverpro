@@ -39,7 +39,7 @@ type TailnetSSHPolicyClient interface {
 // TailnetSSHPolicyFixer is the policy write that provision uses. doctor --fix
 // calls it, so a repair leaves the same rules as a create.
 type TailnetSSHPolicyFixer interface {
-	EnsureServerproPolicy(context.Context, []string, []string, string, string, string) (mesh.PolicyChange, error)
+	EnsureServerproPolicy(context.Context, []string, []string, string, string, string, string) (mesh.PolicyChange, error)
 }
 
 // PublicSSHProbe separates orchestration tests from real public-network access.

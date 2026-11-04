@@ -103,7 +103,7 @@ func countRules(rules []mesh.SSHRule, action, src string) int {
 func TestEnsureServerproPolicyAddsAutomationAcceptRule(t *testing.T) {
 	api, client := newAutomationPolicyAPI(t, `{"ssh":[]}`)
 
-	change, err := client.EnsureServerproPolicy(context.Background(), []string{automationTestTag}, []string{automationTestTag}, automationTestAdmin, automationTestRoot, mesh.AutomationSourceTag)
+	change, err := client.EnsureServerproPolicy(context.Background(), []string{automationTestTag}, []string{automationTestTag}, automationTestAdmin, automationTestRoot, mesh.AutomationSourceTag, "check")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ const sharedAutomationPolicy = `{
 func TestEnsureServerproPolicyKeepsSharedAutomationRuleWhenOff(t *testing.T) {
 	api, client := newAutomationPolicyAPI(t, sharedAutomationPolicy)
 
-	change, err := client.EnsureServerproPolicy(context.Background(), []string{automationTestTag}, []string{automationTestTag}, automationTestAdmin, automationTestRoot, "")
+	change, err := client.EnsureServerproPolicy(context.Background(), []string{automationTestTag}, []string{automationTestTag}, automationTestAdmin, automationTestRoot, "", "check")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +234,7 @@ func TestEnsureServerproPolicyDropsDuplicateAutomationRule(t *testing.T) {
 		"ssh": [{"action":"check","src":["autogroup:admin"],"dst":["tag:serverpro-prod"],"users":["deploy"]}, `+accept+`, `+accept+`]
 	}`)
 
-	change, err := client.EnsureServerproPolicy(context.Background(), []string{automationTestTag}, []string{automationTestTag}, automationTestAdmin, automationTestRoot, mesh.AutomationSourceTag)
+	change, err := client.EnsureServerproPolicy(context.Background(), []string{automationTestTag}, []string{automationTestTag}, automationTestAdmin, automationTestRoot, mesh.AutomationSourceTag, "check")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +257,7 @@ func TestEnsureServerproPolicyNoopsWhenAutomationRuleExists(t *testing.T) {
 		]
 	}`)
 
-	change, err := client.EnsureServerproPolicy(context.Background(), []string{automationTestTag}, []string{automationTestTag}, automationTestAdmin, automationTestRoot, mesh.AutomationSourceTag)
+	change, err := client.EnsureServerproPolicy(context.Background(), []string{automationTestTag}, []string{automationTestTag}, automationTestAdmin, automationTestRoot, mesh.AutomationSourceTag, "check")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestEnsureServerproPolicyNoopsWhenAutomationRuleExists(t *testing.T) {
 func TestEnsureServerproPolicyRejectsOtherAutomationSource(t *testing.T) {
 	api, client := newAutomationPolicyAPI(t, `{"ssh":[]}`)
 
-	_, err := client.EnsureServerproPolicy(context.Background(), []string{automationTestTag}, []string{automationTestTag}, automationTestAdmin, automationTestRoot, automationTestTag)
+	_, err := client.EnsureServerproPolicy(context.Background(), []string{automationTestTag}, []string{automationTestTag}, automationTestAdmin, automationTestRoot, automationTestTag, "check")
 	if err == nil || !strings.Contains(err.Error(), "unsupported automation SSH source") || !strings.Contains(err.Error(), mesh.AutomationSourceTag) {
 		t.Fatalf("err = %v", err)
 	}
@@ -289,7 +289,7 @@ func TestEnsureServerproPolicyRejectsOtherAutomationSource(t *testing.T) {
 func TestEnsureServerproPolicyRejectsRootAutomationAdmin(t *testing.T) {
 	api, client := newAutomationPolicyAPI(t, `{"ssh":[]}`)
 
-	_, err := client.EnsureServerproPolicy(context.Background(), []string{automationTestTag}, []string{automationTestTag}, mesh.RootSSHUser, automationTestRoot, mesh.AutomationSourceTag)
+	_, err := client.EnsureServerproPolicy(context.Background(), []string{automationTestTag}, []string{automationTestTag}, mesh.RootSSHUser, automationTestRoot, mesh.AutomationSourceTag, "check")
 	if err == nil || !strings.Contains(err.Error(), "refused automation SSH accept rule for root") {
 		t.Fatalf("err = %v", err)
 	}
@@ -334,7 +334,7 @@ func TestValidateSSHPolicyRequiresAutomationAcceptRule(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, client := newAutomationPolicyAPI(t, tc.doc)
-			err := client.ValidateSSHPolicy(context.Background(), []string{automationTestTag}, []string{automationTestTag}, automationTestAdmin, automationTestRoot, mesh.AutomationSourceTag)
+			err := client.ValidateSSHPolicy(context.Background(), []string{automationTestTag}, []string{automationTestTag}, automationTestAdmin, automationTestRoot, mesh.AutomationSourceTag, "check")
 			if tc.wantErr == "" && err != nil {
 				t.Fatal(err)
 			}

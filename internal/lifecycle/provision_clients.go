@@ -19,8 +19,8 @@ type ComputeCreator interface {
 type TailscaleClient interface {
 	CreateAuthKey(context.Context, []string, time.Duration) (mesh.AuthKey, error)
 	DeleteAuthKey(context.Context, string) error
-	EnsureServerproPolicy(context.Context, []string, []string, string, string, string) (mesh.PolicyChange, error)
-	ValidateSSHPolicy(context.Context, []string, []string, string, string, string) error
+	EnsureServerproPolicy(context.Context, []string, []string, string, string, string, string) (mesh.PolicyChange, error)
+	ValidateSSHPolicy(context.Context, []string, []string, string, string, string, string) error
 	WaitDevice(context.Context, mesh.DeviceQuery) (mesh.Device, error)
 }
 
