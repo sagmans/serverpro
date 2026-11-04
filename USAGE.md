@@ -226,6 +226,12 @@ and its `tailscale` binary. The human rule stays `check`, root stays
 `check` or disabled, and `server ssh` keeps your own device. The tag is
 fixed and must not be in `tags`. See Automation SSH source.
 
+`access.tailscale.human_ssh` is optional and sets the action of the human
+rule: `check` (default) or `accept`. With `accept`, every tailnet admin
+device logs in to the admin user with no browser login. Root stays `check`
+or disabled, and config refuses `root` as the admin user. See Human SSH
+action.
+
 ```yaml
 access:
   tailscale:
@@ -751,7 +757,7 @@ drop-in, `privileged accounts` removes the provider's own image accounts, and
 | `cloudflared ingress` | fail | Config ingress is `none`, but `cloudflared.service` is enabled or running, or the host state cannot be classified (for example a `cloudflared` process outside the service). A dormant package passes. Runs only with ingress `none`. |
 | `cloudflared apt pin` | fail | The serverpro apt pin for cloudflared is missing or changed. Runs only with ingress `cloudflare-tunnel`; `--fix` rewrites only the pin. |
 | `tailnet policy` (provider) | warn | The tailnet policy lets every source reach every port. See `docs/tailscale-setup.md`, Recommended grants policy. |
-| `tailnet ssh policy` (provider) | fail or warn | Compares the live SSH rules with config and state. Fail: the automation `accept` rule is missing while automation is on; a root rule is not `check`. Warn: the human `check` rule is missing; the automation `accept` rule is present while automation is off for this server (revoke with `server ssh-policy`, see Automation SSH source); a rule from the automation tag has another shape; another source has `accept` for the admin user or `autogroup:nonroot`; state records another automation source than config. `--fix` takes the tailnet policy lock, adds the missing serverpro rules, records state, and reads the policy back. It never revokes the shared `accept` rule. A root rule or a foreign rule needs a hand edit. |
+| `tailnet ssh policy` (provider) | fail or warn | Compares the live SSH rules with config and state. Fail: the automation `accept` rule is missing while automation is on; a root rule is not `check`. The human rule with `accept` that config does not ask for is a fail. Warn: the human rule is missing or is `check` while config asks for `accept`; another `check` rule for the admin user while config asks for `accept`; the automation `accept` rule is present while automation is off for this server (revoke with `server ssh-policy`, see Automation SSH source); a rule from the automation tag has another shape; another source has `accept` for the admin user or `autogroup:nonroot` (the human rule is allowed when config asks for `accept`); state records another automation source than config. `--fix` takes the tailnet policy lock, adds the missing serverpro rules, sets the action of the human rule, records state, and reads the policy back. It never revokes the shared `accept` rule. A root rule or a foreign rule needs a hand edit. |
 
 A probe that cannot read the host fails with "the read-only probe could not
 run". Drift is then unknown, so doctor does not report a pass. The
@@ -1211,6 +1217,35 @@ Every `ssh_tags` entry must also be in `tags`. Empty means `tags`.
 serverpro does not move existing rules: add the tag to the device, write
 the new rules with `server ssh-policy`, then remove the old rules by hand.
 `server import` keeps `ssh_tags` from an existing config, but an import
+without one cannot restore it, so set it again.
+
+## Human SSH action
+
+The human rule gives `autogroup:admin` the admin user. By default it is
+`check`, which asks for a browser login every 12 hours. To turn the browser
+login off for one server:
+
+```sh
+# 1. Set access.tailscale.human_ssh: accept in the server config.
+# 2. Change the rule. No host change.
+serverpro server ssh-policy webapp -n mynamespace
+# 3. Make sure that the check passes.
+serverpro server doctor webapp -n mynamespace
+```
+
+`server ssh-policy`, `server create` and `doctor --fix` change the action
+of the existing rule. They do not add a second rule, because Tailscale
+applies `check` rules before `accept` rules. The rule is shared by every
+server with the same SSH rule tags and admin user, so give those servers the
+same value. Doctor warns about another `check` rule for the admin user on the
+server, which can bring the browser login back. Remove `human_ssh`, or set it
+to `check`, and run `server ssh-policy` to turn the browser login on again.
+
+If the tailnet policy has `sshTests` that expect `check`, change them in
+the same save as the rule, because a policy write that fails a test is
+refused. Read the tradeoff in SECURITY.md first.
+
+`server import` keeps `human_ssh` from an existing config, but an import
 without one cannot restore it, so set it again.
 
 ## Reconcile tailnet-global policy

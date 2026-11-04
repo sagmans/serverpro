@@ -231,6 +231,15 @@ default.
   source reach every port, since UFW is then the only barrier between any
   tailnet device and every listening port. See `docs/tailscale-setup.md`,
   Recommended grants policy.
+- Human SSH accept (`access.tailscale.human_ssh: accept`, off by default)
+  trades step-up login for direct access. The node key of every tailnet admin
+  device becomes the credential for the admin user. Every process on those
+  devices gets a shell, and with it sudo through a stored password, with no
+  browser login. Controls: config and the policy write refuse `root` as the
+  admin user with this value, before any write; the rule names only the admin
+  user, so root stays `check` or disabled; the read-back fails closed when the
+  rule is not `accept` or a root rule is not `check`; and doctor fails on an
+  `accept` human rule that config does not ask for.
 - Automation SSH (`access.tailscale.automation`, off by default) trades
   step-up login for unattended runs. Every process that can open the
   node's LocalAPI socket gets admin SSH, and with it sudo through the
@@ -239,7 +248,7 @@ default.
   server tag as the source; the `accept` rule names only the admin user,
   so root stays `check` or disabled; config and the policy write refuse
   `root` as the admin user while automation is on, before any write; the
-  human rule stays `check`; and
+  human rule stays what `human_ssh` asks for; and
   the read-back fails closed when a root rule is not `check`. The
   transport uses `-F /dev/null`, `BatchMode`, and strict host keys from
   the node's own peer status, the system `/usr/bin/ssh`, and no key or

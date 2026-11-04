@@ -153,8 +153,9 @@ check the effective access in the admin console before you rely on it.
 With `access.tailscale.automation`, serverpro runs non-interactive SSH
 through a second, tagged Tailscale node on the controller. Tailscale
 gives `accept` to that node, so no browser login stops a run. Your own
-device and `serverpro server ssh` keep `check`. Read the tradeoff in
-SECURITY.md before you turn it on.
+device and `serverpro server ssh` keep `check`, unless you set
+`access.tailscale.human_ssh: accept` (USAGE.md, Human SSH action). Read the
+tradeoff in SECURITY.md before you turn it on.
 
 1. Install `tailscale` and `tailscaled` of the managed release (see
    INSTALLATION.md) into a directory that only your user can write.
