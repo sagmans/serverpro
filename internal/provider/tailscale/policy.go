@@ -79,10 +79,11 @@ func (c Client) EnsureServerproPolicy(ctx context.Context, tags, sshTags []strin
 	if automationSource != "" && adminUser == mesh.RootSSHUser {
 		return change, fmt.Errorf("refused automation SSH accept rule for %s: root must stay check or disabled", mesh.RootSSHUser)
 	}
-	doc, etag, err := c.policyDocument(ctx)
+	file, err := c.readPolicyFile(ctx)
 	if err != nil {
 		return change, err
 	}
+	doc := file.doc
 	ownedTags := append([]string(nil), tags...)
 	if automationSource != "" {
 		ownedTags = append(ownedTags, automationSource)
@@ -101,7 +102,7 @@ func (c Client) EnsureServerproPolicy(ctx context.Context, tags, sshTags []strin
 	if err != nil {
 		return change, err
 	}
-	return change, c.publishPolicyChange(ctx, doc, etag, change)
+	return change, c.publishPolicyChange(ctx, file, change)
 }
 
 // RemoveAutomationSSHRule revokes the automation accept rule for these tags
@@ -109,26 +110,22 @@ func (c Client) EnsureServerproPolicy(ctx context.Context, tags, sshTags []strin
 // server records the same rule, because the rule is shared by tag set.
 func (c Client) RemoveAutomationSSHRule(ctx context.Context, tags []string, adminUser string) (ServerproPolicyChange, error) {
 	var change ServerproPolicyChange
-	doc, etag, err := c.policyDocument(ctx)
+	file, err := c.readPolicyFile(ctx)
 	if err != nil {
 		return change, err
 	}
-	change.AutomationSSHRuleRemoved, err = doc.removeAutomationSSHRule(tags, adminUser)
+	change.AutomationSSHRuleRemoved, err = file.doc.removeAutomationSSHRule(tags, adminUser)
 	if err != nil {
 		return change, err
 	}
-	return change, c.publishPolicyChange(ctx, doc, etag, change)
+	return change, c.publishPolicyChange(ctx, file, change)
 }
 
-// publishPolicyChange validates and posts a document only when it changed, so
-// a run against a policy that already matches makes no write and keeps the
-// operator's HuJSON comments.
-func (c Client) publishPolicyChange(ctx context.Context, doc policyDocument, etag string, change ServerproPolicyChange) error {
+// publishPolicyChange validates and posts the policy only when it changed, so
+// a run against a policy that already matches makes no write at all.
+func (c Client) publishPolicyChange(ctx context.Context, file policyFile, change ServerproPolicyChange) error {
 	if !change.Changed() {
 		return nil
 	}
-	if err := c.validatePolicyDocument(ctx, doc); err != nil {
-		return err
-	}
-	return c.postPolicyDocument(ctx, doc, etag)
+	return c.publishPolicyFile(ctx, file)
 }

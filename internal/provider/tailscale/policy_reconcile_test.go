@@ -2,7 +2,6 @@ package tailscale
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -78,7 +77,7 @@ func TestApplyServerproPolicyReconcilePreservesTagsReferencedByRetainedOwners(t 
 		case "POST /tailnet/-/acl/validate":
 			writePassingPolicyValidation(w)
 		case "POST /tailnet/-/acl":
-			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+			if err := decodeHuJSONBody(r.Body, &posted); err != nil {
 				handlerErr.Record(w, "decode policy: %v", err)
 			}
 		default:
@@ -208,12 +207,12 @@ func TestApplyServerproPolicyReconcileRewritesMixedDestinations(t *testing.T) {
 			w.Header().Set("ETag", `"policy-v1"`)
 			_, _ = w.Write([]byte(policy))
 		case "POST /tailnet/-/acl/validate":
-			if err := json.NewDecoder(r.Body).Decode(&validated); err != nil {
+			if err := decodeHuJSONBody(r.Body, &validated); err != nil {
 				handlerErr.Record(w, "decode validation policy: %v", err)
 			}
 			writePassingPolicyValidation(w)
 		case "POST /tailnet/-/acl":
-			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+			if err := decodeHuJSONBody(r.Body, &posted); err != nil {
 				handlerErr.Record(w, "decode policy: %v", err)
 			}
 		default:
@@ -305,7 +304,7 @@ func TestReconcileServerproPolicyRemovesOnlyProvenUnusedEntries(t *testing.T) {
 				handlerErr.Record(w, "If-Match = %q", r.Header.Get("If-Match"))
 				return
 			}
-			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+			if err := decodeHuJSONBody(r.Body, &posted); err != nil {
 				handlerErr.Record(w, "decode policy: %v", err)
 				return
 			}

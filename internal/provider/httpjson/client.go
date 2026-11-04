@@ -170,7 +170,9 @@ func (c Client) DoRaw(ctx context.Context, method, path string, body []byte, hea
 	if err != nil {
 		return nil, nil, err
 	}
-	if body != nil {
+	// A caller-set Content-Type wins: the Tailscale policy API takes HuJSON,
+	// and a second header value would make the media type ambiguous.
+	if body != nil && headers.Get("Content-Type") == "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	for key, values := range headers {

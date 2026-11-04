@@ -105,3 +105,21 @@ func TestDoReturnsStatusError(t *testing.T) {
 		t.Fatalf("expected 404 status error, got %v", err)
 	}
 }
+
+// The Tailscale policy API takes HuJSON; a caller's media type must replace
+// the JSON default, not join it as a second, ambiguous value.
+func TestDoRawCallerContentTypeReplacesJSONDefault(t *testing.T) {
+	const hujsonMedia = "application/hujson"
+	handlerErr := testhttp.NewHandlerErrorRecorder(t)
+	defer handlerErr.Check()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Values("Content-Type"); len(got) != 1 || got[0] != hujsonMedia {
+			handlerErr.Record(w, "Content-Type = %#v", got)
+		}
+	}))
+	defer srv.Close()
+
+	if _, _, err := (Client{BaseURL: srv.URL, HTTP: srv.Client()}).DoRaw(context.Background(), http.MethodPost, "/policy", []byte(`{}`), http.Header{"Content-Type": {hujsonMedia}}); err != nil {
+		t.Fatal(err)
+	}
+}

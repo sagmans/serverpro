@@ -2,7 +2,6 @@ package tailscale
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -31,24 +30,28 @@ func TestEnsureServerproPolicyAddsTagOwnerAndSSHRule(t *testing.T) {
 		requests = append(requests, r.Method+" "+r.URL.Path)
 		switch r.Method + " " + r.URL.Path {
 		case "GET /tailnet/-/acl":
-			if r.Header.Get("Accept") != "application/json" {
+			if r.Header.Get("Accept") != policyMediaHuJSON {
 				handlerErr.Record(w, "Accept = %q", r.Header.Get("Accept"))
 				return
 			}
 			w.Header().Set("ETag", `"policy-v1"`)
 			_, _ = w.Write([]byte(`{"ssh":[]}`))
 		case "POST /tailnet/-/acl/validate":
-			if err := json.NewDecoder(r.Body).Decode(&validated); err != nil {
+			if r.Header.Get("Content-Type") != policyMediaHuJSON {
+				handlerErr.Record(w, "validate Content-Type = %q", r.Header.Get("Content-Type"))
+				return
+			}
+			if err := decodeHuJSONBody(r.Body, &validated); err != nil {
 				handlerErr.Record(w, "decode validation payload: %v", err)
 				return
 			}
 			writePassingPolicyValidation(w)
 		case "POST /tailnet/-/acl":
-			if r.Header.Get("If-Match") != `"policy-v1"` {
-				handlerErr.Record(w, "If-Match = %q", r.Header.Get("If-Match"))
+			if r.Header.Get("If-Match") != `"policy-v1"` || r.Header.Get("Content-Type") != policyMediaHuJSON {
+				handlerErr.Record(w, "If-Match = %q Content-Type = %q", r.Header.Get("If-Match"), r.Header.Get("Content-Type"))
 				return
 			}
-			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+			if err := decodeHuJSONBody(r.Body, &posted); err != nil {
 				handlerErr.Record(w, "decode policy payload: %v", err)
 				return
 			}

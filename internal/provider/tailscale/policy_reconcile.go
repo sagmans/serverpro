@@ -23,14 +23,14 @@ type ServerproPolicyReconcilePlan = mesh.PolicyReconcilePlan
 
 // PlanServerproPolicyReconcile reads live devices and policy without mutation.
 func (c Client) PlanServerproPolicyReconcile(ctx context.Context, protectedTags []string) (ServerproPolicyReconcilePlan, error) {
-	plan, _, _, err := c.serverproPolicyReconcilePlan(ctx, protectedTags)
+	plan, _, err := c.serverproPolicyReconcilePlan(ctx, protectedTags)
 	return plan, err
 }
 
 // ApplyServerproPolicyReconcile publishes only the removals approved from a
 // preview; fresh evidence must produce the identical plan before mutation.
 func (c Client) ApplyServerproPolicyReconcile(ctx context.Context, protectedTags []string, approved ServerproPolicyReconcilePlan) error {
-	plan, doc, etag, err := c.serverproPolicyReconcilePlan(ctx, protectedTags)
+	plan, file, err := c.serverproPolicyReconcilePlan(ctx, protectedTags)
 	if err != nil {
 		return err
 	}
@@ -40,27 +40,25 @@ func (c Client) ApplyServerproPolicyReconcile(ctx context.Context, protectedTags
 	if plan.Empty() {
 		return nil
 	}
-	if _, err := doc.removeTagOwners(plan.TagOwners); err != nil {
+	if _, err := file.doc.removeTagOwners(plan.TagOwners); err != nil {
 		return err
 	}
-	if err := rewritePlannedSSHRules(doc, plan.SSHRules); err != nil {
+	if err := rewritePlannedSSHRules(file.doc, plan.SSHRules); err != nil {
 		return err
 	}
-	if err := c.validatePolicyDocument(ctx, doc); err != nil {
-		return err
-	}
-	return c.postPolicyDocument(ctx, doc, etag)
+	return c.publishPolicyFile(ctx, file)
 }
 
-func (c Client) serverproPolicyReconcilePlan(ctx context.Context, protectedTags []string) (ServerproPolicyReconcilePlan, policyDocument, string, error) {
+func (c Client) serverproPolicyReconcilePlan(ctx context.Context, protectedTags []string) (ServerproPolicyReconcilePlan, policyFile, error) {
 	devices, err := c.Devices(ctx)
 	if err != nil {
-		return ServerproPolicyReconcilePlan{}, nil, "", err
+		return ServerproPolicyReconcilePlan{}, policyFile{}, err
 	}
-	doc, etag, err := c.policyDocument(ctx)
+	file, err := c.readPolicyFile(ctx)
 	if err != nil {
-		return ServerproPolicyReconcilePlan{}, nil, "", err
+		return ServerproPolicyReconcilePlan{}, policyFile{}, err
 	}
+	doc := file.doc
 	used := make(map[string]bool, len(protectedTags))
 	for _, tag := range protectedTags {
 		used[tag] = true
@@ -72,7 +70,7 @@ func (c Client) serverproPolicyReconcilePlan(ctx context.Context, protectedTags 
 	}
 	owners, err := doc.tagOwners()
 	if err != nil {
-		return ServerproPolicyReconcilePlan{}, nil, "", err
+		return ServerproPolicyReconcilePlan{}, policyFile{}, err
 	}
 	// Owner references are policy dependencies even without device or state evidence.
 	for _, values := range owners {
@@ -93,14 +91,14 @@ func (c Client) serverproPolicyReconcilePlan(ctx context.Context, protectedTags 
 	sort.Strings(plan.TagOwners)
 	rules, err := doc.sshRules()
 	if err != nil {
-		return ServerproPolicyReconcilePlan{}, nil, "", err
+		return ServerproPolicyReconcilePlan{}, policyFile{}, err
 	}
 	for _, rule := range rules {
 		if planned, ok := plannedServerproSSHRule(rule, removable); ok {
 			plan.SSHRules = append(plan.SSHRules, planned)
 		}
 	}
-	return plan, doc, etag, nil
+	return plan, file, nil
 }
 
 // plannedServerproSSHRule recognizes the rule shapes that serverpro writes: the

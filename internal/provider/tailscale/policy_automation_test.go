@@ -1,6 +1,7 @@
 package tailscale
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -46,6 +47,8 @@ func newAutomationPolicyAPI(t *testing.T, doc string) (*automationPolicyAPI, Cli
 		case "GET /tailnet/-/acl":
 			w.Header().Set("ETag", automationTestETag)
 			_, _ = io.WriteString(w, api.doc)
+		case "GET /tailnet/-/devices":
+			_, _ = io.WriteString(w, `{"devices":[]}`)
 		case "POST /tailnet/-/acl/validate":
 			writePassingPolicyValidation(w)
 		case "POST /tailnet/-/acl":
@@ -55,7 +58,7 @@ func newAutomationPolicyAPI(t *testing.T, doc string) (*automationPolicyAPI, Cli
 				return
 			}
 			api.posted = map[string]any{}
-			if err := json.Unmarshal(body, &api.posted); err != nil {
+			if err := decodeHuJSONBody(bytes.NewReader(body), &api.posted); err != nil {
 				handlerErr.Record(w, "decode policy payload: %v", err)
 				return
 			}
@@ -177,7 +180,7 @@ func TestRemoveAutomationSSHRuleRemovesEveryCopy(t *testing.T) {
 	if len(rules) != 2 || countRules(rules, sshActionAccept, mesh.AutomationSourceTag) != 0 || countRules(rules, sshActionCheck, mesh.ServerproPolicyOwner) != 1 || countRules(rules, sshActionCheck, "group:sre") != 1 {
 		t.Fatalf("posted ssh rules = %+v", rules)
 	}
-	if !strings.Contains(api.doc, `"checkPeriod":"12h"`) {
+	if !postedRuleHasField(api.posted, "checkPeriod", "12h") {
 		t.Fatalf("foreign rule field lost: %s", api.doc)
 	}
 	if strings.Join(api.requests, ",") != "GET /tailnet/-/acl,POST /tailnet/-/acl/validate,POST /tailnet/-/acl" {

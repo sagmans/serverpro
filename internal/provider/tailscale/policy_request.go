@@ -4,33 +4,83 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
+
+	"github.com/tailscale/hujson"
 )
 
-var ErrPolicyETagMissing = errors.New("tailnet policy response missing ETag; refusing update")
+// policyMediaHuJSON asks the policy API for the file as the operator wrote
+// it. A JSON read strips comments, and a JSON post then deletes them.
+const policyMediaHuJSON = "application/hujson"
 
-func (c Client) policyDocument(ctx context.Context) (policyDocument, string, error) {
-	b, etag, err := c.doPolicyRequest(ctx, http.MethodGet, "/tailnet/"+url.PathEscape(c.tailnet)+"/acl", nil, "", "application/json")
-	if err != nil {
-		return nil, "", err
-	}
-	var doc policyDocument
-	if err := json.Unmarshal(b, &doc); err != nil {
-		return nil, "", err
-	}
-	return doc, etag, nil
+// policyMediaJSON asks for the validation result, which is plain JSON.
+const policyMediaJSON = "application/json"
+
+var (
+	ErrPolicyETagMissing = errors.New("tailnet policy response missing ETag; refusing update")
+	ErrPolicyNotObject   = errors.New("tailnet policy file is not a JSON object; refusing update")
+)
+
+// policyFile is one read of the tailnet policy. source keeps the operator's
+// HuJSON text for renderPolicyFile; doc is its standard JSON view, which the
+// tag-owner and SSH-rule helpers edit; etag guards the later post.
+type policyFile struct {
+	source hujson.Value
+	doc    policyDocument
+	etag   string
 }
 
-// validatePolicyDocument is the gate before every policy write. Tailscale
-// answers /acl/validate with HTTP 200 for failed tests and for rejected
-// syntax too, so the status alone proves nothing; only the body decides.
-func (c Client) validatePolicyDocument(ctx context.Context, doc policyDocument) error {
-	b, err := json.Marshal(doc)
+func (c Client) policyPath() string {
+	return "/tailnet/" + url.PathEscape(c.tailnet) + "/acl"
+}
+
+func (c Client) readPolicyFile(ctx context.Context) (policyFile, error) {
+	b, etag, err := c.doPolicyRequest(ctx, http.MethodGet, c.policyPath(), nil, "", policyMediaHuJSON, "")
+	if err != nil {
+		return policyFile{}, err
+	}
+	source, err := hujson.Parse(b)
+	if err != nil {
+		return policyFile{}, fmt.Errorf("parse tailnet policy HuJSON: %w", err)
+	}
+	var doc policyDocument
+	if err := json.Unmarshal(standardJSON(source), &doc); err != nil {
+		return policyFile{}, fmt.Errorf("decode tailnet policy: %w", err)
+	}
+	// A null file decodes to a nil map; the edit helpers would panic on it and
+	// the diff could not patch a non-object root, so refuse it here.
+	if doc == nil {
+		return policyFile{}, ErrPolicyNotObject
+	}
+	return policyFile{source: source, doc: doc, etag: etag}, nil
+}
+
+// publishPolicyFile validates and posts the exact bytes it renders, so the
+// policy that Tailscale checks is the policy that it stores.
+func (c Client) publishPolicyFile(ctx context.Context, file policyFile) error {
+	if file.etag == "" {
+		return ErrPolicyETagMissing
+	}
+	body, err := renderPolicyFile(file)
 	if err != nil {
 		return err
 	}
-	res, _, err := c.doPolicyRequest(ctx, http.MethodPost, "/tailnet/"+url.PathEscape(c.tailnet)+"/acl/validate", b, "", "application/json")
+	if err := c.validatePolicyBody(ctx, body); err != nil {
+		return err
+	}
+	_, _, err = c.doPolicyRequest(ctx, http.MethodPost, c.policyPath(), body, file.etag, policyMediaHuJSON, policyMediaHuJSON)
+	return err
+}
+
+// validatePolicyBody is the gate before every policy write. Tailscale
+// answers /acl/validate with HTTP 200 for failed tests and for rejected
+// syntax too, so the status alone proves nothing; only the body decides.
+// The request body is HuJSON, but the answer is a JSON result, so it asks
+// for JSON back.
+func (c Client) validatePolicyBody(ctx context.Context, body []byte) error {
+	res, _, err := c.doPolicyRequest(ctx, http.MethodPost, c.policyPath()+"/validate", body, "", policyMediaJSON, policyMediaHuJSON)
 	if err != nil {
 		return err
 	}
@@ -61,25 +111,16 @@ func parsePolicyValidation(body []byte) error {
 	return &PolicyValidationError{Message: res.Message, Failures: res.Data}
 }
 
-func (c Client) postPolicyDocument(ctx context.Context, doc policyDocument, etag string) error {
-	if etag == "" {
-		return ErrPolicyETagMissing
-	}
-	b, err := json.Marshal(doc)
-	if err != nil {
-		return err
-	}
-	_, _, err = c.doPolicyRequest(ctx, http.MethodPost, "/tailnet/"+url.PathEscape(c.tailnet)+"/acl", b, etag, "application/json")
-	return err
-}
-
-func (c Client) doPolicyRequest(ctx context.Context, method, path string, body []byte, ifMatch, accept string) ([]byte, string, error) {
+func (c Client) doPolicyRequest(ctx context.Context, method, path string, body []byte, ifMatch, accept, contentType string) ([]byte, string, error) {
 	headers := http.Header{}
 	if accept != "" {
 		headers.Set("Accept", accept)
 	}
 	if ifMatch != "" {
 		headers.Set("If-Match", ifMatch)
+	}
+	if contentType != "" {
+		headers.Set("Content-Type", contentType)
 	}
 	b, resHeaders, err := c.api.DoRaw(ctx, method, path, body, headers)
 	if err != nil {
