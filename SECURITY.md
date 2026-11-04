@@ -614,9 +614,13 @@ Unmodeled rule fields survive approved destination rewrites. Preview with
 `--dry-run`; live apply requires confirmation or
 `--yes`, refetches, and aborts unless the fresh removal plan exactly matches the
 approved preview. Every changed policy requires an ETag; a missing ETag aborts
-before publication. Interactive preview is stderr-only; stdout remains one final
-JSON document. Partial failures must report remaining resources. Local state can
-drift from provider reality. Only an explicit not-found filesystem result is
+before publication. Tailscale answers `/acl/validate` with HTTP 200 even for
+failed policy tests and rejected syntax, so serverpro writes a policy only when
+the validate body is the empty object `{}`. Any other body, including an empty
+or unreadable one, aborts the write and reports the failing tests.
+Interactive preview is stderr-only; stdout remains one final JSON document.
+Partial failures must report remaining resources. Local state can drift from
+provider reality. Only an explicit not-found filesystem result is
 treated as missing local state;
 permission, invalid-path, and other I/O failures stop provision/import rather
 than bypassing overwrite protection. Admin-username recovery creates a minimal

@@ -195,6 +195,10 @@ Add `sshTests` so that Tailscale rejects a later edit that gives root to
 the tag or drops `check` for people. Do not add an `accept` test for the
 tag: Tailscale would then reject the policy write that revokes the rule.
 
+serverpro validates every policy write against all `sshTests` in the file,
+not only its own. A test that a device change made stale, for example a
+newly tagged device, blocks every serverpro write until you fix the test.
+
 ```jsonc
 "sshTests": [
   {"src": "tag:serverpro-automation", "dst": ["tag:serverpro-server"], "deny": ["root"]},

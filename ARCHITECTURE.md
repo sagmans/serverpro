@@ -524,7 +524,8 @@ SSH-rule fields so future API fields survive reconciliation. Apply refetches
 policy and devices, aborts unless
 the removal plan still exactly matches the approved preview, validates the
 edited document, and posts with its ETag. A missing ETag aborts every policy
-mutation before publication.
+mutation before publication. Validation passes only on an empty `{}` body,
+because the validate endpoint returns HTTP 200 for failed tests too.
 Interactive previews go to stderr so stdout contains one final JSON document.
 
 ### Ingress
