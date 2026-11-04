@@ -59,27 +59,11 @@ func (c Client) serverproPolicyReconcilePlan(ctx context.Context, protectedTags 
 		return ServerproPolicyReconcilePlan{}, policyFile{}, err
 	}
 	doc := file.doc
-	used := make(map[string]bool, len(protectedTags))
-	for _, tag := range protectedTags {
-		used[tag] = true
-	}
-	for _, device := range devices {
-		for _, tag := range device.Tags {
-			used[tag] = true
-		}
-	}
 	owners, err := doc.tagOwners()
 	if err != nil {
 		return ServerproPolicyReconcilePlan{}, policyFile{}, err
 	}
-	// Owner references are policy dependencies even without device or state evidence.
-	for _, values := range owners {
-		for _, value := range values {
-			if strings.HasPrefix(value, tailnetTagPrefix) {
-				used[value] = true
-			}
-		}
-	}
+	used := usedPolicyTags(protectedTags, devices, owners)
 	removable := map[string]bool{}
 	plan := ServerproPolicyReconcilePlan{}
 	for tag, values := range owners {
@@ -99,6 +83,29 @@ func (c Client) serverproPolicyReconcilePlan(ctx context.Context, protectedTags 
 		}
 	}
 	return plan, file, nil
+}
+
+// usedPolicyTags is the evidence that keeps a tag: registered state, live
+// device tags, and tags that other tag definitions name as owners. Owner
+// references are policy dependencies even without device or state evidence.
+func usedPolicyTags(protectedTags []string, devices []Device, owners map[string][]string) map[string]bool {
+	used := make(map[string]bool, len(protectedTags))
+	for _, tag := range protectedTags {
+		used[tag] = true
+	}
+	for _, device := range devices {
+		for _, tag := range device.Tags {
+			used[tag] = true
+		}
+	}
+	for _, values := range owners {
+		for _, value := range values {
+			if strings.HasPrefix(value, tailnetTagPrefix) {
+				used[value] = true
+			}
+		}
+	}
+	return used
 }
 
 // plannedServerproSSHRule recognizes the rule shapes that serverpro writes: the

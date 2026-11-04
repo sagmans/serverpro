@@ -158,6 +158,20 @@ func (c Client) DoBytes(ctx context.Context, method, path string, in any) ([]byt
 	return out, err
 }
 
+// setRequestHeaders copies the caller's headers onto req. A caller-set
+// Content-Type wins over the JSON default: the Tailscale policy API takes
+// HuJSON, and a second header value would make the media type ambiguous.
+func setRequestHeaders(req *http.Request, hasBody bool, headers http.Header) {
+	if hasBody && headers.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	for key, values := range headers {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
+	}
+}
+
 func (c Client) DoRaw(ctx context.Context, method, path string, body []byte, headers http.Header) ([]byte, http.Header, error) {
 	var in io.Reader
 	if body != nil {
@@ -170,16 +184,7 @@ func (c Client) DoRaw(ctx context.Context, method, path string, body []byte, hea
 	if err != nil {
 		return nil, nil, err
 	}
-	// A caller-set Content-Type wins: the Tailscale policy API takes HuJSON,
-	// and a second header value would make the media type ambiguous.
-	if body != nil && headers.Get("Content-Type") == "" {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	for key, values := range headers {
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
+	setRequestHeaders(req, body != nil, headers)
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
