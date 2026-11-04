@@ -22,13 +22,43 @@ func (c Client) policyDocument(ctx context.Context) (policyDocument, string, err
 	return doc, etag, nil
 }
 
+// validatePolicyDocument is the gate before every policy write. Tailscale
+// answers /acl/validate with HTTP 200 for failed tests and for rejected
+// syntax too, so the status alone proves nothing; only the body decides.
 func (c Client) validatePolicyDocument(ctx context.Context, doc policyDocument) error {
 	b, err := json.Marshal(doc)
 	if err != nil {
 		return err
 	}
-	_, _, err = c.doPolicyRequest(ctx, http.MethodPost, "/tailnet/"+url.PathEscape(c.tailnet)+"/acl/validate", b, "", "application/json")
-	return err
+	res, _, err := c.doPolicyRequest(ctx, http.MethodPost, "/tailnet/"+url.PathEscape(c.tailnet)+"/acl/validate", b, "", "application/json")
+	if err != nil {
+		return err
+	}
+	return parsePolicyValidation(res)
+}
+
+// parsePolicyValidation accepts only the empty JSON object that Tailscale
+// sends for a policy that passes. Any other shape, including an empty or
+// unparseable body, fails closed so a proxy or API change cannot turn a
+// rejected policy into a write.
+func parsePolicyValidation(body []byte) error {
+	// A raw key map, not the typed response, decides the pass: JSON null and
+	// objects with unknown or empty fields decode to a zero struct too.
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return &PolicyValidationError{Message: errPolicyValidationUnreadable, cause: err}
+	}
+	if fields != nil && len(fields) == 0 {
+		return nil
+	}
+	var res policyValidationResponse
+	if err := json.Unmarshal(body, &res); err != nil {
+		return &PolicyValidationError{Message: errPolicyValidationUnreadable, cause: err}
+	}
+	if res.Message == "" {
+		res.Message = errPolicyValidationUnexpected
+	}
+	return &PolicyValidationError{Message: res.Message, Failures: res.Data}
 }
 
 func (c Client) postPolicyDocument(ctx context.Context, doc policyDocument, etag string) error {

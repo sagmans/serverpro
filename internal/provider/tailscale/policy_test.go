@@ -12,6 +12,16 @@ import (
 	"github.com/sagmans/serverpro/internal/testhttp"
 )
 
+// passingPolicyValidationBody is what the live /acl/validate endpoint sends
+// for a passing policy; validation fails closed on any other body.
+const passingPolicyValidationBody = `{}`
+
+// writePassingPolicyValidation lets a fake tailnet accept the candidate policy
+// the way the real API does, so tests reach the write step.
+func writePassingPolicyValidation(w http.ResponseWriter) {
+	_, _ = w.Write([]byte(passingPolicyValidationBody))
+}
+
 func TestEnsureServerproPolicyAddsTagOwnerAndSSHRule(t *testing.T) {
 	var validated, posted map[string]any
 	requests := []string{}
@@ -32,6 +42,7 @@ func TestEnsureServerproPolicyAddsTagOwnerAndSSHRule(t *testing.T) {
 				handlerErr.Record(w, "decode validation payload: %v", err)
 				return
 			}
+			writePassingPolicyValidation(w)
 		case "POST /tailnet/-/acl":
 			if r.Header.Get("If-Match") != `"policy-v1"` {
 				handlerErr.Record(w, "If-Match = %q", r.Header.Get("If-Match"))
@@ -81,6 +92,7 @@ func TestEnsureServerproPolicyRejectsMutationWithoutETag(t *testing.T) {
 		case "GET /tailnet/-/acl":
 			_, _ = w.Write([]byte(`{"ssh":[]}`))
 		case "POST /tailnet/-/acl/validate":
+			writePassingPolicyValidation(w)
 		case "POST /tailnet/-/acl":
 			policyPosts++
 		default:

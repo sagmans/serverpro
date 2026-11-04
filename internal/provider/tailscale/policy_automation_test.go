@@ -47,6 +47,7 @@ func newAutomationPolicyAPI(t *testing.T, doc string) (*automationPolicyAPI, Cli
 			w.Header().Set("ETag", automationTestETag)
 			_, _ = io.WriteString(w, api.doc)
 		case "POST /tailnet/-/acl/validate":
+			writePassingPolicyValidation(w)
 		case "POST /tailnet/-/acl":
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
@@ -210,6 +211,8 @@ func TestRemoveAutomationSSHRuleRequiresETag(t *testing.T) {
 		switch r.Method + " " + r.URL.Path {
 		case "GET /tailnet/-/acl":
 			_, _ = io.WriteString(w, sharedAutomationPolicy)
+		case "POST /tailnet/-/acl/validate":
+			writePassingPolicyValidation(w)
 		case "POST /tailnet/-/acl":
 			posts++
 		}

@@ -76,6 +76,7 @@ func TestApplyServerproPolicyReconcilePreservesTagsReferencedByRetainedOwners(t 
 			w.Header().Set("ETag", `"policy-v1"`)
 			_, _ = w.Write([]byte(reconcileOwnerDependencyPolicyFixture))
 		case "POST /tailnet/-/acl/validate":
+			writePassingPolicyValidation(w)
 		case "POST /tailnet/-/acl":
 			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
 				handlerErr.Record(w, "decode policy: %v", err)
@@ -210,6 +211,7 @@ func TestApplyServerproPolicyReconcileRewritesMixedDestinations(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&validated); err != nil {
 				handlerErr.Record(w, "decode validation policy: %v", err)
 			}
+			writePassingPolicyValidation(w)
 		case "POST /tailnet/-/acl":
 			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
 				handlerErr.Record(w, "decode policy: %v", err)
@@ -297,6 +299,7 @@ func TestReconcileServerproPolicyRemovesOnlyProvenUnusedEntries(t *testing.T) {
 			w.Header().Set("ETag", `"policy-v1"`)
 			_, _ = w.Write([]byte(reconcilePolicyFixture))
 		case "POST /tailnet/-/acl/validate":
+			writePassingPolicyValidation(w)
 		case "POST /tailnet/-/acl":
 			if r.Header.Get("If-Match") != `"policy-v1"` {
 				handlerErr.Record(w, "If-Match = %q", r.Header.Get("If-Match"))
@@ -346,6 +349,7 @@ func TestApplyServerproPolicyReconcileRejectsMutationWithoutETag(t *testing.T) {
 		case "GET /tailnet/-/acl":
 			_, _ = w.Write([]byte(`{"tagOwners":{"tag:serverpro-stale":["autogroup:admin"]},"ssh":[{"action":"check","src":["autogroup:admin"],"dst":["tag:serverpro-stale"],"users":["deploy"]}]}`))
 		case "POST /tailnet/-/acl/validate":
+			writePassingPolicyValidation(w)
 		case "POST /tailnet/-/acl":
 			policyPosts++
 		default:
