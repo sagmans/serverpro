@@ -526,6 +526,17 @@ the removal plan still exactly matches the approved preview, validates the
 edited document, and posts with its ETag. A missing ETag aborts every policy
 mutation before publication. Validation passes only on an empty `{}` body,
 because the validate endpoint returns HTTP 200 for failed tests too.
+
+Every policy write reads the file as HuJSON (`Accept: application/hujson`).
+The tag-owner and SSH-rule helpers edit its standard JSON view. The writer
+then computes an RFC 6902 patch from the old view to the new view and applies
+it to the HuJSON source with `hujson.Patch`, so comments and key order outside
+the changed entries stay. The patched file is formatted like the admin
+console formats it. The writer decodes the result again and aborts unless it
+equals the computed document. Validation and the conditional post send the
+same HuJSON bytes (`Content-Type: application/hujson`); the validation answer
+is read as JSON. A live tailnet write on 2026-11-04 confirmed that both
+endpoints accept that media type.
 Interactive previews go to stderr so stdout contains one final JSON document.
 
 ### Ingress

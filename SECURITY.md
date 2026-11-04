@@ -635,7 +635,10 @@ approved preview. Every changed policy requires an ETag; a missing ETag aborts
 before publication. Tailscale answers `/acl/validate` with HTTP 200 even for
 failed policy tests and rejected syntax, so serverpro writes a policy only when
 the validate body is the empty object `{}`. Any other body, including an empty
-or unreadable one, aborts the write and reports the failing tests.
+or unreadable one, aborts the write and reports the failing tests. A write
+keeps the operator's HuJSON comments: it patches only the changed entries, and
+it aborts unless the patched file decodes to exactly the computed policy.
+Tailscale validates the same bytes that serverpro posts.
 Interactive preview is stderr-only; stdout remains one final JSON document.
 Partial failures must report remaining resources. Local state can drift from
 provider reality. Only an explicit not-found filesystem result is

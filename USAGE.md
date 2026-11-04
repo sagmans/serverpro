@@ -1288,6 +1288,9 @@ final JSON document. Apply refetches current evidence and policy and aborts when
 the removal plan differs from the approved preview; an unchanged plan is
 validated and conditionally published with its ETag.
 
+Policy writes keep HuJSON comments and key order outside the entries that
+serverpro changes. A comment inside a removed entry goes with that entry.
+
 ## Delete
 
 Destructive commands always preview the full plan and request approval before
