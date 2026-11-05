@@ -23,7 +23,8 @@ Its built-in npm backend no longer trusts eight eMudhra intermediate CA
 certificates whose private keys were compromised. It is younger than seven
 days; the owner approved this security exception. It keeps the
 `GHSA-wcqh-j26q-g44x` fix.
-Both mise GNU/Linux archives were downloaded independently and matched published checksums.
+Both mise GNU/Linux archives were downloaded independently and matched
+published checksums.
 
 Reviewed 2026-10-22 (cutoff 2026-10-15 18:21 UTC): the mise-managed tool set
 moves to Node.js `24.22.1` with bundled npm `11.19.1`, uv `0.13.5`, gh `2.102.1`,
@@ -36,7 +37,8 @@ Pi stays on `0.87.1`: Pi `1.0.1` and later ship no `npm-shrinkwrap.json`, so its
 first-party dependencies float to the newest matching release. tmux stays on
 `3.7c`: mise installs it from `tmux/tmux-builds`, which has no `3.8` build.
 Rust `1.99.1`, sem `0.28.x`, Pi `1.3.0`, and gh `2.103.0` are younger than seven
-days and fix no disclosed vulnerability. ripgrep, fd, and inspect have no newer release.
+days and fix no disclosed vulnerability. ripgrep, fd, and inspect have no
+newer release.
 
 Reviewed 2026-10-30 (cutoff 2026-10-23): mise moves to `2026.10.24`,
 gh to `2.103.3`, sem to `0.29.0`, and Rust to `1.99.1`. mise, gh, and sem are
@@ -88,11 +90,11 @@ deprecated package is `node-domexception`, which Node.js replaces with its
 built-in `DOMException`. The `brace-expansion` and `undici` repairs are gone:
 the lockfile resolves both to fixed releases.
 
-- https://docs.npmjs.com/cli/v11/using-npm/config#min-release-age
-- https://docs.npmjs.com/cli/v11/using-npm/config#min-release-age-exclude
-- https://github.com/advisories/GHSA-g3hv-75wg-m249
-- https://github.com/aws/aws-sdk-js-v3/issues/8393
-- https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-1.5.0.tgz
+- <https://docs.npmjs.com/cli/v11/using-npm/config#min-release-age>
+- <https://docs.npmjs.com/cli/v11/using-npm/config#min-release-age-exclude>
+- <https://github.com/advisories/GHSA-g3hv-75wg-m249>
+- <https://github.com/aws/aws-sdk-js-v3/issues/8393>
+- <https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-1.5.0.tgz>
 
 | Updated tool | Selected release | Published (UTC) | Selection |
 | --- | --- | --- | --- |
@@ -114,53 +116,54 @@ the lockfile resolves both to fixed releases.
 
 Primary selection and security evidence:
 
-- https://nodejs.org/dist/index.json
-- https://registry.npmjs.org/@earendil-works%2Fpi-coding-agent
-- https://api.launchpad.net/1.0/ubuntu/+archive/primary
-- https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-amd64/Packages.gz
-- https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-arm64/Packages.gz
-- https://github.com/moby/moby/releases/tag/docker-v29.9.2
-- https://github.com/containerd/containerd/releases/tag/v2.4.2
-- https://github.com/docker/compose/releases/tag/v5.6.1
-- https://go.dev/issue/82345
-- https://github.com/containerd/containerd/security/advisories/GHSA-vwhp-8p66-mq4f
-- https://github.com/containerd/containerd/security/advisories/GHSA-8647-2jxj-p2rc
-- https://github.com/containerd/containerd/security/advisories/GHSA-hc94-p972-ch66
-- https://github.com/containerd/containerd/security/advisories/GHSA-pg57-6jwg-q645
-- https://github.com/docker/buildx/releases/tag/v0.38.1
-- https://github.com/docker/buildx/security/advisories/GHSA-gwr2-q96m-6682
-- https://github.com/docker/buildx/security/advisories/GHSA-p54p-jq4x-rc28
-- https://github.com/jdx/mise/security/advisories/GHSA-333c-h2jr-xv83
-- https://github.com/jdx/mise/security/advisories/GHSA-wcqh-j26q-g44x
-- https://github.com/astral-sh/uv/releases/tag/0.13.5
-- https://github.com/astral-sh/uv/security/advisories/GHSA-hq85-5cpj-mr62
-- https://github.com/cli/cli/releases/tag/v2.103.3
-- https://github.com/cli/cli/pull/14791
-- https://nodejs.org/dist/index.json
-- https://github.com/ast-grep/ast-grep/security/advisories/GHSA-xx6h-xcfw-vf5j
-- https://github.com/ast-grep/ast-grep/security/advisories/GHSA-cmvf-x8f7-rvp6
-- https://github.com/astral-sh/uv/security/advisories/GHSA-2cv4-cqwr-gwf7
-- https://github.com/jdx/mise/releases/tag/v2026.10.24
-- https://github.com/jdx/mise/releases/tag/v2026.10.19
-- https://github.com/jdx/mise/pull/14781
-- https://github.com/jdx/mise/releases/download/v2026.10.24/SHASUMS256.txt
-- https://github.com/Ataraxy-Labs/sem/releases/download/v0.29.0/checksums.txt
-- https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_checksums.txt
-- https://github.com/advisories/GHSA-g3hv-75wg-m249
-- https://github.com/jdx/mise/security/advisories/GHSA-43hx-4j66-v486
-- https://github.com/cloudflare/cloudflared/releases/tag/2026.10.6
+- <https://nodejs.org/dist/index.json>
+- <https://registry.npmjs.org/@earendil-works%2Fpi-coding-agent>
+- <https://api.launchpad.net/1.0/ubuntu/+archive/primary>
+- <https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-amd64/Packages.gz>
+- <https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-arm64/Packages.gz>
+- <https://github.com/moby/moby/releases/tag/docker-v29.9.2>
+- <https://github.com/containerd/containerd/releases/tag/v2.4.2>
+- <https://github.com/docker/compose/releases/tag/v5.6.1>
+- <https://go.dev/issue/82345>
+- <https://github.com/containerd/containerd/security/advisories/GHSA-vwhp-8p66-mq4f>
+- <https://github.com/containerd/containerd/security/advisories/GHSA-8647-2jxj-p2rc>
+- <https://github.com/containerd/containerd/security/advisories/GHSA-hc94-p972-ch66>
+- <https://github.com/containerd/containerd/security/advisories/GHSA-pg57-6jwg-q645>
+- <https://github.com/docker/buildx/releases/tag/v0.38.1>
+- <https://github.com/docker/buildx/security/advisories/GHSA-gwr2-q96m-6682>
+- <https://github.com/docker/buildx/security/advisories/GHSA-p54p-jq4x-rc28>
+- <https://github.com/jdx/mise/security/advisories/GHSA-333c-h2jr-xv83>
+- <https://github.com/jdx/mise/security/advisories/GHSA-wcqh-j26q-g44x>
+- <https://github.com/astral-sh/uv/releases/tag/0.13.5>
+- <https://github.com/astral-sh/uv/security/advisories/GHSA-hq85-5cpj-mr62>
+- <https://github.com/cli/cli/releases/tag/v2.103.3>
+- <https://github.com/cli/cli/pull/14791>
+- <https://nodejs.org/dist/index.json>
+- <https://github.com/ast-grep/ast-grep/security/advisories/GHSA-xx6h-xcfw-vf5j>
+- <https://github.com/ast-grep/ast-grep/security/advisories/GHSA-cmvf-x8f7-rvp6>
+- <https://github.com/astral-sh/uv/security/advisories/GHSA-2cv4-cqwr-gwf7>
+- <https://github.com/jdx/mise/releases/tag/v2026.10.24>
+- <https://github.com/jdx/mise/releases/tag/v2026.10.19>
+- <https://github.com/jdx/mise/pull/14781>
+- <https://github.com/jdx/mise/releases/download/v2026.10.24/SHASUMS256.txt>
+- <https://github.com/Ataraxy-Labs/sem/releases/download/v0.29.0/checksums.txt>
+- <https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_checksums.txt>
+- <https://github.com/advisories/GHSA-g3hv-75wg-m249>
+- <https://github.com/jdx/mise/security/advisories/GHSA-43hx-4j66-v486>
+- <https://github.com/cloudflare/cloudflared/releases/tag/2026.10.6>
 
 On 2026-10-22 the Docker repository contains Engine 29.9.2, containerd 2.4.2,
 Buildx 0.38.1, and Compose 5.6.1 on both architectures. Keep the reviewed
-official binary for hosts whose apt candidate cannot satisfy the Buildx floor. Both Linux binaries were independently
+official binary for hosts whose apt candidate cannot satisfy the Buildx floor.
+Both Linux binaries were independently
 downloaded and matched `checksums.txt` and GitHub release asset digests.
 
 - amd64 SHA-256: `e25d5cd675092bb5d1d03632fdc46cdf3fede7b514dc5f023a105e00d3ce5ad4`
 - arm64 SHA-256: `3b83b3731916ba433feccaaa689fe5bcdc81c641d92c8e6c2ea865dfa141c97a`
-- https://github.com/docker/buildx/releases/tag/v0.38.1
-- https://github.com/docker/buildx/releases/download/v0.38.1/checksums.txt
-- https://github.com/docker/buildx#manual-download
-- https://github.com/docker/cli/blob/master/cli-plugins/manager/manager.go
+- <https://github.com/docker/buildx/releases/tag/v0.38.1>
+- <https://github.com/docker/buildx/releases/download/v0.38.1/checksums.txt>
+- <https://github.com/docker/buildx#manual-download>
+- <https://github.com/docker/cli/blob/master/cli-plugins/manager/manager.go>
 
 Docker documents system-wide manual plugin installation but discourages
 unmanaged production downloads because automatic security updates are absent.
@@ -175,10 +178,10 @@ version and verifies the reviewed shrinkwrap integrity before use. A disposable
 Ubuntu arm64 run passed real Pi help, idempotence, vulnerability rejection,
 repair after drift, and the runtime dependency audit with zero vulnerabilities.
 
-- https://github.com/advisories/GHSA-qhr7-859c-m2p7
-- https://github.com/advisories/GHSA-6j4f-fj2g-mc7p
-- https://github.com/advisories/GHSA-q2hr-2g5m-vwhr
-- https://registry.npmjs.org/brace-expansion
+- <https://github.com/advisories/GHSA-qhr7-859c-m2p7>
+- <https://github.com/advisories/GHSA-6j4f-fj2g-mc7p>
+- <https://github.com/advisories/GHSA-q2hr-2g5m-vwhr>
+- <https://registry.npmjs.org/brace-expansion>
 
 The 2026-10-30 review found that Pi `0.87.1` and `1.0.0` also pin
 `undici@8.10.2` exactly. Pi requires it directly, and the shrinkwrap holds one
@@ -190,17 +193,17 @@ registry SHA-512 matches the pinned integrity. With both repairs applied, the
 npm bulk advisory endpoint reported no advisories for the 138 runtime
 packages in the Pi `0.87.1` shrinkwrap. No real Pi install was run for this review.
 
-- https://github.com/advisories/GHSA-2m5v-pch6-74hx
-- https://github.com/advisories/GHSA-4w7w-5xrc-9h26
-- https://github.com/advisories/GHSA-xjj6-f33q-929c
-- https://github.com/advisories/GHSA-qrxm-fqhp-jwvm
-- https://github.com/advisories/GHSA-4qv8-2p9j-2685
-- https://github.com/advisories/GHSA-f72v-6w45-q472
-- https://github.com/advisories/GHSA-9fm3-97px-rjf6
-- https://github.com/advisories/GHSA-55wc-3pg8-jfw6
-- https://registry.npmjs.org/undici
-- https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-0.87.1.tgz
-- https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-1.0.0.tgz
+- <https://github.com/advisories/GHSA-2m5v-pch6-74hx>
+- <https://github.com/advisories/GHSA-4w7w-5xrc-9h26>
+- <https://github.com/advisories/GHSA-xjj6-f33q-929c>
+- <https://github.com/advisories/GHSA-qrxm-fqhp-jwvm>
+- <https://github.com/advisories/GHSA-4qv8-2p9j-2685>
+- <https://github.com/advisories/GHSA-f72v-6w45-q472>
+- <https://github.com/advisories/GHSA-9fm3-97px-rjf6>
+- <https://github.com/advisories/GHSA-55wc-3pg8-jfw6>
+- <https://registry.npmjs.org/undici>
+- <https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-0.87.1.tgz>
+- <https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-1.0.0.tgz>
 
 These findings are a point-in-time review, not proof that all dependencies or
 artifacts are safe. The local Pi repair passed its runtime dependency audit.
@@ -277,7 +280,8 @@ golangci-lint `v2.14.0` (bumped 2026-10-13 for Go 1.27 export data). Reviewed
 2026-11-02: golangci-lint moves to `v2.15.0` (published 2026-10-16) and
 govulncheck to `v1.9.0` (published 2026-10-11); both pass the seven-day age
 gate. golangci-lint `v2.15.0` is an immutable stable release; govulncheck
-`v1.9.0` is an exact official repository tag. Both require Go 1.25 or newer and support
+`v1.9.0` is an exact official repository tag. Both require Go 1.25 or newer
+and support
 the Go 1.27.3 project toolchain.
 
 ### Hetzner Cloud API
