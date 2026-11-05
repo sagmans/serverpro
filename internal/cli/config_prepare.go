@@ -26,6 +26,12 @@ func (a *app) prepareConfigForCreate(ctx context.Context, namespace, server stri
 	if err != nil {
 		return cfg, "", nil, err
 	}
+	// Check under the workflow lock and before publish, so a refused create
+	// leaves the server's config unchanged.
+	if err := a.validateCreateProviderAgainstState(stPath); err != nil {
+		unlock()
+		return cfg, "", nil, err
+	}
 	if err := a.publishPreparedConfig(cfg, source); err != nil {
 		unlock()
 		return cfg, "", nil, err

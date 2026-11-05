@@ -385,12 +385,14 @@ func contextWithDefaultTimeout(ctx context.Context, timeout time.Duration) (cont
 	return context.WithTimeout(ctx, timeout)
 }
 
+// serverProviderAccount pairs a server's stored token with the provider that
+// owns the server. Every path that uses a stored token after state load passes
+// here, so the guard stays in place even if a caller skips the earlier check.
 func (a *app) serverProviderAccount(st state.State) (compute.Provider, compute.Account, error) {
-	providerName := a.provider
-	if providerName == "" {
-		providerName = st.Compute.Provider
+	if err := a.validateProviderFlag(st); err != nil {
+		return nil, compute.Account{}, err
 	}
-	provider, err := a.resolveProvider(providerName)
+	provider, err := a.resolveProvider(st.Compute.Provider)
 	if err != nil {
 		return nil, compute.Account{}, err
 	}

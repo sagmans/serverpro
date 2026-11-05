@@ -401,8 +401,11 @@ func (a *app) loadServerReadRef(name string) (serverReadRef, error) {
 	if st.Server != name {
 		return serverReadRef{}, fmt.Errorf("state server %q does not match requested server %q", st.Server, name)
 	}
+	if err := a.validateProviderFlag(st); err != nil {
+		return serverReadRef{}, err
+	}
 	if !a.matchesServerState(st) {
-		return serverReadRef{}, fmt.Errorf("state does not match requested provider")
+		return serverReadRef{}, fmt.Errorf("state does not match requested namespace")
 	}
 	return serverReadRef{StatePath: stPath, ConfigPath: cfgPath, State: st}, nil
 }

@@ -357,6 +357,14 @@ Reports still contain infrastructure metadata; treat them as private when
 copying or sharing them. A storage failure produces a redacted stderr warning
 and preserves the complete report on stdout.
 
+A stored server token goes only to the provider recorded in that server's state.
+The `--provider` flag cannot redirect it. A command with a different flag value,
+or state with no provider to compare, fails closed before it uses the token. A
+`server create` rerun also checks an existing state before it changes the config
+or runs preflight. The rerun records the flag value only when state has no
+provider and no provider resources. Each compute adapter also refuses a record
+of another provider before its first read or mutation call.
+
 Provider API calls never follow redirects that leave the credential's trust
 boundary. The shared provider HTTP client refuses redirect chains after five
 hops, rejects plaintext and cross-host targets outright (subdomains and other

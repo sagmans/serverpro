@@ -83,6 +83,11 @@ func (a *app) loadConfigAndStateForServer(name string) (config.Config, string, s
 	if err := validateStateTarget(cfg, st); err != nil {
 		return cfg, "", state.State{}, err
 	}
+	// The registry lookup above filters on the flag; an explicit namespace, config,
+	// or state path does not. Stop here, before prompts and credentials.
+	if err := a.validateProviderFlag(st); err != nil {
+		return cfg, "", state.State{}, err
+	}
 	return cfg, stPath, st, nil
 }
 

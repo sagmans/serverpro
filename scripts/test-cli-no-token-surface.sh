@@ -441,6 +441,29 @@ run_fail_grep "server status token guard" 'missing credentials: \[server provide
 run_ok_grep "server doctor dry-run" '"action": "doctor"' "$bin" --non-interactive --dry-run -n mynamespace server doctor webapp
 run_fail_grep "server doctor fix dry-run guard" '--fix cannot be used with --dry-run' "$bin" --non-interactive --dry-run -n mynamespace server doctor webapp --fix
 run_fail_grep "server doctor token guard" 'missing credentials: \[server provider API token' "$bin" --non-interactive -n mynamespace server doctor webapp
+
+# A provider flag that disagrees with state must stop the command before it
+# reads a credential. This HOME stores no token, so the mismatch error can only
+# appear when the guard fires first; the matching flag shows the guard is not
+# rejecting every flag. A stored token would otherwise reach the flag's vendor.
+mismatch_pattern='provider flag mismatch: -p "vultr" differs from state provider "hetzner"'
+config_before_mismatch="$(cksum <"$config_path")"
+run_fail_grep "provider flag mismatch doctor" "$mismatch_pattern" "$bin" --non-interactive -n mynamespace -p vultr server doctor webapp
+run_fail_grep "provider flag mismatch doctor explicit paths" "$mismatch_pattern" "$bin" --non-interactive -p vultr --config "$config_path" --state "$state_path" server doctor webapp
+run_fail_grep "provider flag mismatch status" "$mismatch_pattern" "$bin" --non-interactive -n mynamespace -p vultr server status webapp
+run_fail_grep "provider flag mismatch power" "$mismatch_pattern" "$bin" --non-interactive -y -n mynamespace -p vultr server restart webapp
+run_fail_grep "provider flag mismatch delete" "$mismatch_pattern" "$bin" --non-interactive -y -n mynamespace -p vultr server delete webapp
+run_fail_grep "provider flag mismatch bootstrap" "$mismatch_pattern" "$bin" --non-interactive -n mynamespace -p vultr server bootstrap webapp all
+run_fail_grep "provider flag mismatch create rerun" "$mismatch_pattern" "$bin" --non-interactive -y -n mynamespace -p vultr server create webapp --location ewr --size vc2-2c-4gb
+if [[ "$(cksum <"$config_path")" == "$config_before_mismatch" ]]; then
+	log "PASS | provider flag mismatch leaves config unchanged"
+	pass=$((pass + 1))
+else
+	log "FAIL | provider flag mismatch changed the server config"
+	fail=$((fail + 1))
+fi
+run_fail_grep "provider flag match reaches token guard" 'missing credentials: \[server provider API token' "$bin" --non-interactive -n mynamespace -p hetzner server doctor webapp
+
 run_ok_grep "server ssh dry-run" 'tailscale' "$bin" --non-interactive --dry-run -n mynamespace server ssh webapp
 skip_case "server ssh live" "requires tailscale SSH/session and remote host"
 run_ok_grep "server ssh-policy dry-run" '"status": "planned"' "$bin" --non-interactive --dry-run -n mynamespace server ssh-policy webapp

@@ -44,6 +44,12 @@ widen support. `INSTALLATION.md` owns the full tool and package version matrix.
 --timeout <duration>     operation timeout, including workflow-lock waits
 ```
 
+`-p` must name the provider in the server's state. Each server token belongs to
+the provider in state, so a command with a different `-p` value fails before it
+uses the token or calls a provider. Commands on an existing server do not need
+`-p`. `server list` and a `server status` lookup without `-n` use `-p` as a
+filter, so they skip servers of another provider.
+
 Persistent flags are command-scoped; each command's `--help` shows only flags
 that command accepts. `--config` is accepted only by
 `server create`, `server doctor`, and `server bootstrap`.
