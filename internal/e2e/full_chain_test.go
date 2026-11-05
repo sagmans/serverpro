@@ -53,7 +53,7 @@ func TestCompiledFullChainJourneys(t *testing.T) {
 			home := t.TempDir()
 			namespace := "e2e-" + provider.name
 			orchestrationAuditPath := filepath.Join(home, "orchestration-audit.log")
-			writeCredentials(t, home, namespace)
+			writeCredentials(t, home, namespace, provider.name)
 			env := append(journeyEnv(home, fakeBin, fixture.URL(), namespace), "SERVERPRO_E2E_CLEANUP_AUDIT="+orchestrationAuditPath)
 			artifacts := newArtifactLog(t, provider.name)
 
@@ -102,7 +102,7 @@ func TestCompiledProviderOnlyImportRecovery(t *testing.T) {
 	fakeBin := writeFakeTailscale(t)
 	namespace := "e2e-import"
 	createHome := t.TempDir()
-	writeCredentials(t, createHome, namespace)
+	writeCredentials(t, createHome, namespace, "vultr")
 	createEnv := journeyEnv(createHome, fakeBin, fixture.URL(), namespace)
 	artifacts := newArtifactLog(t, "import-recovery")
 
@@ -125,6 +125,18 @@ func TestCompiledProviderOnlyImportRecovery(t *testing.T) {
 	var rows []map[string]any
 	if err := json.Unmarshal([]byte(imported.stdout), &rows); err != nil || len(rows) != 1 || rows[0]["status"] != "imported" {
 		t.Fatalf("invalid import result: err=%v stdout=%s", err, imported.stdout)
+	}
+	// Import is the recovery path for a stored token with no provider, so the
+	// journey must leave a set that a later create can verify.
+	credentialsBody, err := os.ReadFile(filepath.Join(importHome, ".config", "serverpro", "namespaces", namespace, "servers", testServer, "credentials.json"))
+	if err != nil {
+		t.Fatalf("read imported credentials: %v", err)
+	}
+	var importedCredentials struct {
+		ServerProviderName string `json:"server_provider_name"`
+	}
+	if err := json.Unmarshal(credentialsBody, &importedCredentials); err != nil || importedCredentials.ServerProviderName != "vultr" {
+		t.Fatalf("import did not record the token provider: err=%v name=%q", err, importedCredentials.ServerProviderName)
 	}
 
 	doctor := runCommand(binary, importEnv, "server", "doctor", testServer,
@@ -155,7 +167,7 @@ func TestCompiledDigitalOceanLegacyImportRecovery(t *testing.T) {
 	fakeBin := writeFakeTailscale(t)
 	namespace := "e2e-legacy-import"
 	createHome := t.TempDir()
-	writeCredentials(t, createHome, namespace)
+	writeCredentials(t, createHome, namespace, "digitalocean")
 	createEnv := journeyEnv(createHome, fakeBin, fixture.URL(), namespace)
 	artifacts := newArtifactLog(t, "digitalocean-legacy-import")
 
@@ -201,7 +213,7 @@ func TestCompiledCheckpointFailureKeepsRecoveryEvidenceAndCleanup(t *testing.T) 
 	fakeBin := writeFakeTailscale(t)
 	home := t.TempDir()
 	namespace := "e2e-checkpoint"
-	writeCredentials(t, home, namespace)
+	writeCredentials(t, home, namespace, "hetzner")
 	marker := filepath.Join(home, "checkpoint-failed")
 	env := append(journeyEnv(home, fakeBin, fixture.URL(), namespace), "SERVERPRO_E2E_FAIL_COMPLETE_CHECKPOINT="+marker)
 	artifacts := newArtifactLog(t, "checkpoint")
@@ -296,7 +308,7 @@ func writeFakeTailscale(t *testing.T) string {
 	return dir
 }
 
-func writeCredentials(t *testing.T, home, namespace string) {
+func writeCredentials(t *testing.T, home, namespace, provider string) {
 	t.Helper()
 	dir := filepath.Join(home, ".config", "serverpro", "namespaces", namespace, "servers", testServer)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -304,7 +316,8 @@ func writeCredentials(t *testing.T, home, namespace string) {
 	}
 	body, err := json.Marshal(map[string]string{
 		"namespace": namespace, "server": testServer,
-		"server_provider_token": testProviderToken, "tailscale_token": testTailscaleToken,
+		"server_provider_token": testProviderToken, "server_provider_name": provider,
+		"tailscale_token": testTailscaleToken,
 	})
 	if err != nil {
 		t.Fatal(err)

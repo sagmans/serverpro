@@ -61,7 +61,7 @@ func runTwinCreate(t *testing.T, namespace, mode string) (commandResult, string,
 	binary := buildE2EBinary(t)
 	fakeBin, calls := writeLoggingFakeTailscale(t)
 	home := t.TempDir()
-	writeCredentials(t, home, namespace)
+	writeCredentials(t, home, namespace, "hetzner")
 	env := replaceEnv(journeyEnv(home, fakeBin, fixture.URL(), namespace), compiledTailnetTwinEnv, mode)
 	artifacts := newArtifactLog(t, namespace)
 	result := runCommand(binary, env, "server", "create", testServer,

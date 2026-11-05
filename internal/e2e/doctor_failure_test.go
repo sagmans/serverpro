@@ -37,7 +37,7 @@ func TestCompiledDoctorPackageDiagnostics(t *testing.T) {
 	binary := buildE2EBinary(t)
 	fakeBin := writeFakeTailscale(t)
 	home := t.TempDir()
-	writeCredentials(t, home, compiledDoctorNamespace)
+	writeCredentials(t, home, compiledDoctorNamespace, compiledDoctorProvider)
 	env := replaceEnv(journeyEnv(home, fakeBin, fixture.URL(), compiledDoctorNamespace), compiledDoctorFailureEnv, "")
 	artifacts := newArtifactLog(t, "doctor-package-diagnostics")
 
@@ -96,32 +96,7 @@ func TestCompiledDoctorPackageDiagnostics(t *testing.T) {
 			if report.Passed() {
 				t.Fatal("failed managed package check reported success")
 			}
-			var packageResult *doctor.Result
-			for i := range report.Results {
-				check := &report.Results[i]
-				if check.Status == doctor.Fail && len(check.Evidence) > compiledDoctorMaxEvidenceBytes {
-					t.Errorf("%s evidence is %d bytes, exceeds %d", check.Name, len(check.Evidence), compiledDoctorMaxEvidenceBytes)
-				}
-				if check.Name == bootstraptools.ManagedPackageCheckName {
-					packageResult = check
-				}
-			}
-			if packageResult == nil || packageResult.Status != doctor.Fail || packageResult.Scope != "remote" {
-				t.Fatalf("missing failed remote managed package result: %+v", packageResult)
-			}
-			for _, want := range []string{compiledDoctorBatchFailure, compiledDoctorBatchStatus, compiledDoctorBaselineEvidence, compiledDoctorRedaction} {
-				if !strings.Contains(packageResult.Evidence, want) {
-					t.Errorf("managed package evidence missing %q: %q", want, packageResult.Evidence)
-				}
-			}
-			for _, want := range []string{compiledDoctorRepairFailure, compiledDoctorRepairExitStatus, compiledDoctorTerminalCause} {
-				if strings.Contains(packageResult.Evidence, want) != tc.fix {
-					t.Errorf("repair evidence %q present = %v, want %v", want, strings.Contains(packageResult.Evidence, want), tc.fix)
-				}
-			}
-			if strings.Contains(packageResult.Evidence, compiledDoctorTruncation) != tc.truncated {
-				t.Errorf("truncation present = %v, want %v", strings.Contains(packageResult.Evidence, compiledDoctorTruncation), tc.truncated)
-			}
+			requireManagedPackageDiagnostics(t, report, tc.fix, tc.truncated)
 		})
 	}
 
@@ -133,6 +108,38 @@ func TestCompiledDoctorPackageDiagnostics(t *testing.T) {
 		t.Fatalf("fixture resources remain: %d", remaining)
 	}
 	requireServerArtifactsAbsent(t, home, compiledDoctorNamespace)
+}
+
+// requireManagedPackageDiagnostics keeps the evidence contract of the failed
+// package check apart from the journey that provokes the failure.
+func requireManagedPackageDiagnostics(t *testing.T, report doctor.Report, fix, truncated bool) {
+	t.Helper()
+	var packageResult *doctor.Result
+	for i := range report.Results {
+		check := &report.Results[i]
+		if check.Status == doctor.Fail && len(check.Evidence) > compiledDoctorMaxEvidenceBytes {
+			t.Errorf("%s evidence is %d bytes, exceeds %d", check.Name, len(check.Evidence), compiledDoctorMaxEvidenceBytes)
+		}
+		if check.Name == bootstraptools.ManagedPackageCheckName {
+			packageResult = check
+		}
+	}
+	if packageResult == nil || packageResult.Status != doctor.Fail || packageResult.Scope != "remote" {
+		t.Fatalf("missing failed remote managed package result: %+v", packageResult)
+	}
+	for _, want := range []string{compiledDoctorBatchFailure, compiledDoctorBatchStatus, compiledDoctorBaselineEvidence, compiledDoctorRedaction} {
+		if !strings.Contains(packageResult.Evidence, want) {
+			t.Errorf("managed package evidence missing %q: %q", want, packageResult.Evidence)
+		}
+	}
+	for _, want := range []string{compiledDoctorRepairFailure, compiledDoctorRepairExitStatus, compiledDoctorTerminalCause} {
+		if strings.Contains(packageResult.Evidence, want) != fix {
+			t.Errorf("repair evidence %q present = %v, want %v", want, strings.Contains(packageResult.Evidence, want), fix)
+		}
+	}
+	if strings.Contains(packageResult.Evidence, compiledDoctorTruncation) != truncated {
+		t.Errorf("truncation present = %v, want %v", strings.Contains(packageResult.Evidence, compiledDoctorTruncation), truncated)
+	}
 }
 
 func requireDoctorSecretFreeOutput(t *testing.T, result commandResult) {

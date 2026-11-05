@@ -26,7 +26,7 @@ func TestCompiledDeleteRejectsInvalidExternalCredentialBeforeComputeMutation(t *
 	fakeBin := writeFakeTailscale(t)
 	home := t.TempDir()
 	namespace := "e2e-delete-preflight"
-	writeCredentials(t, home, namespace)
+	writeCredentials(t, home, namespace, "hetzner")
 	env := replaceEnv(journeyEnv(home, fakeBin, fixture.URL(), namespace), compiledDeleteCleanupFailureEnv, "")
 	artifacts := newArtifactLog(t, "delete-preflight")
 
@@ -69,7 +69,7 @@ func TestCompiledDeleteReportsPartialAfterPostComputeCleanupFailure(t *testing.T
 	fakeBin := writeFakeTailscale(t)
 	home := t.TempDir()
 	namespace := "e2e-delete-partial"
-	writeCredentials(t, home, namespace)
+	writeCredentials(t, home, namespace, "hetzner")
 	env := replaceEnv(journeyEnv(home, fakeBin, fixture.URL(), namespace), compiledDeleteCleanupFailureEnv, "")
 	artifacts := newArtifactLog(t, "delete-partial")
 

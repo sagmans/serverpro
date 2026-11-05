@@ -107,6 +107,9 @@ func writeImportArtifacts(cfg config.Config, st state.State, cfgPath, stPath str
 	creds.Namespace = cfg.Namespace
 	creds.Server = cfg.Server
 	creds.ServerProvider = opts.ProviderToken
+	// Discovery just proved this token against this provider, so import is the
+	// recovery path for a file that records no provider or a wrong one.
+	creds.ServerProviderName = st.Compute.Provider
 	if opts.TailscaleToken != "" {
 		creds.Tailscale = opts.TailscaleToken
 	}

@@ -358,7 +358,7 @@ def created_key():
     print(key)
 
 
-def write_credentials(path, namespace, server):
+def write_credentials(path, namespace, server, provider):
     """Write the CLI credential document with tokens taken from the environment.
 
     The file is created private, so no other user can read it even briefly.
@@ -367,6 +367,7 @@ def write_credentials(path, namespace, server):
         "namespace": namespace,
         "server": server,
         "server_provider_token": os.environ[CREDENTIAL_TOKEN_ENV["server_provider_token"]],
+        "server_provider_name": provider,
         "tailscale_token": os.environ[CREDENTIAL_TOKEN_ENV["tailscale_token"]],
         "tailscale_auth_key": "",
         "cloudflare_token": os.environ[CREDENTIAL_TOKEN_ENV["cloudflare_token"]],
@@ -387,7 +388,7 @@ HELPER_COMMANDS = {
     "count-identity-devices": (count_identity_devices, 2),
     "decoy-key-request": (decoy_key_request, 3),
     "created-key": (created_key, 0),
-    "write-credentials": (write_credentials, 3),
+    "write-credentials": (write_credentials, 4),
 }
 
 

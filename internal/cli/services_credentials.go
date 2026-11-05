@@ -38,6 +38,10 @@ func (a *app) ensureCredentials(cfg config.Config) (credentials.Set, bool, error
 		if err != nil {
 			return creds, false, err
 		}
+		// The flag names the vendor the operator entered this token for. A
+		// command without the flag leaves it unrecorded instead of keeping the
+		// name of the token it replaces.
+		creds.ServerProviderName = a.provider
 	}
 	if credentialMissing(missing, "Tailscale API token") {
 		creds.Tailscale, err = a.promptSecret("Tailscale API token")
@@ -66,6 +70,7 @@ func (a *app) mergeCredentials(cfg config.Config, supplied credentials.Set) erro
 	return credentials.Update(cfg, func(current *credentials.Set) error {
 		if current.ServerProvider == "" {
 			current.ServerProvider = supplied.ServerProvider
+			current.ServerProviderName = supplied.ServerProviderName
 		}
 		if current.Tailscale == "" {
 			current.Tailscale = supplied.Tailscale
@@ -86,6 +91,7 @@ func (a *app) applyCachedServerProviderCredential(creds *credentials.Set) bool {
 		return false
 	}
 	creds.ServerProvider = account.Token
+	creds.ServerProviderName = string(account.Provider)
 	return true
 }
 

@@ -1373,6 +1373,12 @@ remaining servers intact so the operation can be retried.
 ~/.local/state/serverpro/namespaces/<namespace>/servers/<server>.json
 ```
 
+credentials.json records the provider of the stored server token in
+`server_provider_name`. `server create` refuses a stored token when this name
+differs from `-p`, or when the name is missing and state does not name the same
+provider. The error gives the recovery step: correct `-p`, set the name, or remove
+the token and enter a new one. `server import` also records the name.
+
 credentials.json holds service tokens (`server_provider_token`,
 `tailscale_token`, `cloudflare_token`) and stored operator auth
 (`admin_sudo_password`, `github_pat`, optional `tailscale_auth_key`) as

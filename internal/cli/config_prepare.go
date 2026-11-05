@@ -28,7 +28,7 @@ func (a *app) prepareConfigForCreate(ctx context.Context, namespace, server stri
 	}
 	// Check under the workflow lock and before publish, so a refused create
 	// leaves the server's config unchanged.
-	if err := a.validateCreateProviderAgainstState(stPath); err != nil {
+	if err := a.validateCreateProviderAgainstState(cfg, stPath); err != nil {
 		unlock()
 		return cfg, "", nil, err
 	}

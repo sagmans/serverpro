@@ -58,7 +58,7 @@ func TestCreatePromptsUseLiveProviderCatalog(t *testing.T) {
 func TestCreateComputeAccountUsesServerCredentials(t *testing.T) {
 	cfg := config.ExampleServer("demo", "web")
 	a := &app{provider: "hetzner", providers: testProviderRegistry(t)}
-	accountRef, err := a.computeAccountForConfig(cfg, credentials.Set{ServerProvider: "acct"})
+	accountRef, err := a.computeAccountForConfig(cfg, credentials.Set{ServerProvider: "acct", ServerProviderName: "hetzner"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestCreateDefaultNoIngressAllowsTailscaleOnlyServiceCredentials(t *testing.
 	if err := config.Save(cfgPath, cfg); err != nil {
 		t.Fatal(err)
 	}
-	if err := credentials.Save(cfg, credentials.Set{Namespace: "demo", Server: "web", ServerProvider: "acct", Tailscale: "ts"}); err != nil {
+	if err := credentials.Save(cfg, credentials.Set{Namespace: "demo", Server: "web", ServerProvider: "acct", ServerProviderName: "hetzner", Tailscale: "ts"}); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("DEMO_WEB_SUDOPASS", "correct horse battery staple")

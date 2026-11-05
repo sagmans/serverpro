@@ -27,7 +27,7 @@ func createTestConfig(t *testing.T) string {
 	if err := config.Save(cfgPath, cfg); err != nil {
 		t.Fatal(err)
 	}
-	if err := credentials.Save(cfg, credentials.Set{Namespace: "demo", Server: "web", ServerProvider: "acct", Tailscale: "ts", Cloudflare: "cf"}); err != nil {
+	if err := credentials.Save(cfg, credentials.Set{Namespace: "demo", Server: "web", ServerProvider: "acct", ServerProviderName: "hetzner", Tailscale: "ts", Cloudflare: "cf"}); err != nil {
 		t.Fatal(err)
 	}
 	return cfgPath
@@ -48,7 +48,7 @@ func writeDoctorFixture(t *testing.T) (string, string) {
 	if err := config.Save(cfgPath, cfg); err != nil {
 		t.Fatal(err)
 	}
-	if err := credentials.Save(cfg, credentials.Set{Namespace: "demo", Server: "web", ServerProvider: "acct", Tailscale: "ts", Cloudflare: "cf"}); err != nil {
+	if err := credentials.Save(cfg, credentials.Set{Namespace: "demo", Server: "web", ServerProvider: "acct", ServerProviderName: "hetzner", Tailscale: "ts", Cloudflare: "cf"}); err != nil {
 		t.Fatal(err)
 	}
 	st := state.State{Namespace: "demo", Server: "web", Tailscale: state.TailscaleState{Name: "demo-web"}}

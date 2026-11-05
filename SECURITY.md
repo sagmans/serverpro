@@ -361,9 +361,19 @@ A stored server token goes only to the provider recorded in that server's state.
 The `--provider` flag cannot redirect it. A command with a different flag value,
 or state with no provider to compare, fails closed before it uses the token. A
 `server create` rerun also checks an existing state before it changes the config
-or runs preflight. The rerun records the flag value only when state has no
-provider and no provider resources. Each compute adapter also refuses a record
-of another provider before its first read or mutation call.
+or runs preflight. Each compute adapter also refuses a record of another provider
+before its first read or mutation call.
+
+`credentials.json` also records the provider of the stored server token in
+`server_provider_name`. serverpro writes it when an operator enters a token for
+`-p <provider>`, and when `server import` proves a token at that provider. When
+state has no provider and no provider resources, or when no state exists,
+`server create` compares the flag with this name before it changes the config or
+runs preflight. A different name fails closed. A stored token with no name also
+fails closed, because the flag would be the only evidence. When state names the
+flag's provider, `server create` records that name for an older token. An
+operator who edits this name or the token by hand owns that claim: serverpro
+cannot prove which vendor issued a token.
 
 Provider API calls never follow redirects that leave the credential's trust
 boundary. The shared provider HTTP client refuses redirect chains after five

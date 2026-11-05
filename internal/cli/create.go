@@ -144,6 +144,11 @@ func (a *app) computeAccountForConfig(cfg config.Config, creds credentials.Set) 
 	if creds.ServerProvider == "" {
 		return compute.Account{}, fmt.Errorf("missing credentials: [server provider API token]")
 	}
+	// Every create provider call takes its token from this account, so this
+	// check also covers a token that appeared after the check under the lock.
+	if err := validateStoredTokenProvider(cfg, creds, string(provider.Name())); err != nil {
+		return compute.Account{}, err
+	}
 	return compute.Account{Name: cfg.Namespace + "/" + cfg.Server, Provider: provider.Name(), Token: creds.ServerProvider, Scope: cfg.Namespace + "/" + cfg.Server}, nil
 }
 

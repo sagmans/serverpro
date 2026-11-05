@@ -324,6 +324,7 @@ expected = {
     "namespace": "spdogfooda",
     "server": "web",
     "server_provider_token": os.environ["EXPECTED_PROVIDER"],
+    "server_provider_name": "hetzner",
     "tailscale_token": os.environ["EXPECTED_TAILSCALE"],
     "tailscale_auth_key": "",
     "cloudflare_token": os.environ["EXPECTED_CLOUDFLARE"],

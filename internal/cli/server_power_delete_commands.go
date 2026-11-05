@@ -403,6 +403,14 @@ func (a *app) serverProviderAccount(st state.State) (compute.Provider, compute.A
 	if creds.ServerProvider == "" {
 		return nil, compute.Account{}, fmt.Errorf("missing credentials: [server provider API token]")
 	}
+	// State is the authority here, so an unrecorded token passes. A recorded
+	// name that disagrees means state and credentials describe different
+	// vendors, and neither can be trusted to choose the API.
+	if creds.ServerProviderName != "" {
+		if err := validateStoredTokenProvider(serverCredentialConfig(st), creds, st.Compute.Provider); err != nil {
+			return nil, compute.Account{}, err
+		}
+	}
 	return provider, compute.Account{Name: st.Namespace + "/" + st.Server, Provider: provider.Name(), Token: creds.ServerProvider, Scope: st.Namespace + "/" + st.Server}, nil
 }
 

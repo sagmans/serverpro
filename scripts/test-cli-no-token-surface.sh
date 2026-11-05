@@ -464,6 +464,20 @@ else
 fi
 run_fail_grep "provider flag match reaches token guard" 'missing credentials: \[server provider API token' "$bin" --non-interactive -n mynamespace -p hetzner server doctor webapp
 
+# With no state to compare, only the provider recorded beside a stored token
+# can stop that token from reaching the flag's vendor. The dummy token never
+# leaves: each refusal happens before the first provider call.
+binding_dir="$HOME/.config/serverpro/namespaces/bindingns/servers/web"
+binding_args=(--non-interactive -y -n bindingns -p vultr server create web --location ewr --size vc2-2c-4gb --image 1743 --admin-user ops --tailscale-tailnet example.ts.net)
+mkdir -p "$binding_dir"
+chmod 700 "$HOME/.config/serverpro" "$HOME/.config/serverpro/namespaces" "$HOME/.config/serverpro/namespaces/bindingns" "$HOME/.config/serverpro/namespaces/bindingns/servers" "$binding_dir"
+printf '{"namespace":"bindingns","server":"web","server_provider_token":"dummy"}\n' >"$binding_dir/credentials.json"
+chmod 600 "$binding_dir/credentials.json"
+run_fail_grep "stored token with no provider refused" 'provider "vultr" cannot be verified: the stored token of bindingns/web records no provider' "$bin" "${binding_args[@]}"
+printf '{"namespace":"bindingns","server":"web","server_provider_token":"dummy","server_provider_name":"hetzner"}\n' >"$binding_dir/credentials.json"
+run_fail_grep "stored token of another provider refused" 'provider "vultr" differs from provider "hetzner" recorded for the stored token of bindingns/web' "$bin" "${binding_args[@]}"
+rm -f "$binding_dir/credentials.json"
+
 run_ok_grep "server ssh dry-run" 'tailscale' "$bin" --non-interactive --dry-run -n mynamespace server ssh webapp
 skip_case "server ssh live" "requires tailscale SSH/session and remote host"
 run_ok_grep "server ssh-policy dry-run" '"status": "planned"' "$bin" --non-interactive --dry-run -n mynamespace server ssh-policy webapp

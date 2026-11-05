@@ -82,7 +82,7 @@ write_credentials() {
 	mkdir -p "$cred_dir" || return
 	chmod 700 "$HOME/.config/serverpro" "$HOME/.config/serverpro/namespaces" "$HOME/.config/serverpro/namespaces/$namespace" "$HOME/.config/serverpro/namespaces/$namespace/servers" "$cred_dir" 2>/dev/null || true
 	PROVIDER_TOKEN="$3" TAILSCALE_TOKEN="$4" CLOUDFLARE_TOKEN="$5" \
-		python3 "$validator_script" write-credentials "$cred_dir/credentials.json" "$namespace" "$server"
+		python3 "$validator_script" write-credentials "$cred_dir/credentials.json" "$namespace" "$server" "$6"
 }
 
 # wait_live_ok polls a read-only command until its output passes validation or
@@ -418,7 +418,7 @@ run_destructive_dogfood() {
 		skip_case "live create/delete" "leftover servers must be removed first"
 	elif ! run_live_ok namespace-created "live namespace create" "$bin" namespace create "$namespace"; then
 		skip_case "live create/delete" "namespace create failed"
-	elif ! write_credentials "$namespace" "$server" "$token" "$SERVERPRO_DOGFOOD_TAILSCALE_TOKEN" "${SERVERPRO_DOGFOOD_CLOUDFLARE_TOKEN:-}"; then
+	elif ! write_credentials "$namespace" "$server" "$token" "$SERVERPRO_DOGFOOD_TAILSCALE_TOKEN" "${SERVERPRO_DOGFOOD_CLOUDFLARE_TOKEN:-}" "$provider"; then
 		log "FAIL | live write credentials"
 		fail=$((fail + 1))
 	else
