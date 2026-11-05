@@ -78,7 +78,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.3"
-          cache: true
+          # A shared Actions cache can hold entries from other refs. The build
+          # that gets attested and published must not read them, so it pays
+          # for a cold start. setup-go caches by default, so say false.
+          cache: false
 
       - name: Build native binary
         env:

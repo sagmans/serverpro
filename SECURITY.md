@@ -558,7 +558,8 @@ coverage, and landing code plus documentation together. A changed remote key or
 artifact fails closed until that review completes.
 
 Release tags run the reusable non-live check gate on the exact tagged commit and
-use the same Go 1.27.3 pin as local development. Release publication rejects
+use the same Go 1.27.3 pin as local development. The build that gets attested
+and published does not read the Actions cache. Release publication rejects
 non-SemVer tags and existing releases, never clobbers assets, smoke-tests native
 binaries, and pairs every target archive with checksums, an SPDX SBOM, and
 signed Sigstore provenance and SBOM attestations. SemVer prerelease tags are
