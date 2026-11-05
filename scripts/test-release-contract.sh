@@ -76,7 +76,7 @@ assert_contains "${CI_WORKFLOW}" "actions/setup-go@${SETUP_GO_SHA}"
 assert_line_count "${CI_WORKFLOW}" "          go-version: \"${GO_VERSION}\"" 2
 assert_absent "${CI_WORKFLOW}" "1.26.x"
 assert_absent "${CI_WORKFLOW}" "check-latest: true"
-assert_contains "${RELEASE_WORKFLOW}" "uses: ./.github/workflows/ci.yml"
+assert_contains "${RELEASE_WORKFLOW}" "uses: $/.github/workflows/ci.yml"
 assert_contains "${RELEASE_WORKFLOW}" "actions/checkout@${CHECKOUT_SHA}"
 assert_contains "${RELEASE_WORKFLOW}" "actions/setup-go@${SETUP_GO_SHA}"
 assert_line_count "${RELEASE_WORKFLOW}" "          go-version: \"${GO_VERSION}\"" 1

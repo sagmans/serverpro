@@ -1,0 +1,16 @@
+# Repo config for the pre-push workflow scan. It replaces the base config in
+# .githooks/lib/actionlint.yaml, which is empty, and this file adds only the
+# two entries that actionlint cannot answer correctly today.
+self-hosted-runner:
+  labels:
+    # GitHub-hosted, not self-hosted: release.yml needs it for native amd64
+    # macOS builds. Hooks accept actionlint from 1.7.7, which predates the
+    # label, so listing it keeps the scan result the same on every version.
+    - macos-15-intel
+paths:
+  .github/workflows/release.yml:
+    ignore:
+      # actionlint 1.7.12 rejects the self-repository syntax that zizmor
+      # requires. It is a false positive for this one call only: remove it
+      # when a release closes https://github.com/rhysd/actionlint/issues/711.
+      - 'reusable workflow call "\$/\.github/workflows/ci\.yml" at "uses" is not following the format'

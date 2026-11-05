@@ -14,7 +14,9 @@ concurrency:
 
 jobs:
   checks:
-    uses: ./.github/workflows/ci.yml
+    # Self-repository form: it resolves to the running commit, and files on
+    # the runner cannot change what it loads. See .github/actionlint.yaml.
+    uses: $/.github/workflows/ci.yml
     permissions:
       contents: read
 
