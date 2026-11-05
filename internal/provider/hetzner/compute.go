@@ -122,6 +122,9 @@ func (p ComputeProvider) Status(ctx context.Context, ref compute.ServerRef) (com
 	if ref.Account.Token == "" {
 		return compute.ServerStatus{}, compute.Diagnostics{{Status: compute.Fail, Message: "provider credential missing"}}
 	}
+	if err := validateReadRequest(ref.Record, p.Name()); err != nil {
+		return compute.ServerStatus{}, compute.Diagnostics{{Status: compute.Fail, Message: err.Error()}}
+	}
 	id, err := serverID(ref.Record)
 	if err != nil {
 		return compute.ServerStatus{}, compute.Diagnostics{{Status: compute.Fail, Message: err.Error()}}
@@ -305,7 +308,13 @@ func accessPolicyID(record compute.ServerRecord) (int64, error) {
 }
 
 func validateMutationRequest(record compute.ServerRecord, provider compute.ProviderName) error {
-	return providerutil.ValidateMutationProvider(record.Provider, provider)
+	return providerutil.ValidateRecordProvider(record.Provider, provider)
+}
+
+// validateReadRequest applies the same ownership rule to reads, because a read
+// sends the account token as a mutation does.
+func validateReadRequest(record compute.ServerRecord, provider compute.ProviderName) error {
+	return providerutil.ValidateRecordProvider(record.Provider, provider)
 }
 
 func validateLiveAccessPolicyOwnership(record compute.ServerRecord, firewall Firewall) error {

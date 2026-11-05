@@ -83,6 +83,9 @@ func (p ComputeProvider) Status(ctx context.Context, ref compute.ServerRef) (com
 	if ref.Account.Token == "" {
 		return compute.ServerStatus{}, compute.Diagnostics{{Status: compute.Fail, Message: "provider credential missing"}}
 	}
+	if err := validateReadRequest(ref.Record, p.Name()); err != nil {
+		return compute.ServerStatus{}, compute.Diagnostics{{Status: compute.Fail, Message: err.Error()}}
+	}
 	id, err := instanceID(ref.Record)
 	if err != nil {
 		return compute.ServerStatus{}, compute.Diagnostics{{Status: compute.Fail, Message: err.Error()}}

@@ -13,8 +13,10 @@ var bootstrapSecretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\$6\$[^\s"']+`),
 }
 
-// ValidateMutationProvider prevents an adapter from mutating another provider's record.
-func ValidateMutationProvider(actual, expected compute.ProviderName) error {
+// ValidateRecordProvider stops an adapter before it sends its account token for
+// another provider's record. Reads need this as much as mutations, because the
+// request itself carries the token.
+func ValidateRecordProvider(actual, expected compute.ProviderName) error {
 	if actual != expected {
 		return fmt.Errorf("provider ownership mismatch: state provider %q provider %q", actual, expected)
 	}

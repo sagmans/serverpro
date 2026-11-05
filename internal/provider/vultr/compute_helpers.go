@@ -46,7 +46,13 @@ func firewallGroupID(record compute.ServerRecord) (string, bool) {
 }
 
 func validateMutationRequest(record compute.ServerRecord, provider compute.ProviderName) error {
-	return providerutil.ValidateMutationProvider(record.Provider, provider)
+	return providerutil.ValidateRecordProvider(record.Provider, provider)
+}
+
+// validateReadRequest applies the same ownership rule to reads, because a read
+// sends the account token as a mutation does.
+func validateReadRequest(record compute.ServerRecord, provider compute.ProviderName) error {
+	return providerutil.ValidateRecordProvider(record.Provider, provider)
 }
 
 func validateLiveInstanceOwnership(record compute.ServerRecord, inst Instance) error {

@@ -13,11 +13,11 @@ type testProviderError struct {
 
 func (e *testProviderError) Error() string { return e.message }
 
-func TestValidateMutationProviderRejectsMismatch(t *testing.T) {
-	if err := ValidateMutationProvider("vultr", "vultr"); err != nil {
+func TestValidateRecordProviderRejectsMismatch(t *testing.T) {
+	if err := ValidateRecordProvider("vultr", "vultr"); err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidateMutationProvider("hetzner", "vultr"); err == nil {
+	if err := ValidateRecordProvider("hetzner", "vultr"); err == nil {
 		t.Fatal("expected ownership mismatch")
 	}
 }
