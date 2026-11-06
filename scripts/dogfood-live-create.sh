@@ -82,7 +82,7 @@ write_credentials() {
 	mkdir -p "$cred_dir" || return
 	chmod 700 "$HOME/.config/serverpro" "$HOME/.config/serverpro/namespaces" "$HOME/.config/serverpro/namespaces/$namespace" "$HOME/.config/serverpro/namespaces/$namespace/servers" "$cred_dir" 2>/dev/null || true
 	PROVIDER_TOKEN="$3" TAILSCALE_TOKEN="$4" CLOUDFLARE_TOKEN="$5" \
-		python3 "$validator_script" write-credentials "$cred_dir/credentials.json" "$namespace" "$server" "$6"
+		"${DOGFOOD_PYTHON[@]}" "$validator_script" write-credentials "$cred_dir/credentials.json" "$namespace" "$server" "$6"
 }
 
 # wait_live_ok polls a read-only command until its output passes validation or
@@ -142,7 +142,7 @@ list_namespace_servers() {
 	local out="$out_dir/discover-$1.json"
 	"$bin" --non-interactive -n "$namespace" -p "$provider" server discover >"$out" 2>"$out.err" || return 1
 	validate_case_output list "$out" >>"$out.err" 2>&1 || return 1
-	python3 "$validator_script" namespace-servers "$out" "$namespace"
+	"${DOGFOOD_PYTHON[@]}" "$validator_script" namespace-servers "$out" "$namespace"
 }
 
 # check_leftovers reports provider servers in the dogfood namespace other than
@@ -221,7 +221,7 @@ report_server_facts() {
 		return
 	fi
 	node="$(state_field tailscale.node_id)"
-	age_hours="$(python3 "$validator_script" age-hours "$(state_field created_at)")"
+	age_hours="$("${DOGFOOD_PYTHON[@]}" "$validator_script" age-hours "$(state_field created_at)")"
 	scenario_summary+=("SERVER | $provider/$namespace/$server | compute=$compute node=${node:-unknown} age=${age_hours:-unknown}h kept=$kept")
 	if [[ "$kept" == yes && -n "$age_hours" ]] && ((age_hours >= max_age_hours)); then
 		scenario_summary+=("WARN | kept server age ${age_hours}h reaches SERVERPRO_DOGFOOD_MAX_AGE_HOURS=$max_age_hours; delete it with SERVERPRO_DOGFOOD_SCENARIOS=delete")

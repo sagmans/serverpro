@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --no-project --python-preference only-managed python
 """Validate strict JSON contracts emitted by live dogfood commands.
 
 Also hosts the harness's small JSON helpers as subcommands, so the bash

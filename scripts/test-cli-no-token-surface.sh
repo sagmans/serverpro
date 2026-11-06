@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -u
 
+# Developer checks keep the same runtime boundary as the live harness.
+PYTHON=(uv run --no-project --python-preference only-managed python)
+# Resolve the managed interpreter while mise still has its original HOME and trust store.
+MANAGED_PYTHON="$("${PYTHON[@]}" -c 'import sys; print(sys.executable)')" || exit 1
+PYTHON=("$MANAGED_PYTHON")
+
 # Exercises the full CLI surface that can run without live provider tokens,
 # Tailscale keys, Cloudflare keys, SSH sessions, or paid infrastructure.
 # The harness uses an isolated HOME so local-state mutations are intentional,
@@ -65,7 +71,7 @@ run_ok() {
 }
 
 json_file_valid() {
-	python3 - "$1" <<'PY'
+	"${PYTHON[@]}" - "$1" <<'PY'
 import json
 import sys
 

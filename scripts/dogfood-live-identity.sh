@@ -50,7 +50,7 @@ tailscale_api() {
 # hostname and tag; at least two means the decoy is really competing.
 count_identity_devices() {
 	tailscale_api GET "/tailnet/$SERVERPRO_DOGFOOD_TAILNET/devices" |
-		python3 "$validator_script" count-identity-devices "$1" "$2"
+		"${DOGFOOD_PYTHON[@]}" "$validator_script" count-identity-devices "$1" "$2"
 }
 
 # identity_teardown logs the decoy out (removing the ephemeral device), stops
@@ -105,9 +105,9 @@ run_identity_checks() {
 	secret_dir="$work_dir/secret"
 	mkdir -p "$secret_dir" && chmod 700 "$secret_dir" || return 1
 	body="$secret_dir/decoy-key-request.json"
-	python3 "$validator_script" decoy-key-request "$tag" "$DOGFOOD_DECOY_KEY_EXPIRY_SECONDS" "$DOGFOOD_DECOY_DESCRIPTION" >"$body"
+	"${DOGFOOD_PYTHON[@]}" "$validator_script" decoy-key-request "$tag" "$DOGFOOD_DECOY_KEY_EXPIRY_SECONDS" "$DOGFOOD_DECOY_DESCRIPTION" >"$body"
 	finish_hooks+=(identity_teardown)
-	if ! key="$(tailscale_api POST "/tailnet/$SERVERPRO_DOGFOOD_TAILNET/keys" "$body" | python3 "$validator_script" created-key)"; then
+	if ! key="$(tailscale_api POST "/tailnet/$SERVERPRO_DOGFOOD_TAILNET/keys" "$body" | "${DOGFOOD_PYTHON[@]}" "$validator_script" created-key)"; then
 		log "FAIL | live identity decoy key | Tailscale API key creation failed"
 		fail=$((fail + 1))
 		return 1

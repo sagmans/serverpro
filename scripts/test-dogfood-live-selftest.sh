@@ -2,7 +2,7 @@
 # Network-free self-test for scripts/test-dogfood-live.sh.
 # WHY: the live harness guards paid/destructive infrastructure and handles real
 # provider tokens, but its safety logic previously had no executable proof. A
-# fake serverpro binary and fake python3 make guard, secret-transport, and
+# fake serverpro binary and fake uv launcher make guard, secret-transport, and
 # cleanup behavior testable in CI without tokens or network.
 set -uo pipefail
 
@@ -14,10 +14,9 @@ trap 'rm -rf "$tmp"' EXIT
 
 fakebin="$tmp/fakebin"
 mkdir -p "$fakebin"
-# The interpreter itself, not a version-manager shim: the harness runs under
-# env -i with a temp HOME, where a shim (mise, pyenv, asdf) cannot resolve
-# a version and would loop back into the fake python3 below.
-real_python="$(python3 -c 'import sys; print(sys.executable)')"
+# Resolve managed Python before the fake launcher takes over PATH and HOME.
+# The isolated fixture must preserve argv capture without a shim recursion.
+real_python="$(uv run --no-project --python-preference only-managed python -c 'import sys; print(sys.executable)')" || exit 1
 
 SENT_HETZNER='SENTINEL_HETZNER_SECRET'
 SENT_VULTR='SENTINEL_VULTR_SECRET'
@@ -27,10 +26,15 @@ SENT_SUDO='SENTINEL_SUDO_SECRET'
 SENT_CF='SENTINEL_CLOUDFLARE_SECRET'
 SENT_DECOY='tskey-auth-SENTINEL-DECOY-KEY'
 
-# Fake python3 records argv, then executes the production validator and its
-# helper subcommands unchanged so serialization assertions cover real code.
-cat >"$fakebin/python3" <<'FAKE'
+# Keep the production launcher contract visible to the secret-transport proof.
+cat >"$fakebin/uv" <<'FAKE'
 #!/usr/bin/env bash
+EXPECTED_PREFIX='run --no-project --python-preference only-managed python'
+if [[ "${*:1:5}" != "$EXPECTED_PREFIX" ]]; then
+  printf 'unexpected managed runtime arguments\n' >&2
+  exit 2
+fi
+shift 5
 printf '<%s>\n' "$@" >>"$FAKE_ARGV_DIR/python-argv.log"
 exec "$FAKE_REAL_PYTHON" "$@"
 FAKE
@@ -280,7 +284,7 @@ case "$method $url" in
 esac
 FAKE
 
-chmod +x "$fakebin/python3" "$fakebin/serverpro" "$fakebin/tailscale" "$fakebin/curl"
+chmod +x "$fakebin/uv" "$fakebin/serverpro" "$fakebin/tailscale" "$fakebin/curl"
 
 fails=0
 note() { printf '%s\n' "$*"; }

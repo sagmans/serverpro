@@ -9,6 +9,8 @@
 # any order and every helper has exactly one home. Sourcing it again only
 # redefines constants and functions.
 
+# The harness must fail before a controller-selected system interpreter can run.
+DOGFOOD_PYTHON=(uv run --no-project --python-preference only-managed python)
 # DigitalOcean is the default test provider for on-demand dogfood servers. It
 # lives here because the prompt flow needs it before the paid flow runs.
 DOGFOOD_DEFAULT_PROVIDER="digitalocean"
@@ -180,7 +182,7 @@ validate_case_output() {
 	local expected_provider="${3:-$provider}"
 	local expected_namespace="${4:-$namespace}"
 	local expected_server="${5:-$server}"
-	python3 "$validator_script" "$kind" "$path" "$expected_provider" "$expected_namespace" "$expected_server"
+	"${DOGFOOD_PYTHON[@]}" "$validator_script" "$kind" "$path" "$expected_provider" "$expected_namespace" "$expected_server"
 }
 
 # run_case records one judged command, keeping its stdout and stderr as
@@ -276,7 +278,7 @@ state_path() {
 
 # state_field reads one dotted field from server state; empty when absent.
 state_field() {
-	python3 "$validator_script" state-field "$(state_path "$HOME")" "$1"
+	"${DOGFOOD_PYTHON[@]}" "$validator_script" state-field "$(state_path "$HOME")" "$1"
 }
 
 # remote_read runs a read-only command on the managed host over Tailscale SSH,

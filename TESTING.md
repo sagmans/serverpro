@@ -9,6 +9,10 @@ coverage matters as much as line coverage: every operator-visible capability
 needs unit, integration, smoke/e2e, and dogfood evidence or an explicit reason
 why a layer is not applicable.
 
+Developer Python entry points use `uv run --no-project` with
+`--python-preference only-managed`. `make check` rejects bare Python launchers
+before it runs the existing suites. Minimal-PATH checks must stop if uv is absent.
+
 ## Test layers
 
 | Layer | Command | Purpose | Live APIs |

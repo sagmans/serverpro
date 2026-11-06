@@ -9,7 +9,9 @@ DEVELOPMENT.md is contributor workflow. User docs live in `README.md`,
 - Ubuntu 24.04 LTS (`noble`) amd64/arm64 is the only supported managed-host
   dogfood target.
 - Go 1.27.4 is the supported development, CI, and release toolchain.
-- `mise.toml` owns the exact Go version pin.
+- `mise.toml` owns the exact Go and uv version pins.
+- Python checks require mise-managed uv and run with managed Python only.
+  A missing uv command stops the check without a system Python fallback.
 - The `go` directive is a minimum, not a pin. `GOTOOLCHAIN=auto` runs any
   newer local Go as-is, so an unpatched Go 1.27.0 or 1.27.1 on `PATH` would
   run the gates and fail `make vuln`. The Makefile therefore exports

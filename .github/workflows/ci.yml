@@ -24,7 +24,21 @@ jobs:
           go-version: "1.27.4"
           cache: true
 
+      # Controller checks require the same managed runtime as local hooks.
+      - uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        timeout-minutes: 5
+        with:
+          version: '2026.10.23'
+          cache: false
+          mise_toml: |
+            [tools]
+            uv = "0.13.6"
+        env:
+          UV_PYTHON: "3.14.10"
+
       - name: Run checks
+        env:
+          UV_PYTHON: "3.14.10"
         run: make check
 
   full-chain-e2e:

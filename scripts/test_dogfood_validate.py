@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --no-project --python-preference only-managed python
 """Unit tests for live dogfood JSON output contracts."""
 
 import copy

@@ -1,6 +1,8 @@
 SHELL := /bin/sh
 
 GO ?= go
+# Controller-side checks must never select the operating system Python.
+PYTHON := uv run --no-project --python-preference only-managed python
 # GO_FLOOR is the patched minimum from go.mod. GOTOOLCHAIN=auto never switches
 # down, so a newer but unpatched local Go (1.27.0 through 1.27.2) would otherwise run
 # every gate; pinning the default to the floor keeps local runs on the same
@@ -38,12 +40,15 @@ NPM ?= npm
 PI_LOCK_DIR := internal/bootstraptools/pi
 NPM_REGISTRY := https://registry.npmjs.org/
 
-.PHONY: ci check fmt fmt-check tidy-check test test-unit test-go-check test-harness test-smoke test-integration test-e2e test-full-chain-e2e test-release test-release-shell test-dogfood-readonly test-dogfood-live test-dogfood-live-selftest vet build bin dogfood-no-token link-bin lint lint-shell vuln pi-lock-audit race cover install-tools hooks install-hooks lint-fast gen-bootstrap-wrapper
+.PHONY: python-policy ci check fmt fmt-check tidy-check test test-unit test-go-check test-harness test-smoke test-integration test-e2e test-full-chain-e2e test-release test-release-shell test-dogfood-readonly test-dogfood-live test-dogfood-live-selftest vet build bin dogfood-no-token link-bin lint lint-shell vuln pi-lock-audit race cover install-tools hooks install-hooks lint-fast gen-bootstrap-wrapper
 .SILENT: fmt fmt-check link-bin
 
 ci: build check
 
-check: fmt-check tidy-check test-go-check test-harness test-smoke test-e2e test-release-shell test-dogfood-live-selftest vet lint lint-shell vuln pi-lock-audit
+check: python-policy fmt-check tidy-check test-go-check test-harness test-smoke test-e2e test-release-shell test-dogfood-live-selftest vet lint lint-shell vuln pi-lock-audit
+
+python-policy:
+	bash scripts/check-python-runtime.sh
 
 fmt:
 	bash scripts/go-format.sh write
@@ -94,7 +99,7 @@ test-dogfood-live: bin
 # Network-free proof that the live harness guards, secret transport, and
 # cleanup retention work; safe for `check` because it uses only fakes.
 test-dogfood-live-selftest:
-	python3 -m unittest scripts/test_dogfood_validate.py
+	$(PYTHON) -m unittest scripts/test_dogfood_validate.py
 	bash scripts/test-dogfood-live-selftest.sh
 
 vet:
