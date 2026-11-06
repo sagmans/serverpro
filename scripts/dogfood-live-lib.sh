@@ -9,8 +9,17 @@
 # any order and every helper has exactly one home. Sourcing it again only
 # redefines constants and functions.
 
-# The harness must fail before a controller-selected system interpreter can run.
-DOGFOOD_PYTHON=(uv run --no-project --python-preference only-managed python)
+# Runtime discovery precedes HOME isolation because mise resolves tools per user.
+DOGFOOD_PYTHON_REQUEST=(uv run --no-project --python-preference only-managed python)
+dogfood_python_init() {
+	local selected
+	selected=$("${DOGFOOD_PYTHON_REQUEST[@]}" -c 'import sys; print(sys.executable)') || return 1
+	if [[ "$selected" != /* || ! -x "$selected" ]]; then
+		printf 'managed Python resolution failed: expected an absolute executable path\n' >&2
+		return 1
+	fi
+	DOGFOOD_PYTHON=("$selected")
+}
 # DigitalOcean is the default test provider for on-demand dogfood servers. It
 # lives here because the prompt flow needs it before the paid flow runs.
 DOGFOOD_DEFAULT_PROVIDER="digitalocean"

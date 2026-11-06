@@ -38,6 +38,7 @@ source "$destructive_flow"
 source "$identity_flow"
 # shellcheck source=scripts/dogfood-live-prompt.sh
 source "$prompt_flow"
+dogfood_python_init || exit 1
 
 # WHY reset: bash seeds SECONDS from an inherited environment value, so an
 # operator shell that exports it would inflate the reported run duration.

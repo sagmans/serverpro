@@ -35,6 +35,12 @@ if [[ "${*:1:5}" != "$EXPECTED_PREFIX" ]]; then
   exit 2
 fi
 shift 5
+printf '%s\n' "$FAKE_PYTHON_LAUNCHER"
+FAKE
+
+# The resolved launcher retains argument evidence after HOME isolation.
+cat >"$fakebin/python-managed" <<'FAKE'
+#!/usr/bin/env bash
 printf '<%s>\n' "$@" >>"$FAKE_ARGV_DIR/python-argv.log"
 exec "$FAKE_REAL_PYTHON" "$@"
 FAKE
@@ -284,7 +290,7 @@ case "$method $url" in
 esac
 FAKE
 
-chmod +x "$fakebin/uv" "$fakebin/serverpro" "$fakebin/tailscale" "$fakebin/curl"
+chmod +x "$fakebin/uv" "$fakebin/python-managed" "$fakebin/serverpro" "$fakebin/tailscale" "$fakebin/curl"
 
 fails=0
 note() { printf '%s\n' "$*"; }
@@ -363,7 +369,7 @@ run_harness() {
 	mkdir -p "$FAKE_ARGV_DIR" "$stmp/htmp" "$stmp/home"
 	[[ -z "$delete_status" ]] || printf '%s\n' "$delete_status" >"$FAKE_ARGV_DIR/delete-status"
 	env -i PATH="$fakebin:/usr/bin:/bin" HOME="$stmp/home" \
-		TMPDIR="$stmp/htmp" FAKE_ARGV_DIR="$FAKE_ARGV_DIR" FAKE_REAL_PYTHON="$real_python" \
+		TMPDIR="$stmp/htmp" FAKE_ARGV_DIR="$FAKE_ARGV_DIR" FAKE_REAL_PYTHON="$real_python" FAKE_PYTHON_LAUNCHER="$fakebin/python-managed" \
 		SERVERPRO_BIN="$fakebin/serverpro" \
 		SENT_HETZNER="$SENT_HETZNER" SENT_VULTR="$SENT_VULTR" \
 		SENT_DIGITALOCEAN="$SENT_DIGITALOCEAN" SENT_CF="$SENT_CF" SENT_DECOY="$SENT_DECOY" \
