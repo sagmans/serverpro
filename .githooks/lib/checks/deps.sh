@@ -26,6 +26,8 @@ set -euo pipefail
 lib_dir="$(cd "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 # shellcheck source-path=SCRIPTDIR source=../tools.sh
 . "$lib_dir/tools.sh"
+# shellcheck source-path=SCRIPTDIR source=../helpers.sh
+. "$lib_dir/helpers.sh"
 
 CHECK=dependency-scan
 SCANNER=osv-scanner
