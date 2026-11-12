@@ -8,7 +8,7 @@ DEVELOPMENT.md is contributor workflow. User docs live in `README.md`,
 - macOS 27 arm64 is the supported local controller/development runtime.
 - Ubuntu 24.04 LTS (`noble`) amd64/arm64 is the only supported managed-host
   dogfood target.
-- Go 1.27.3 is the supported development, CI, and release toolchain.
+- Go 1.27.4 is the supported development, CI, and release toolchain.
 - `mise.toml` owns the exact Go version pin.
 - The `go` directive is a minimum, not a pin. `GOTOOLCHAIN=auto` runs any
   newer local Go as-is, so an unpatched Go 1.27.0 or 1.27.1 on `PATH` would
@@ -114,8 +114,8 @@ race and one merged coverage profile. Its release shell contract does not rerun
 the Go release package; `make test-release` remains the focused target that
 runs that package once plus the shell assertions. Standalone unit, integration,
 race, and cover targets support focused development. Build-tagged full-chain
-journeys run through `make test-full-chain-e2e` as a separate pre-push step. The gate
-rejects aggregate coverage below 81.8% and any 0%-covered function.
+journeys run through `make test-full-chain-e2e` as a separate pre-push step.
+The gate rejects aggregate coverage below 81.8% and any 0%-covered function.
 `make check` also runs `make lint-shell`, which needs ShellCheck on `PATH`
 (preinstalled on the CI runner; install it locally with your system package
 manager, for example `brew install shellcheck` or `apt install shellcheck`).

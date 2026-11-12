@@ -13,7 +13,7 @@ other environments cannot run the binary.
 | --- | --- | --- | --- |
 | Controller CLI | macOS 27 | arm64 | Runs provider APIs, local state, Tailscale SSH, and remote orchestration. |
 | Managed host | Ubuntu 24.04 LTS (`noble`) | amd64, arm64 | Cloud-init, bootstrap, Tailscale, Docker, and Cloudflare Tunnel target. |
-| Source build toolchain | Go 1.27.3 or newer patched release | arm64 | Runs on the supported controller; Go 1.27.3 is the development, CI, and release baseline. Go 1.27.0 through 1.27.2 miss its security fixes. |
+| Source build toolchain | Go 1.27.4 or newer patched release | arm64 | Runs on the supported controller; Go 1.27.4 is the development, CI, and release baseline. Go 1.27.0 through 1.27.3 miss its security fixes. |
 
 Live create refetches the selected provider location's catalog and rejects a
 missing image or any image outside this OS/release/architecture matrix before
@@ -120,7 +120,7 @@ connector serverpro did not install from `pkg.cloudflare.com`: install and
 ## Requirements
 
 - A supported controller from the matrix above
-- Go 1.27.3+
+- Go 1.27.4+
 - Git
 - `ssh`
 - `tailscale` CLI for local SSH checks and `serverpro server ssh`

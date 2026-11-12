@@ -264,6 +264,12 @@ The official vulnerability database records it as fixed in Go 1.26.10 and Go
 1.27.3 (released 2026-10-19). Go 1.27.3 is newer than the usual release-age
 window, and the owner approved this security exception, so the pin moves to
 Go 1.27.3 and a local 1.27.2 must not run project gates.
+Reviewed 2026-11-12: govulncheck reported GO-2026-6859 (CVE-2026-97054,
+`net/http` HTTP/1 server crash from a MaxBytesReader header race) reachable
+under Go 1.27.3. The official vulnerability database records it as fixed in Go
+1.27.4 (released 2026-11-10). Go 1.27.4 is newer than the usual release-age
+window, and the owner approved this security exception, so the pin moves to
+Go 1.27.4 and a local 1.27.3 must not run project gates.
 
 ### Go quality tools
 
@@ -282,7 +288,7 @@ govulncheck to `v1.9.0` (published 2026-10-11); both pass the seven-day age
 gate. golangci-lint `v2.15.0` is an immutable stable release; govulncheck
 `v1.9.0` is an exact official repository tag. Both require Go 1.25 or newer
 and support
-the Go 1.27.3 project toolchain.
+the Go 1.27.4 project toolchain.
 
 ### Hetzner Cloud API
 
@@ -1274,7 +1280,7 @@ Use: release workflow, native runner architecture, artifact transport, SPDX
 SBOM, signed provenance, attached-bundle verification, and release-integrity
 guidance. Reviewed 2026-08-11: checkout is pinned to `v7.0.1` and setup-go to
 `v7.0.0`; both declare the supported Node 24 JavaScript action runtime, and the
-release runner uses Go `1.27.3`. Upload/download/attestation actions are pinned
+release runner uses Go `1.27.4`. Upload/download/attestation actions are pinned
 to the tags listed above, with commit SHAs recorded in workflow comments; Syft
 is pinned to `v1.48.0`.
 `macos-15-intel` supplies amd64 and `macos-15` supplies arm64 for native smoke
