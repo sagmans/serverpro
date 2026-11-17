@@ -133,15 +133,32 @@ exit 0
 }
 
 type doctorGitCommandFixture struct {
-	binDir string
-	home   string
+	binDir    string
+	home      string
+	decoyHome string
 }
 
 func newDoctorGitCommandFixture(t *testing.T) doctorGitCommandFixture {
 	t.Helper()
-	fixture := doctorGitCommandFixture{binDir: t.TempDir(), home: t.TempDir()}
+	fixture := doctorGitCommandFixture{binDir: t.TempDir(), home: t.TempDir(), decoyHome: t.TempDir()}
 	fixture.writeExecutable(t, "getent", "#!/bin/sh\nprintf 'deploy:x:1000:1000:Deploy:%s:/bin/sh\\n' \"$DOCTOR_GIT_HOME\"\n")
 	fixture.writeExecutable(t, "runuser", "#!/bin/sh\nset -eu\n[ \"$1\" = -u ]\nshift 2\n[ \"$1\" = -- ]\nshift\nexec \"$@\"\n")
+	// Tests must never write Git configuration, so a fail-closed stub stands in
+	// for git. It refuses any HOME except the resolved admin home, which proves
+	// each generated command threads that home before any fixture file I/O.
+	fixture.writeExecutable(t, "git", `#!/bin/sh
+set -eu
+reject() { printf 'unexpected fixture git call (HOME=%s): %s\n' "$HOME" "$*" >&2; exit 1; }
+[ "$HOME" = "$DOCTOR_GIT_HOME" ] || reject "$@"
+[ "$1" = config ] && [ "$2" = --global ] || reject "$@"
+shift 2
+operation=write
+if [ "$1" = --get ]; then operation=read; shift; fi
+case "$1" in user.name|user.email|gpg.format|user.signingkey|commit.gpgsign) ;; *) reject "$@" ;; esac
+file="$HOME/$1"
+shift
+if [ "$operation" = read ]; then [ "$#" = 0 ] && cat "$file"; else [ "$#" = 1 ] && printf '%s\n' "$1" > "$file"; fi
+`)
 	return fixture
 }
 
@@ -152,17 +169,18 @@ func (f doctorGitCommandFixture) writeExecutable(t *testing.T, name, body string
 	}
 }
 
+// run starts with a decoy HOME so a command that loses the admin home is
+// rejected by the stub instead of touching the developer's real home.
 func (f doctorGitCommandFixture) run(script string) error {
 	cmd := exec.Command("sh", "-c", script)
-	cmd.Env = append(os.Environ(), "DOCTOR_GIT_HOME="+f.home, "PATH="+f.binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	cmd.Env = append(os.Environ(), "HOME="+f.decoyHome, "DOCTOR_GIT_HOME="+f.home, "PATH="+f.binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return cmd.Run()
 }
 
+// gitConfig seeds drift in the stub's per-key files, never in real Git config.
 func (f doctorGitCommandFixture) gitConfig(t *testing.T, key, value string) {
 	t.Helper()
-	cmd := exec.Command("git", "config", "--global", key, value)
-	cmd.Env = append(os.Environ(), "HOME="+f.home)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git config %s: %v: %s", key, err, out)
+	if err := os.WriteFile(filepath.Join(f.home, key), []byte(value+"\n"), 0o600); err != nil {
+		t.Fatalf("set fixture value %s: %v", key, err)
 	}
 }

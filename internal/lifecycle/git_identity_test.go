@@ -107,7 +107,7 @@ Host serverpro-github-example-example-app
 	if err := os.WriteFile(configPath, []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	setFixtureGitConfig(t, home, "url."+repo.aliasURL()+".insteadOf", repo.url)
+	seedRewriteFixture(t, home, "url."+repo.aliasURL()+".insteadOf", repo.url)
 	script := gitDeployAccessCleanupScript(repo)
 	if err := runGitDeployCleanupFixture(home, configPath, script); err != nil {
 		t.Fatalf("cleanup failed: %v", err)
@@ -127,7 +127,7 @@ Host serverpro-github-example-example-app
 			t.Fatalf("cleanup retained %q:\n%s", removed, updated)
 		}
 	}
-	if out, err := fixtureGitConfig(home, "--get-all", "url."+repo.aliasURL()+".insteadOf"); err == nil {
+	if out, err := readRewriteFixture(home, "url."+repo.aliasURL()+".insteadOf"); err == nil {
 		t.Fatalf("cleanup retained Git rewrite: %s", out)
 	}
 }
@@ -144,17 +144,47 @@ func TestGitDeployAccessCleanupRejectsIncompleteBlockBeforeMutation(t *testing.T
 		t.Fatal(err)
 	}
 	rewriteKey := "url." + repo.aliasURL() + ".insteadOf"
-	setFixtureGitConfig(t, home, rewriteKey, repo.url)
+	seedRewriteFixture(t, home, rewriteKey, repo.url)
 	if err := runGitDeployCleanupFixture(home, configPath, gitDeployAccessCleanupScript(repo)); err == nil {
 		t.Fatal("incomplete managed SSH block passed cleanup")
 	}
-	out, err := fixtureGitConfig(home, "--get-all", rewriteKey)
+	out, err := readRewriteFixture(home, rewriteKey)
 	if err != nil || strings.TrimSpace(out) != repo.url {
 		t.Fatalf("failed cleanup mutated rewrite: output=%q error=%v", out, err)
 	}
 }
 
+// Tests must never write Git configuration. The cleanup script's only Git use
+// is unsetting the deploy rewrite, so these files stand in for that one entry
+// and a fail-closed stub stands in for git.
+const (
+	rewriteFixtureKeyFile   = "rewrite-key"
+	rewriteFixtureValueFile = "rewrite-value"
+	rewriteFixtureBinDir    = "bin"
+	rewriteFixtureDecoyDir  = "decoy-home"
+)
+
+// rewriteFixtureGitStub refuses any call that is not the expected unset in the
+// fixture home, so a cleanup that loses TARGET_HOME or grows a new Git call
+// fails instead of reaching the developer's real home. It reports a missing
+// key with the same status as git so the production tolerance stays exercised.
+var rewriteFixtureGitStub = fmt.Sprintf(`#!/bin/sh
+set -eu
+reject() { printf 'unexpected fixture git call (HOME=%%s): %%s\n' "$HOME" "$*" >&2; exit 1; }
+[ "$HOME" = "$FIXTURE_HOME" ] || reject "$@"
+[ "$#" = 4 ] && [ "$1" = config ] && [ "$2" = --global ] && [ "$3" = --unset-all ] || reject "$@"
+[ -f "$HOME/%[1]s" ] && [ "$(cat "$HOME/%[1]s")" = "$4" ] || exit %[3]d
+rm "$HOME/%[1]s" "$HOME/%[2]s"
+`, rewriteFixtureKeyFile, rewriteFixtureValueFile, gitConfigMissingKeyExitStatus)
+
 func runGitDeployCleanupFixture(home, configPath, cleanupScript string) error {
+	binDir := filepath.Join(home, rewriteFixtureBinDir)
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "git"), []byte(rewriteFixtureGitStub), 0o700); err != nil {
+		return err
+	}
 	const harness = `set -eu
 TARGET_USER=fixture
 TARGET_GID=fixture
@@ -173,24 +203,36 @@ install() {
   chmod 0600 "$2"
 }
 `
+	// A decoy HOME makes the stub reject any Git call that skips TARGET_HOME.
+	decoyHome := filepath.Join(home, rewriteFixtureDecoyDir)
 	cmd := exec.Command("bash", "-c", harness+cleanupScript)
-	cmd.Env = append(os.Environ(), "FIXTURE_HOME="+home, "FIXTURE_CONFIG="+configPath)
+	cmd.Env = append(os.Environ(), "HOME="+decoyHome, "FIXTURE_HOME="+home, "FIXTURE_CONFIG="+configPath, "PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return cmd.Run()
 }
 
-func setFixtureGitConfig(t *testing.T, home, key, value string) {
+// seedRewriteFixture records the one deploy rewrite the cleanup must remove.
+func seedRewriteFixture(t *testing.T, home, key, value string) {
 	t.Helper()
-	if out, err := fixtureGitConfig(home, key, value); err != nil {
-		t.Fatalf("set fixture git config: %v: %s", err, out)
+	if err := os.WriteFile(filepath.Join(home, rewriteFixtureKeyFile), []byte(key), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, rewriteFixtureValueFile), []byte(value), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func fixtureGitConfig(home string, args ...string) (string, error) {
-	commandArgs := append([]string{"config", "--global"}, args...)
-	cmd := exec.Command("git", commandArgs...)
-	cmd.Env = append(os.Environ(), "HOME="+home)
-	out, err := cmd.CombinedOutput()
-	return string(out), err
+// readRewriteFixture returns the seeded rewrite value, or an error once the
+// cleanup removed it or when a different key was seeded.
+func readRewriteFixture(home, key string) (string, error) {
+	seeded, err := os.ReadFile(filepath.Join(home, rewriteFixtureKeyFile))
+	if err != nil {
+		return "", err
+	}
+	if string(seeded) != key {
+		return "", fmt.Errorf("rewrite fixture holds key %q, not %q", seeded, key)
+	}
+	value, err := os.ReadFile(filepath.Join(home, rewriteFixtureValueFile))
+	return string(value), err
 }
 
 func TestSetupGitAccountKeyRejectsInvalidManagedDeployRepository(t *testing.T) {
