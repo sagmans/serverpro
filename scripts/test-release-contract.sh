@@ -19,6 +19,14 @@ SETUP_GO_SHA=b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
 ATTEST_PROVENANCE_SHA=4d101475d8b20a2381f78447822ac1eab6504dd8
 ATTEST_SBOM_SHA=1e69f48acb82d1966a394da916b4c1698aa569d6
 SBOM_ACTION_SHA=66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c
+# Stable object identities keep command fixtures independent of local Git policy.
+MAIN_COMMIT_SHA=1111111111111111111111111111111111111111
+OFFMAIN_COMMIT_SHA=2222222222222222222222222222222222222222
+TAG_OBJECT_SHA=3333333333333333333333333333333333333333
+OFFMAIN_OBJECT_SHA=4444444444444444444444444444444444444444
+MISMATCH_OBJECT_SHA=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+MAINTAINER_SIGNER=ahmetsercansagman@gmail.com
+OVERRIDE_SIGNER=maintainer@example.invalid
 
 fail() {
   printf 'FAIL | %s\n' "$1" >&2
@@ -102,36 +110,41 @@ assert_contains "${INSTALLATION_DOC}" "grep -F \"  \${archive}\" SHA256SUMS"
 assert_contains "${INSTALLATION_DOC}" "--bundle \"\${provenance_bundle}\""
 assert_contains "${INSTALLATION_DOC}" '--predicate-type https://spdx.dev/Document/v2.3'
 
-# --- release provenance validator scenarios (mocked gh API) ---
-# Run from a Git hook, Git exports GIT_DIR and friends; without this the
-# sandbox commands below would rewrite the caller's repository config.
-# shellcheck disable=SC2046 # WHY: one variable name per word is intended.
-unset $(git rev-parse --local-env-vars)
+# These command fixtures exercise the production validator without creating
+# repositories, commits, or tags, so operator identity and hooks stay intact.
 PROV_SANDBOX=$(mktemp -d)
-git init -q --bare "${PROV_SANDBOX}/origin.git"
-git init -q -b main "${PROV_SANDBOX}/repo"
-git -C "${PROV_SANDBOX}/repo" config user.email dev@example.invalid
-git -C "${PROV_SANDBOX}/repo" config user.name contract-test
-# Sandbox tags must stay unsigned even when the operator's global Git
-# configuration forces signed annotated tags.
-git -C "${PROV_SANDBOX}/repo" config commit.gpgsign false
-git -C "${PROV_SANDBOX}/repo" config tag.gpgsign false
-git -C "${PROV_SANDBOX}/repo" config tag.forcesignannotated false
-# Global hooks (commit-msg policy, pre-push checks) would judge the sandbox's
-# throwaway commits and pushes; an empty hooks directory keeps them out.
-mkdir "${PROV_SANDBOX}/no-hooks"
-git -C "${PROV_SANDBOX}/repo" config core.hooksPath "${PROV_SANDBOX}/no-hooks"
-git -C "${PROV_SANDBOX}/repo" remote add origin "${PROV_SANDBOX}/origin.git"
-git -C "${PROV_SANDBOX}/repo" commit --allow-empty -q -m base
-git -C "${PROV_SANDBOX}/repo" checkout -q -b feature
-git -C "${PROV_SANDBOX}/repo" commit --allow-empty -q -m off-main
-git -C "${PROV_SANDBOX}/repo" tag -a rel-offmain -m off-main
-git -C "${PROV_SANDBOX}/repo" checkout -q main
-git -C "${PROV_SANDBOX}/repo" tag rel-light main
-git -C "${PROV_SANDBOX}/repo" tag -a rel-main -m on-main
-git -C "${PROV_SANDBOX}/repo" push -q origin main
+
+# Failure paths must release the same disposable files as successful runs.
+cleanup_provenance() {
+  rm -r -- "${PROV_SANDBOX:?}"
+}
+trap cleanup_provenance EXIT
 
 mkdir "${PROV_SANDBOX}/bin"
+cat >"${PROV_SANDBOX}/bin/git" <<'SHIM'
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Reject unexpected commands so a fixture cannot conceal new Git mutations.
+case "$*" in
+  'cat-file -t refs/tags/rel-light') printf 'commit\n' ;;
+  'cat-file -t refs/tags/rel-main'|'cat-file -t refs/tags/rel-offmain') printf 'tag\n' ;;
+  'rev-parse refs/tags/rel-main') printf '%s\n' "${FAKE_TAG_OBJECT_SHA}" ;;
+  'rev-parse refs/tags/rel-offmain') printf '%s\n' "${FAKE_OFFMAIN_OBJECT_SHA}" ;;
+  'rev-parse refs/tags/rel-main^{commit}') printf '%s\n' "${FAKE_MAIN_COMMIT_SHA}" ;;
+  'rev-parse refs/tags/rel-offmain^{commit}') printf '%s\n' "${FAKE_OFFMAIN_COMMIT_SHA}" ;;
+  'fetch --quiet origin refs/heads/main') printf '%s\n' "${FAKE_MAIN_COMMIT_SHA}" >FETCH_HEAD ;;
+  "merge-base --is-ancestor ${FAKE_MAIN_COMMIT_SHA} FETCH_HEAD")
+    # A stale or omitted fetch must not satisfy the positive scenario.
+    [[ $(cat FETCH_HEAD) == "${FAKE_MAIN_COMMIT_SHA}" ]]
+    ;;
+  "merge-base --is-ancestor ${FAKE_OFFMAIN_COMMIT_SHA} FETCH_HEAD")
+    [[ $(cat FETCH_HEAD) == "${FAKE_MAIN_COMMIT_SHA}" ]]
+    exit 1
+    ;;
+  *) printf 'unexpected fixture Git command: %s\n' "$*" >&2; exit 2 ;;
+esac
+SHIM
 cat >"${PROV_SANDBOX}/bin/gh" <<'SHIM'
 #!/usr/bin/env bash
 if [[ ${1:-} == api && ${2:-} == *git/ref/tags/* ]]; then
@@ -145,33 +158,51 @@ else
     "${FAKE_TAGGER_EMAIL}" "${FAKE_VERIFIED}" "${FAKE_REASON}"
 fi
 SHIM
-chmod +x "${PROV_SANDBOX}/bin/gh"
+chmod +x "${PROV_SANDBOX}/bin/git" "${PROV_SANDBOX}/bin/gh"
 
 provenance_case() {
-  local name=$1 expected=$2 tag=$3 ref_sha=$4 verified=$5 reason=$6 tagger=$7
-  if (cd "${PROV_SANDBOX}/repo" &&
+  local name=$1 expected=$2 tag=$3 ref_sha=$4 verified=$5 reason=$6 tagger=$7 diagnostic=$8
+  # Production passes an unset repository variable as an empty string, so the
+  # default signer list is the path most cases must prove; the override path
+  # gets its own case.
+  local allowlist=${9:-}
+  local output
+  mkdir "${PROV_SANDBOX}/${name}"
+  if output=$(cd "${PROV_SANDBOX}/${name}" &&
       export GITHUB_REPOSITORY=contract/serverpro \
         PATH="${PROV_SANDBOX}/bin:${PATH}" \
+        RELEASE_SIGNER_ALLOWLIST=${allowlist} \
+        FAKE_MAIN_COMMIT_SHA=${MAIN_COMMIT_SHA} FAKE_OFFMAIN_COMMIT_SHA=${OFFMAIN_COMMIT_SHA} \
+        FAKE_TAG_OBJECT_SHA=${TAG_OBJECT_SHA} FAKE_OFFMAIN_OBJECT_SHA=${OFFMAIN_OBJECT_SHA} \
         FAKE_REF_SHA=${ref_sha} FAKE_VERIFIED=${verified} \
         FAKE_REASON=${reason} FAKE_TAGGER_EMAIL=${tagger} &&
-      bash "${PROVENANCE}" "${tag}") >/dev/null 2>&1; then
+      bash "${PROVENANCE}" "${tag}" 2>&1); then
     [[ ${expected} == pass ]] || fail "provenance case accepted: ${name}"
   else
     [[ ${expected} == fail ]] || fail "provenance case rejected: ${name}"
   fi
+  # A rejection for a different reason does not prove the intended guard.
+  [[ ${output} == "${diagnostic}" ]] || fail "provenance case ${name}: ${output}"
+  printf 'PASS | provenance %s\n' "${name}"
 }
 
-MAINTAINER_SIGNER=ahmetsercansagman@gmail.com
-TAG_OBJECT_SHA=$(git -C "${PROV_SANDBOX}/repo" rev-parse "rel-main^{tag}")
-OFFMAIN_OBJECT_SHA=$(git -C "${PROV_SANDBOX}/repo" rev-parse "rel-offmain^{tag}")
-
-provenance_case lightweight-tag fail rel-light '' false unsigned ''
-provenance_case annotated-off-main fail rel-offmain "${OFFMAIN_OBJECT_SHA}" true valid "${MAINTAINER_SIGNER}"
-provenance_case unsigned-tag fail rel-main "${TAG_OBJECT_SHA}" false unsigned "${MAINTAINER_SIGNER}"
-provenance_case unlisted-signer fail rel-main "${TAG_OBJECT_SHA}" true valid attacker@example.invalid
-provenance_case object-mismatch fail rel-main deadbeefdeadbeefdeadbeefdeadbeefdeadbeef true valid "${MAINTAINER_SIGNER}"
-provenance_case signed-on-main pass rel-main "${TAG_OBJECT_SHA}" true valid "${MAINTAINER_SIGNER}"
-
-rm -rf "${PROV_SANDBOX}"
+provenance_case lightweight-tag fail rel-light '' false unsigned '' \
+  'release provenance rejected: rel-light is missing locally or is not an annotated tag object'
+provenance_case annotated-off-main fail rel-offmain "${OFFMAIN_OBJECT_SHA}" true valid "${MAINTAINER_SIGNER}" \
+  "release provenance rejected: tagged commit ${OFFMAIN_COMMIT_SHA} is not an ancestor of main"
+provenance_case unsigned-tag fail rel-main "${TAG_OBJECT_SHA}" false unsigned "${MAINTAINER_SIGNER}" \
+  'release provenance rejected: tag signature is not verified (reason: unsigned)'
+provenance_case unlisted-signer fail rel-main "${TAG_OBJECT_SHA}" true valid attacker@example.invalid \
+  'release provenance rejected: tagger attacker@example.invalid is not in the release signer allowlist'
+provenance_case object-mismatch fail rel-main "${MISMATCH_OBJECT_SHA}" true valid "${MAINTAINER_SIGNER}" \
+  "release provenance rejected: remote tag object ${MISMATCH_OBJECT_SHA} differs from local ${TAG_OBJECT_SHA}"
+provenance_case signed-on-main pass rel-main "${TAG_OBJECT_SHA}" true valid "${MAINTAINER_SIGNER}" \
+  "release provenance accepted: rel-main signed by ${MAINTAINER_SIGNER} from commit ${MAIN_COMMIT_SHA}"
+provenance_case override-signer pass rel-main "${TAG_OBJECT_SHA}" true valid "${OVERRIDE_SIGNER}" \
+  "release provenance accepted: rel-main signed by ${OVERRIDE_SIGNER} from commit ${MAIN_COMMIT_SHA}" \
+  "release@example.invalid, ${OVERRIDE_SIGNER}"
+provenance_case override-excludes-default fail rel-main "${TAG_OBJECT_SHA}" true valid "${MAINTAINER_SIGNER}" \
+  "release provenance rejected: tagger ${MAINTAINER_SIGNER} is not in the release signer allowlist" \
+  "${OVERRIDE_SIGNER}"
 
 printf 'PASS | release contract\n'
