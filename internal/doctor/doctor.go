@@ -33,6 +33,7 @@ func RunWithOptions(ctx context.Context, cfg config.Config, st state.State, cred
 		localTool("tailscale"),
 		localTool("ssh"),
 		stateSecretsClean(st, creds),
+		credentialStorageResult(clients.CredentialStorage),
 		checkComputeServer(ctx, cfg, st, opt.ComputeAccount, clients.Compute),
 		checkComputeAccessPolicy(st),
 	}

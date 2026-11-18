@@ -317,6 +317,7 @@ func (a *app) doctorReport(ctx context.Context, cfg config.Config, st state.Stat
 		}
 		clients.Cloudflare = cloudflare.New(creds.Cloudflare, cfg.Cloudflare.AccountID)
 		clients.Remote = remoteRunner(cfg, sudoPassword)
+		clients.CredentialStorage = doctor.CheckCredentialStorage
 	}
 	if err != nil {
 		return doctor.Report{Results: []doctor.Result{{Status: doctor.Fail, Scope: "provider", Name: "compute provider", Evidence: err.Error()}}}

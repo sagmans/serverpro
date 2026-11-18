@@ -49,10 +49,16 @@ type CloudflareClient interface {
 	GetTunnel(context.Context, string) (ingress.Tunnel, error)
 }
 
+// CredentialStorageCheck inspects the local credential store. It is a
+// client, not a direct call, because it reads the operator's real config
+// root and OS keyring; unit tests leave it nil and get a skip instead.
+type CredentialStorageCheck func() Result
+
 type Clients struct {
-	Compute        ComputeClient
-	Tailscale      TailscaleClient
-	Cloudflare     CloudflareClient
-	Remote         remote.Runner
-	PublicSSHProbe PublicSSHProbe
+	Compute           ComputeClient
+	Tailscale         TailscaleClient
+	Cloudflare        CloudflareClient
+	Remote            remote.Runner
+	PublicSSHProbe    PublicSSHProbe
+	CredentialStorage CredentialStorageCheck
 }

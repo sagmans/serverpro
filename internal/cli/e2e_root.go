@@ -111,6 +111,9 @@ func NewE2E(apiURL string) (*cobra.Command, error) {
 				PublicSSHProbe: func(context.Context, string) error {
 					return syscall.ECONNREFUSED
 				},
+				// The e2e binary runs under a throwaway HOME, so the real
+				// check is safe and proves doctor sees the sealed files.
+				CredentialStorage: doctor.CheckCredentialStorage,
 			}
 			return clients, account, nil
 		},
