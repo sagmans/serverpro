@@ -235,9 +235,14 @@ Create prompts for missing server-scoped credentials and stores them under:
 ```
 
 Credential directories are `0700`; files are `0600`. Files are encrypted with
-the per-install data key at `~/.local/share/serverpro/credential-key.txt`,
-created on the first write. Back up that key file apart from `~/.config`;
-without it stored credentials cannot be read.
+one per-install data key, created on the first write. On macOS it goes in the
+login Keychain; on Linux in the Secret Service (GNOME Keyring, KWallet) when
+one answers on D-Bus. Headless hosts without a keyring use
+`~/.local/share/serverpro/credential-key.txt`. Run `serverpro auth init` once
+and save the printed recovery key in a password manager; without the key,
+stored credentials cannot be read. Upgrading from a release that stored
+plaintext: run `serverpro auth migrate`, then rotate those tokens. See
+"Credential key" in `USAGE.md`.
 
 ## Managed server tools
 

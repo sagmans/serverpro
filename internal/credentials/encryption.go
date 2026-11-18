@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"syscall"
 
 	"filippo.io/age"
 	"filippo.io/age/armor"
+
+	"github.com/sagmans/serverpro/internal/privatefile"
 )
 
 const (
@@ -28,22 +29,27 @@ const (
 	encryptedHeaderSlack = 16
 )
 
-// encryptCredentialSet seals the set with the data key. The body is ASCII
+// sealCredentialSet seals the set for the given recipients, or for the
+// active data key (plus a pending rotation key) when recipients is nil;
+// rotation passes the new key explicitly. The body is ASCII
 // armored so the file is visibly an age file to anyone who opens it, and the
 // age CLI can decrypt it with the recovery key if serverpro is unavailable.
 // The JSON inside keeps namespace and server, which ValidateTarget checks
 // after decryption, so a file copied to another server's path is rejected.
-func encryptCredentialSet(creds Set) ([]byte, error) {
-	identity, err := loadOrCreateIdentity()
-	if err != nil {
-		return nil, err
+func sealCredentialSet(creds Set, recipients []age.Recipient) ([]byte, error) {
+	if recipients == nil {
+		active, err := encryptionRecipients()
+		if err != nil {
+			return nil, err
+		}
+		recipients = active
 	}
 	plaintext, err := json.Marshal(creds)
 	if err != nil {
 		return nil, err
 	}
 	var out bytes.Buffer
-	if err := sealInto(&out, identity, plaintext); err != nil {
+	if err := sealInto(&out, recipients, plaintext); err != nil {
 		return nil, fmt.Errorf("encrypt credentials: %w", err)
 	}
 	return out.Bytes(), nil
@@ -51,9 +57,9 @@ func encryptCredentialSet(creds Set) ([]byte, error) {
 
 // sealInto streams plaintext through age and armor. Both writers must close
 // in order: age flushes its last chunk, then armor writes the footer.
-func sealInto(out *bytes.Buffer, identity *age.HybridIdentity, plaintext []byte) error {
+func sealInto(out *bytes.Buffer, recipients []age.Recipient, plaintext []byte) error {
 	armored := armor.NewWriter(out)
-	sealed, err := age.Encrypt(armored, identity.Recipient())
+	sealed, err := age.Encrypt(armored, recipients...)
 	if err != nil {
 		return err
 	}
@@ -90,14 +96,14 @@ func decodeCredentialFile(path string, body []byte) ([]byte, error) {
 // not match gets its own hint, because a restored wrong key otherwise shows
 // only age's generic "no identity matched" error.
 func openSealed(sealed []byte) ([]byte, error) {
-	identity, err := loadIdentity()
+	identities, err := decryptionIdentities()
 	if err != nil {
 		return nil, err
 	}
-	plaintext, err := age.Decrypt(armor.NewReader(bytes.NewReader(sealed)), identity)
+	plaintext, err := age.Decrypt(armor.NewReader(bytes.NewReader(sealed)), identities...)
 	var mismatch *age.NoIdentityMatchError
 	if errors.As(err, &mismatch) {
-		return nil, fmt.Errorf("%w; %s holds a different key than the one that sealed this file", err, activeKeyStore.Describe())
+		return nil, fmt.Errorf("%w; the active credential key is not the one that sealed this file (restore it with serverpro auth restore)", err)
 	}
 	if err != nil {
 		return nil, err
@@ -114,7 +120,7 @@ func isEncryptedCredentialBody(body []byte) bool {
 // findEncryptedCredentialFile returns one encrypted credential file under the
 // serverpro config root, or "". Key creation uses it to detect a lost key.
 func findEncryptedCredentialFile() (string, error) {
-	matches, err := filepath.Glob(filepath.Join(credentialRoot(), credentialFileGlob))
+	matches, err := credentialFilePaths()
 	if err != nil {
 		return "", err
 	}
@@ -146,4 +152,20 @@ func hasEncryptedHeader(path string) (bool, error) {
 		return false, err
 	}
 	return isEncryptedCredentialBody(bytes.TrimSpace(head[:n])), nil
+}
+
+// openWithIdentity decrypts one stored file with a single candidate key.
+// Restore uses it to prove a recovery key before it can replace anything,
+// independent of whichever key the store currently holds.
+func openWithIdentity(path string, identity age.Identity) error {
+	body, err := privatefile.ReadPrivate(path, credentialFileKind)
+	if err != nil {
+		return err
+	}
+	plaintext, err := age.Decrypt(armor.NewReader(bytes.NewReader(bytes.TrimSpace(body))), identity)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(io.Discard, plaintext)
+	return err
 }

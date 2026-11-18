@@ -683,9 +683,17 @@ never replaced.
   files, age-encrypted with one per-install data key. `internal/credentials` is
   the only seam: `loadJSON` decrypts (or reads legacy plaintext) and
   `writeCredentialSet` encrypts before the atomic write. The key comes from a
-  `KeyStore`; the default is a `0600` key file under
-  `~/.local/share/serverpro`, outside the config tree. Readers never create a
-  key; writers create it on first use unless sealed files already exist.
+  `KeyStore` picked per process (`keystore_select.go`): an injected
+  environment key, a key command, a pinned backend, or automatic selection
+  between the OS keyring (`github.com/zalando/go-keyring`: macOS Keychain via
+  `/usr/bin/security`, Linux Secret Service over D-Bus) and a `0600` key file
+  under `~/.local/share/serverpro`, outside the config tree. A HOME under the
+  temp directory always uses the key file, so tests never touch the login
+  keyring. Readers never create a key; writers create it on first use unless
+  sealed files already exist. `lifecycle.go` owns init, restore, and
+  crash-resumable rotation through a pending key; `inventory.go` owns
+  migration and the name-only file reports behind `serverpro auth` and the
+  doctor `credential storage` check.
 - Provider authentication tokens are excluded from JSON serialization even
   when request DTOs are marshaled; account names/scopes remain serializable.
 - Redacted error messages preserve their wrapped cause so cancellation,

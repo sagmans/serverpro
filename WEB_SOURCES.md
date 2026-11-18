@@ -235,6 +235,26 @@ or later to decrypt by hand. age pulls `golang.org/x/crypto`; it is pinned at
 `v0.59.0` (2026-11-11), the first tag past GO-2026-5932, GO-2026-6354, and
 GO-2026-6355, with `x/sys v0.50.0` and `x/term v0.48.0` lifted alongside.
 
+### Credential key store: go-keyring
+
+```text
+https://github.com/zalando/go-keyring
+https://pkg.go.dev/github.com/zalando/go-keyring@v0.2.8
+https://proxy.golang.org/github.com/zalando/go-keyring/@v/v0.2.8.info
+https://pkg.go.dev/github.com/godbus/dbus/v5@v5.2.2
+https://pkg.go.dev/github.com/danieljoos/wincred@v1.2.3
+https://osv.dev/list?ecosystem=Go&q=go-keyring
+https://specifications.freedesktop.org/secret-service-spec/latest/
+```
+
+Use: OS keyring backend for the credential data key. Reviewed 2026-11-18: pin
+`github.com/zalando/go-keyring v0.2.8` (2026-03-23), with
+`github.com/godbus/dbus/v5 v5.2.2` (2025-12-29, Linux Secret Service) and
+`github.com/danieljoos/wincred v1.2.3` (Windows, unused by serverpro), all
+older than the seven-day release-age floor and with no OSV advisories. On macOS
+it runs `/usr/bin/security` and passes the secret on stdin, so it works with
+`CGO_ENABLED=0` release builds and never puts the key in argv.
+
 ### Go toolchain and security floor
 
 ```text

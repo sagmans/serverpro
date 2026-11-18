@@ -37,8 +37,29 @@ func writeTargetPath(cfg config.Config) (string, error) {
 }
 
 // withCredentialWriteLock serializes local writers that otherwise lose each
-// other's fields to whole-file replacement.
+// other's fields to whole-file replacement. Lock order is fixed for every
+// path: key lifecycle, then the namespace guard, then the file. WHY: rotation
+// holds the lifecycle lock while it takes each file lock, so a writer that
+// took the file lock first and then waited on the lifecycle lock would
+// deadlock against it. The key is created before any lock is held, and the
+// shared lifecycle lock keeps rotation and restore from changing the key
+// between reading the recipients and publishing the file.
 func withCredentialWriteLock(path string, write func() error) error {
+	if _, err := loadOrCreateIdentity(); err != nil {
+		return err
+	}
+	unlockKey, err := lockKeyLifecycleShared()
+	if err != nil {
+		return err
+	}
+	defer unlockKey()
+	return withCredentialFileLock(path, write)
+}
+
+// withCredentialFileLock takes the guard and per-file locks without the
+// lifecycle lock. Only rotation calls it directly, because it already holds
+// the lifecycle lock exclusively.
+func withCredentialFileLock(path string, write func() error) error {
 	unlockGuard, err := privatefile.LockSharedContext(context.Background(), config.LocalArtifactGuardPath())
 	if err != nil {
 		return err
@@ -56,11 +77,17 @@ func withCredentialWriteLock(path string, write func() error) error {
 // body is encrypted before it reaches the temp file, so plaintext secrets never
 // touch the disk; the rename replaces any legacy plaintext file in one step.
 func writeCredentialSet(path string, creds Set) error {
-	body, err := encryptCredentialSet(creds)
+	body, err := sealCredentialSet(creds, nil)
 	if err != nil {
 		return err
 	}
-	return privatefile.AtomicWrite(path, body, privatefile.WriteOptions{TempPattern: ".credentials-*.tmp", Sync: true, BeforeRename: func() error {
+	return publishSealedCredentials(path, body)
+}
+
+// publishSealedCredentials is the one place sealed bytes reach the disk, so
+// saves, migration, and rotation share the symlink re-check and durability.
+func publishSealedCredentials(path string, sealed []byte) error {
+	return privatefile.AtomicWrite(path, sealed, privatefile.WriteOptions{TempPattern: ".credentials-*.tmp", Sync: true, BeforeRename: func() error {
 		return rejectSymlinkInCredentialAbsPath(path, "save")
 	}})
 }
