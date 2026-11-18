@@ -6,11 +6,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"filippo.io/age"
+	"filippo.io/age/armor"
 )
 
 const (
@@ -23,7 +27,37 @@ const (
 	testServerOperationLockSuffix = ".operation.lock"
 	testImportMarkerSuffix        = ".import.json"
 	testCredentialFileName        = "credentials.json"
+	// testCredentialKeyPath is where the binary keeps its data key under the
+	// isolated HOME; the journey reads it to prove the stored file is sealed.
+	testCredentialKeyPath = ".local/share/serverpro/credential-key.txt"
 )
+
+// decryptStoredCredentials opens a credential file the way an operator with
+// the recovery key would: through the age format, not through serverpro. It
+// also fails when the file is plaintext, so the journey proves encryption.
+func decryptStoredCredentials(home, path string) ([]byte, error) {
+	sealed, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.HasPrefix(sealed, []byte(armor.Header)) {
+		return nil, fmt.Errorf("credentials file %s is not encrypted", path)
+	}
+	keyFile, err := os.Open(filepath.Join(home, testCredentialKeyPath))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = keyFile.Close() }()
+	identities, err := age.ParseIdentities(keyFile)
+	if err != nil {
+		return nil, err
+	}
+	plaintext, err := age.Decrypt(armor.NewReader(bytes.NewReader(sealed)), identities...)
+	if err != nil {
+		return nil, err
+	}
+	return io.ReadAll(plaintext)
+}
 
 type providerCase struct {
 	name     string
@@ -128,7 +162,7 @@ func TestCompiledProviderOnlyImportRecovery(t *testing.T) {
 	}
 	// Import is the recovery path for a stored token with no provider, so the
 	// journey must leave a set that a later create can verify.
-	credentialsBody, err := os.ReadFile(filepath.Join(importHome, ".config", "serverpro", "namespaces", namespace, "servers", testServer, "credentials.json"))
+	credentialsBody, err := decryptStoredCredentials(importHome, filepath.Join(importHome, ".config", "serverpro", "namespaces", namespace, "servers", testServer, testCredentialFileName))
 	if err != nil {
 		t.Fatalf("read imported credentials: %v", err)
 	}

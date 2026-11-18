@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -12,10 +13,20 @@ type setFile struct {
 	Project string `json:"project"`
 }
 
+// loadJSON reads one credential file through the private-file checks, then
+// decrypts it (or accepts legacy plaintext) before the JSON schema rules run.
 func loadJSON(path string) (Set, error) {
-	var file setFile
-	if err := privatefile.ReadJSON(path, &file, "credentials"); err != nil {
+	body, err := privatefile.ReadPrivate(path, credentialFileKind)
+	if err != nil {
 		return Set{}, err
+	}
+	plaintext, err := decodeCredentialFile(path, body)
+	if err != nil {
+		return Set{}, err
+	}
+	var file setFile
+	if err := json.Unmarshal(plaintext, &file); err != nil {
+		return Set{}, fmt.Errorf("parse credentials %s: %w", path, err)
 	}
 	if file.Namespace != "" && file.Project != "" && file.Namespace != file.Project {
 		return Set{}, fmt.Errorf("credentials namespace %q conflicts with legacy project %q", file.Namespace, file.Project)

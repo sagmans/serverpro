@@ -103,13 +103,7 @@ func TestSaveWritesPrivateJSON(t *testing.T) {
 	if creds.Namespace != "prod" || creds.Server != "server" || creds.ServerProvider != "h" {
 		t.Fatalf("saved namespace = %q server = %q server_provider=%q", creds.Namespace, creds.Server, creds.ServerProvider)
 	}
-	body, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(body), `"namespace": "prod"`) || !strings.Contains(string(body), `"server": "server"`) || !strings.Contains(string(body), `"server_provider_token": "h"`) || strings.Contains(string(body), `"project"`) {
-		t.Fatalf("credentials JSON did not use namespace schema:\n%s", string(body))
-	}
+	requireSealedNamespaceSchema(t, path)
 	di, err := os.Stat(filepath.Dir(path))
 	if err != nil {
 		t.Fatal(err)
@@ -137,5 +131,27 @@ func TestSaveTightensExistingCredentialFileMode(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode = %o", info.Mode().Perm())
+	}
+}
+
+// requireSealedNamespaceSchema proves the file on disk is ciphertext with no
+// secret field visible, and that its decrypted body keeps the namespace
+// schema. It is split out to keep the save test under the complexity limit.
+func requireSealedNamespaceSchema(t *testing.T, path string) {
+	t.Helper()
+	stored, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The file on disk must be ciphertext: no secret value may appear in it.
+	if !isEncryptedCredentialBody(stored) || strings.Contains(string(stored), `"server_provider_token"`) {
+		t.Fatalf("credentials file is not encrypted:\n%s", string(stored))
+	}
+	body, err := decodeCredentialFile(path, stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"namespace":"prod"`) || !strings.Contains(string(body), `"server":"server"`) || !strings.Contains(string(body), `"server_provider_token":"h"`) || strings.Contains(string(body), `"project"`) {
+		t.Fatalf("credentials JSON did not use namespace schema:\n%s", string(body))
 	}
 }

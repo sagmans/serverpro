@@ -679,7 +679,13 @@ never replaced.
   selectors require a zero-unrelated-match live inventory before cleanup.
 - Provider firewalls restrict inbound access; public SSH remains closed.
 - Remote root actions require the admin sudo password.
-- Provider and service tokens are stored in private server-scoped credential files.
+- Provider and service tokens are stored in private server-scoped credential
+  files, age-encrypted with one per-install data key. `internal/credentials` is
+  the only seam: `loadJSON` decrypts (or reads legacy plaintext) and
+  `writeCredentialSet` encrypts before the atomic write. The key comes from a
+  `KeyStore`; the default is a `0600` key file under
+  `~/.local/share/serverpro`, outside the config tree. Readers never create a
+  key; writers create it on first use unless sealed files already exist.
 - Provider authentication tokens are excluded from JSON serialization even
   when request DTOs are marshaled; account names/scopes remain serializable.
 - Redacted error messages preserve their wrapped cause so cancellation,

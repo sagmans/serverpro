@@ -43,9 +43,9 @@ func validateStoredTokenProvider(cfg config.Config, creds credentials.Set, provi
 	target := cfg.Namespace + "/" + cfg.Server
 	path := config.Expand(cfg.Credentials.JSONPath)
 	if creds.ServerProviderName == "" {
-		return fmt.Errorf("%w: provider %q cannot be verified: the stored token of %s records no provider; no provider call was made; if the token belongs to %s, set server_provider_name in %s; otherwise remove server_provider_token there and enter a new token", errProviderFlagMismatch, provider, target, provider, path)
+		return fmt.Errorf("%w: provider %q cannot be verified: the stored token of %s records no provider; no provider call was made; if the token belongs to %s and its server exists, run serverpro server import %s -n %s -p %s --force to record it; otherwise delete the encrypted %s and enter the tokens again", errProviderFlagMismatch, provider, target, provider, cfg.Server, cfg.Namespace, provider, path)
 	}
-	return fmt.Errorf("%w: provider %q differs from provider %q recorded for the stored token of %s; no provider call was made; use provider %s, or remove server_provider_token and server_provider_name in %s and enter a new token", errProviderFlagMismatch, provider, creds.ServerProviderName, target, creds.ServerProviderName, path)
+	return fmt.Errorf("%w: provider %q differs from provider %q recorded for the stored token of %s; no provider call was made; use provider %s, or delete the encrypted %s and enter the tokens again", errProviderFlagMismatch, provider, creds.ServerProviderName, target, creds.ServerProviderName, path)
 }
 
 // validateCreateProviderAgainstState protects a create rerun and a first create

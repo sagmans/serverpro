@@ -234,7 +234,10 @@ Create prompts for missing server-scoped credentials and stores them under:
 ~/.config/serverpro/namespaces/<namespace>/servers/<server>/credentials.json
 ```
 
-Credential directories are `0700`; files are `0600`.
+Credential directories are `0700`; files are `0600`. Files are encrypted with
+the per-install data key at `~/.local/share/serverpro/credential-key.txt`,
+created on the first write. Back up that key file apart from `~/.config`;
+without it stored credentials cannot be read.
 
 ## Managed server tools
 

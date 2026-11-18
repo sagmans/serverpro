@@ -282,7 +282,35 @@ files:
 
 Credential directories must be `0700`; files must be `0600`.
 
-Stored operator auth, plaintext at rest by operator decision: the remote admin
+Credential files are encrypted at rest. Each write seals the whole set with
+[age](https://age-encryption.org) (ASCII armored, post-quantum hybrid
+X25519 + ML-KEM-768 recipient) before the bytes reach the temp file, so no
+plaintext secret touches the disk. One per-install data key unlocks every
+file. It lives outside the config tree, at
+`~/.local/share/serverpro/credential-key.txt` (`0600`, directory `0700`), so a
+backup, dotfile sync, or support bundle of `~/.config/serverpro` carries only
+ciphertext. The key is created silently on the first write; nothing prompts,
+so agents and automation run unattended. Rules:
+
+- A missing key with existing ciphertext fails closed on read and write.
+  serverpro never mints a replacement key over sealed files.
+- Tampered ciphertext, and ciphertext copied to another server's path, fail
+  to load.
+- A legacy plaintext `credentials.json` is still read, and the next write
+  replaces it atomically with ciphertext. Until a command writes credentials,
+  an upgraded host keeps that file in plaintext; an explicit migration step is
+  planned.
+- Recovery needs only the age CLI, v1.3.0 or later (hybrid keys):
+  `age -d -i ~/.local/share/serverpro/credential-key.txt credentials.json`.
+
+Threat model, stated plainly: encryption protects leaked backups, synced
+dotfiles, grep-style token scrapers, and copied config trees. It does not
+protect against a process running as the same user, which can read the key
+file, nor against root. That access is accepted on purpose so automation is
+never blocked. A stolen disk exposes both key and ciphertext until the key
+moves into an OS keyring.
+
+Stored operator auth, encrypted at rest as above: the remote admin
 sudo password (`admin_sudo_password`, gated by `admin.store_console_password`,
 default on, `false` keeps it runtime-only), the GitHub fine-grained PAT
 (`github_pat`, redeployable to a GitHub-rejected remote `gh` credential by
@@ -292,9 +320,9 @@ order is: in-process cache,
 `<NAMESPACE>_<SERVER>_SUDOPASS` env var, stored file, prompt; prompted or
 env-supplied values are persisted when the flag is on. Unstamped legacy
 configs migrate their tool-forced `false` to stored on load; `schema_version: 1`
-files keep an explicit `false` as runtime-only. Disk compromise or a
-leaked backup/home copy exposes these secrets — protect the home directory and
-backups accordingly.
+files keep an explicit `false` as runtime-only. A copy of the whole home
+directory, key included, exposes these secrets; back up the key apart from
+the config tree.
 
 `serverpro server doctor` compares the stored `github_pat` with the remote
 `gh` token through truncated SHA-256 fingerprints, so drift is diagnosable
@@ -305,10 +333,9 @@ only a token GitHub rejects (or a host with no token at all) is replaced, a
 working but different token is reported for a human decision, and an
 unanswered probe stays unresolved with the egress lead.
 
-This is the early-release credential model. Future hardening should evaluate OS
-keychains, encrypted local databases, explicit lock/unlock flows, and
-memory-only prompts where credentials are requested for each operation and then
-discarded.
+Planned hardening keeps the no-prompt rule: hold the data key in the macOS
+Keychain or Linux Secret Service where available, and add a recovery key and
+`serverpro auth` lifecycle commands.
 
 Never expose provider tokens, tunnel tokens, Tailscale auth keys, sudo
 passwords, password hashes, or cloud-init bootstrap data in logs, state, JSON,
@@ -319,8 +346,9 @@ sentinel credentials and redacts them from failure artifacts before upload.
 Provider account tokens are marked non-serializable so even request DTO JSON
 omits them. Redacted error messages
 retain wrapped causes for `errors.Is`/`errors.As` decisions while their public
-message stays masked. Sudo passwords may now persist in credentials.json per
-the stored-operator-auth model above; every other handling rule is unchanged.
+message stays masked. Sudo passwords may now persist, encrypted, in
+credentials.json per the stored-operator-auth model above; every other handling
+rule is unchanged.
 serverpro always creates short-lived tagged Tailscale keys itself, and a
 stored user-supplied auth key is refused rather than used because its
 namespace scope cannot be verified; the value is never logged or exported.
@@ -372,8 +400,8 @@ state has no provider and no provider resources, or when no state exists,
 runs preflight. A different name fails closed. A stored token with no name also
 fails closed, because the flag would be the only evidence. When state names the
 flag's provider, `server create` records that name for an older token. An
-operator who edits this name or the token by hand owns that claim: serverpro
-cannot prove which vendor issued a token.
+operator who records this name through `server import`, or who replaces the
+token, owns that claim: serverpro cannot prove which vendor issued a token.
 
 Provider API calls never follow redirects that leave the credential's trust
 boundary. The shared provider HTTP client refuses redirect chains after five

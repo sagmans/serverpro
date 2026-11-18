@@ -147,8 +147,16 @@ func TestResolveSudoPasswordStoresPromptedValueForLaterRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), "admin_sudo_password") {
-		t.Fatalf("credentials file missing stored password:\n%s", body)
+	// The password must persist only as ciphertext: never readable on disk.
+	if strings.Contains(string(body), "correct horse battery staple") || strings.Contains(string(body), "admin_sudo_password") {
+		t.Fatalf("credentials file stores the password in plaintext:\n%s", body)
+	}
+	stored, err := credentials.LoadPartial(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.AdminSudoPassword != "correct horse battery staple" {
+		t.Fatalf("credentials file missing stored password")
 	}
 }
 

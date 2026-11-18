@@ -212,6 +212,29 @@ Revalidate signed repository metadata before deployment.
 
 ## Core references
 
+### Credential encryption: age
+
+```text
+https://age-encryption.org/v1
+https://github.com/FiloSottile/age
+https://pkg.go.dev/filippo.io/age@v1.3.2
+https://proxy.golang.org/filippo.io/age/@v/v1.3.2.info
+https://github.com/advisories/GHSA-32gq-x56h-299c
+https://osv.dev/GO-2026-5932
+https://osv.dev/GO-2026-6354
+https://osv.dev/GO-2026-6355
+```
+
+Use: format and library for encrypted credential files. Reviewed 2026-11-18:
+pin `filippo.io/age v1.3.2` (tagged 2026-08-29, commit `b74dce4`), older than
+the seven-day release-age floor. The only known advisory, GHSA-32gq-x56h-299c
+(plugin name path traversal), was fixed in 1.2.1 and does not apply: serverpro
+uses only native hybrid identities, never plugins. Upstream recommends the
+hybrid X25519 + ML-KEM-768 identity for new systems; its keys need age v1.3.0
+or later to decrypt by hand. age pulls `golang.org/x/crypto`; it is pinned at
+`v0.59.0` (2026-11-11), the first tag past GO-2026-5932, GO-2026-6354, and
+GO-2026-6355, with `x/sys v0.50.0` and `x/term v0.48.0` lifted alongside.
+
 ### Go toolchain and security floor
 
 ```text

@@ -52,9 +52,15 @@ func withCredentialWriteLock(path string, write func() error) error {
 	return write()
 }
 
-// writeCredentialSet publishes a complete set as one atomic private file.
+// writeCredentialSet publishes a complete set as one atomic private file. The
+// body is encrypted before it reaches the temp file, so plaintext secrets never
+// touch the disk; the rename replaces any legacy plaintext file in one step.
 func writeCredentialSet(path string, creds Set) error {
-	return privatefile.AtomicWriteJSON(path, creds, privatefile.WriteOptions{TempPattern: ".credentials-*.tmp", Sync: true, BeforeRename: func() error {
+	body, err := encryptCredentialSet(creds)
+	if err != nil {
+		return err
+	}
+	return privatefile.AtomicWrite(path, body, privatefile.WriteOptions{TempPattern: ".credentials-*.tmp", Sync: true, BeforeRename: func() error {
 		return rejectSymlinkInCredentialAbsPath(path, "save")
 	}})
 }

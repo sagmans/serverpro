@@ -1369,6 +1369,7 @@ remaining servers intact so the operation can be retried.
 ```text
 ~/.config/serverpro/namespaces/<namespace>/servers/<server>.yaml
 ~/.config/serverpro/namespaces/<namespace>/servers/<server>/credentials.json
+~/.local/share/serverpro/credential-key.txt
 ~/.local/state/serverpro/registry.json
 ~/.local/state/serverpro/namespaces/<namespace>/servers/<server>.json
 ```
@@ -1376,15 +1377,22 @@ remaining servers intact so the operation can be retried.
 credentials.json records the provider of the stored server token in
 `server_provider_name`. `server create` refuses a stored token when this name
 differs from `-p`, or when the name is missing and state does not name the same
-provider. The error gives the recovery step: correct `-p`, set the name, or remove
-the token and enter a new one. `server import` also records the name.
+provider. The error gives the recovery step: correct `-p`, record the name with
+`server import --force` when the server exists, or delete the encrypted
+credentials.json and enter the tokens again. `server import` also records the
+name.
 
 credentials.json holds service tokens (`server_provider_token`,
 `tailscale_token`, `cloudflare_token`) and stored operator auth
-(`admin_sudo_password`, `github_pat`, optional `tailscale_auth_key`) as
-plaintext `0600`; a stored `tailscale_auth_key` is never used, because
-serverpro always mints its own short-lived tagged bootstrap key. The sudo
-password resolves from in-process cache, then the
+(`admin_sudo_password`, `github_pat`, optional `tailscale_auth_key`),
+encrypted with age under the data key in `credential-key.txt` (both `0600`);
+the key is created on the first write with no prompt. Back up the key file:
+without it the credential files cannot be read. A legacy plaintext file is read
+and re-encrypted on the next write. To inspect a file by hand, run age v1.3.0
+or later: `age -d -i ~/.local/share/serverpro/credential-key.txt <path>`. A stored
+`tailscale_auth_key` is never used, because serverpro always mints its own
+short-lived tagged bootstrap key. The sudo password resolves from in-process
+cache, then the
 `<NAMESPACE>_<SERVER>_SUDOPASS` env var, then credentials.json, then a prompt;
 prompted or env values are stored unless `admin.store_console_password: false`.
 The GitHub PAT prompted during full development access setup is stored only
