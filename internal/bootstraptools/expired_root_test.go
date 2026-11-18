@@ -40,32 +40,6 @@ printf 'deploy:x:1000:1000::%s:/bin/bash\n' "$FAKE_HOME"`,
 	return binDir, logPath
 }
 
-// sha256sumCandidates lists the host commands that hash like GNU sha256sum:
-// Linux and macOS 15+ ship sha256sum (macOS under /sbin), while older macOS
-// hosts only get it from Homebrew coreutils as gsha256sum.
-var sha256sumCandidates = []string{"sha256sum", "gsha256sum"}
-
-// sha256sumBinDir exposes the host's real sha256sum, under that name, in a
-// private directory. Tests that pin PATH to a minimal base (to keep host tools
-// such as a stray herdr out of reach) still need genuine hashing, and the
-// minimal base misses macOS /sbin and Homebrew prefixes.
-func sha256sumBinDir(t *testing.T) string {
-	t.Helper()
-	for _, name := range sha256sumCandidates {
-		path, err := exec.LookPath(name)
-		if err != nil {
-			continue
-		}
-		binDir := t.TempDir()
-		if err := os.Symlink(path, filepath.Join(binDir, sha256sumCandidates[0])); err != nil {
-			t.Fatal(err)
-		}
-		return binDir
-	}
-	t.Skip("sha256sum-compatible command not available on this host")
-	return ""
-}
-
 func readCallLog(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -129,45 +103,37 @@ func TestUserHomeCommandSurvivesExpiredRootPassword(t *testing.T) {
 	}
 }
 
-// TestHerdrCheckReportsUnverifiedInstallVersion covers the stale-install
-// branch: a mise install of another Herdr version fails the digest gate with
-// an actionable message, and the binary itself never runs.
-func TestHerdrCheckReportsUnverifiedInstallVersion(t *testing.T) {
-	for _, tc := range []struct {
-		name, version, want string
-	}{
-		{name: "other-version", version: "0.8.0", want: "expected herdr " + HerdrVersion + ", got herdr 0.8.0 (unverified install path); rerun managed bootstrap"},
-		{name: "same-version-tampered", version: HerdrVersion, want: "Herdr SHA-256 mismatch: expected "},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			home := t.TempDir()
-			installDir := filepath.Join(home, ".local", "share", "mise", "installs", "herdr", tc.version)
-			miseDir := filepath.Join(home, ".local", "bin")
-			for _, dir := range []string{installDir, miseDir} {
-				if err := os.MkdirAll(dir, 0o750); err != nil {
-					t.Fatal(err)
-				}
-			}
-			ranMarker := filepath.Join(home, "herdr-ran")
-			if err := os.WriteFile(filepath.Join(installDir, "herdr"), []byte("#!/bin/sh\ntouch "+ranMarker+"\necho 'herdr "+HerdrVersion+"'\n"), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			mise := "#!/bin/sh\n[ \"$1\" = exec ] && [ \"$2\" = -- ] || exit 2\nshift 2\nPATH=" + installDir + ":$PATH exec \"$@\"\n"
-			if err := os.WriteFile(filepath.Join(miseDir, "mise"), []byte(mise), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			cmd := exec.Command("bash", "-c", "set -euo pipefail; "+herdrVerifiedCommand())
-			cmd.Env = []string{"HOME=" + home, "PATH=" + sha256sumBinDir(t) + ":/usr/bin:/bin"}
-			out, err := cmd.CombinedOutput()
-			if err == nil {
-				t.Fatalf("unverified herdr accepted:\n%s", out)
-			}
-			if !strings.Contains(string(out), tc.want) {
-				t.Fatalf("herdr check output = %q, want %q", out, tc.want)
-			}
-			if _, err := os.Stat(ranMarker); !os.IsNotExist(err) {
-				t.Fatal("herdr check executed an unverified binary")
-			}
-		})
+// TestHerdrCheckReportsLegacyMiseInstall covers the migration branch: a
+// mise-managed Herdr left by an older release shadows the vendor install, so
+// doctor names the stale path with an actionable message and never runs it.
+func TestHerdrCheckReportsLegacyMiseInstall(t *testing.T) {
+	home := t.TempDir()
+	legacyDir := filepath.Join(home, ".local", "share", "mise", "installs", "herdr", "0.9.5")
+	miseDir := filepath.Join(home, ".local", "bin")
+	for _, dir := range []string{legacyDir, miseDir} {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ranMarker := filepath.Join(home, "herdr-ran")
+	if err := os.WriteFile(filepath.Join(legacyDir, "herdr"), []byte("#!/bin/sh\ntouch "+ranMarker+"\necho 'herdr 0.9.5'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mise := "#!/bin/sh\n[ \"$1\" = exec ] && [ \"$2\" = -- ] || exit 2\nshift 2\nPATH=" + legacyDir + ":$PATH exec \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(miseDir, "mise"), []byte(mise), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", "-c", "set -euo pipefail; "+herdrCheckCommand())
+	cmd.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin"}
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("legacy mise herdr accepted:\n%s", out)
+	}
+	want := "expected herdr at " + filepath.Join(miseDir, "herdr") + ", got " + filepath.Join(legacyDir, "herdr") + "; rerun managed bootstrap"
+	if !strings.Contains(string(out), want) {
+		t.Fatalf("herdr check output = %q, want %q", out, want)
+	}
+	if _, err := os.Stat(ranMarker); !os.IsNotExist(err) {
+		t.Fatal("herdr check executed the legacy binary")
 	}
 }

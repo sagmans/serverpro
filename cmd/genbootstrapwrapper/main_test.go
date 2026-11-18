@@ -22,7 +22,7 @@ func TestMainPrintsWrapperScript(t *testing.T) {
 		_ = r.Close()
 	}()
 
-	// The wrapper carries the Pi lock and outgrows the pipe buffer, so the
+	// The wrapper embeds the whole bootstrap script and outgrows the pipe buffer, so the
 	// reader must drain concurrently or main blocks on its own write.
 	type result struct {
 		body []byte

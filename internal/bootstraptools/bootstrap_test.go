@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -146,7 +147,11 @@ var installScriptRequiredMarkers = []string{
 	"SERVERPRO_BOOTSTRAP_MISE_SHA256_LINUX_ARM64='" + MiseLinuxArm64TarGzSHA256 + "'",
 	"SERVERPRO_BOOTSTRAP_NODE_VERSION='" + NodeVersion + "'",
 	"SERVERPRO_BOOTSTRAP_NPM_VERSION='" + NPMVersion + "'",
-	"SERVERPRO_BOOTSTRAP_PI_VERSION='" + PiVersion + "'",
+	"SERVERPRO_BOOTSTRAP_PI_INSTALLER_URL='" + PiInstallerURL + "'",
+	"SERVERPRO_BOOTSTRAP_HERDR_INSTALLER_URL='" + HerdrInstallerURL + "'",
+	"SERVERPRO_BOOTSTRAP_PI_PROBE_BASE64=",
+	"SERVERPRO_BOOTSTRAP_HERDR_PROBE_BASE64=",
+	"SERVERPRO_BOOTSTRAP_HERDR_PI_PROBE_BASE64=",
 	"SERVERPRO_BOOTSTRAP_UV_VERSION='0.13.5'",
 	"SERVERPRO_BOOTSTRAP_UV_BACKEND='aqua:astral-sh/uv'",
 	"SERVERPRO_BOOTSTRAP_RUST_VERSION='1.99.1'",
@@ -168,10 +173,6 @@ var installScriptRequiredMarkers = []string{
 	"SERVERPRO_BOOTSTRAP_INSPECT_BACKEND='" + InspectMiseBackend + "'",
 	"SERVERPRO_BOOTSTRAP_INSPECT_SHA256_LINUX_X64='" + InspectLinuxX64SHA256 + "'",
 	"SERVERPRO_BOOTSTRAP_INSPECT_SHA256_LINUX_ARM64='" + InspectLinuxArm64SHA256 + "'",
-	"SERVERPRO_BOOTSTRAP_HERDR_VERSION='" + HerdrVersion + "'",
-	"SERVERPRO_BOOTSTRAP_HERDR_BACKEND='" + HerdrMiseBackend + "'",
-	"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64='" + HerdrLinuxX64SHA256 + "'",
-	"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_ARM64='" + HerdrLinuxArm64SHA256 + "'",
 	"SERVERPRO_BOOTSTRAP_PI_TOOL='" + PiToolName + "'",
 	"SERVERPRO_BOOTSTRAP_BASE_PACKAGES='apt:ca-certificates apt:curl apt:gnupg apt:ufw apt:apparmor apt:unattended-upgrades apt:jq'",
 	"SERVERPRO_BOOTSTRAP_GIT_PACKAGES='apt:git apt:openssh-client'",
@@ -201,7 +202,7 @@ var installScriptRequiredMarkers = []string{
 	`chmod 0600 "${config}"`,
 	"refusing unsafe bashrc path",
 	"refusing symlinked mise config backup source",
-	`export MISE_EXPERIMENTAL=1 MISE_YES=1 MISE_NPM_PACKAGE_MANAGER=npm npm_config_ignore_scripts=true NPM_CONFIG_IGNORE_SCRIPTS=true`,
+	`export MISE_EXPERIMENTAL=1 MISE_YES=1 npm_config_ignore_scripts=true NPM_CONFIG_IGNORE_SCRIPTS=true`,
 	`BOOTSTRAP_TARGET=${1:-${SERVERPRO_BOOTSTRAP_TARGET:-all}}`,
 	`main "$@"`,
 	"case \"${BOOTSTRAP_TARGET}\" in",
@@ -231,24 +232,24 @@ var installScriptRequiredMarkers = []string{
 	"verify_all_user_tools",
 	"verify_managed_mise_tool",
 	"rustup component list --installed",
-	"tool_alias.herdr",
-	"herdr@${herdr_version}",
-	"bootstrap_herdr_sha256_for_arch",
-	"herdr integration install pi",
-	"pi: current",
-	`\"\$HOME/.local/bin/mise\" exec -- npm ci --omit=dev --ignore-scripts --no-audit --no-fund`,
+	"remove_legacy_herdr_tool_for_target",
+	`mise --yes unuse --path "${config}" herdr`,
+	"legacy_pi_cleanup_commands",
+	"native_installer_commands Pi",
+	"native_installer_commands Herdr",
+	`curl -fsSL --proto '=https' --tlsv1.2`,
+	"setsid -w timeout ${NATIVE_INSTALLER_TIMEOUT_SECONDS} sh",
+	`"$HOME/.local/bin/herdr" integration install pi`,
 	"docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc",
 	"exec bash \"$0\" \"$@\"",
 	"mapfile -t network_ids < <(docker network ls -q 2>/dev/null || true)",
 	`repair_mise_config_for_user`,
 	`backup_timestamp=$(date -u +%Y%m%d%H%M%S)`,
 	`backup=${config}.serverpro-bad-${backup_timestamp}`,
-	`expected pi at %s, got %s`,
 	`case "$tool_version" in "ripgrep $expected_version"|"ripgrep $expected_version "*)`,
 	`case "$tool_version" in "ast-grep $expected_version"|"ast-grep $expected_version "*)`,
 	`test "$tool_version" = "sem $expected_version"`,
 	`inspect --help`,
-	`\"\$HOME/.local/bin/mise\" exec -- node --version`,
 	`PATH="${TARGET_PATH}"`,
 	`bash -c 'cd "$HOME" && exec bash -c "$1"' sh "${script}"`,
 	`# serverpro-bootstrap-tools: admin user toolchain`,
@@ -261,7 +262,6 @@ var installScriptUniqueVersions = []string{
 	MinimumMiseVersion,
 	NodeVersion,
 	NPMVersion,
-	PiVersion,
 	"0.13.5",
 	"1.99.1",
 	TmuxVersion,
@@ -271,7 +271,6 @@ var installScriptUniqueVersions = []string{
 	AstGrepVersion,
 	SemVersion,
 	InspectVersion,
-	HerdrVersion,
 }
 
 var installScriptUniqueChecksums = []string{
@@ -283,8 +282,6 @@ var installScriptUniqueChecksums = []string{
 	SemLinuxArm64SHA256,
 	InspectLinuxX64SHA256,
 	InspectLinuxArm64SHA256,
-	HerdrLinuxX64SHA256,
-	HerdrLinuxArm64SHA256,
 }
 
 var installScriptForbiddenMarkers = []string{
@@ -298,9 +295,8 @@ var installScriptForbiddenMarkers = []string{
 	"mise_bin=$(require_root_bootstrap_mise)",
 	`MISE_INSTALL_PATH="${tmp}" sh`,
 	"https://mise.run",
-	"https://herdr.dev/install.sh",
-	"herdr update",
 	"herdr@latest",
+	"tools.herdr\" \"",
 	"SHASUMS256.txt",
 	"mise --yes bootstrap --only tools",
 	`chmod 0644 "${config}"`,
@@ -314,7 +310,16 @@ func TestInstallScriptExportsManagedManifestAndNoSecrets(t *testing.T) {
 	assertAppearsOnce(t, script, installScriptUniqueVersions)
 	assertAppearsOnce(t, script, installScriptUniqueChecksums)
 	assertOmitsAll(t, script, installScriptForbiddenMarkers)
+	// Remote scripts are downloaded to a file and checked before they run;
+	// piping a download straight into a shell would run a partial body.
+	if match := pipeToShellPattern.FindString(script); match != "" {
+		t.Fatalf("install script pipes into a shell: %q", match)
+	}
 }
+
+// pipeToShellPattern matches a pipe into sh or bash, but not into tools such
+// as sha256sum that merely start with the same letters.
+var pipeToShellPattern = regexp.MustCompile(`\|\s*(sudo\s+)?(sh|bash)(\s|$)`)
 
 func assertContainsAll(t *testing.T, script string, markers []string) {
 	t.Helper()

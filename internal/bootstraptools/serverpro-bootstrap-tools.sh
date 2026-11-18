@@ -16,6 +16,22 @@ BUILDX_PLUGIN_PATH=/usr/local/lib/docker/cli-plugins/docker-buildx
 BUILDX_PARENT_DIRECTORIES=(/usr /usr/local /usr/local/lib /usr/local/lib/serverpro /usr/local/lib/serverpro/docker-buildx /usr/local/lib/docker /usr/local/lib/docker/cli-plugins)
 VERIFIED_BUILDX_BINARY=
 
+# Agent CLIs install through their vendor installers so `pi update` and
+# `herdr update` keep working (internal/bootstraptools/native_agents.go). The
+# installer runs npm ci for Pi, so its bound covers a slow registry, while the
+# download bounds cover only the small installer script itself.
+NATIVE_INSTALLER_TIMEOUT_SECONDS=900
+NATIVE_INSTALLER_CONNECT_TIMEOUT_SECONDS=10
+NATIVE_INSTALLER_DOWNLOAD_TIMEOUT_SECONDS=120
+NATIVE_INSTALLER_DOWNLOAD_RETRIES=3
+# Older serverpro releases installed Pi in this directory under the mise Node
+# install's lib/; bootstrap retires it before Pi's installer runs.
+LEGACY_PI_INSTALL_DIRECTORY=serverpro-pi
+# Older serverpro releases also mapped the herdr tool name to this mise backend.
+# Bootstrap removes the alias only while it still holds this value, so an
+# operator's own alias survives.
+LEGACY_HERDR_MISE_BACKEND=github:herdrdev/herdr
+
 # Pinned artifacts are fetched/extracted under root; remove every temp dir on any
 # exit path (error, signal, success) so partial downloads never linger on a host.
 BOOTSTRAP_TMP_DIRS=()
@@ -91,30 +107,6 @@ validate_tool_name() {
   case "${value}" in
     ''|*[!A-Za-z0-9@._/+-]*)
       printf '%s contains unsupported characters: %s\n' "${name}" "${value}" >&2
-      exit 1
-      ;;
-  esac
-}
-
-validate_mise_backend() {
-  local name="$1"
-  local value="$2"
-  local repository
-  case "${value}" in
-    github:*) repository=${value#github:} ;;
-    *)
-      printf '%s must use a github:owner/repository backend: %s\n' "${name}" "${value}" >&2
-      exit 1
-      ;;
-  esac
-  case "${repository}" in
-    ''|*[!A-Za-z0-9._/-]*|/*|*/|*//*|*/*/*)
-      printf '%s must use a github:owner/repository backend: %s\n' "${name}" "${value}" >&2
-      exit 1
-      ;;
-    */*) ;;
-    *)
-      printf '%s must use a github:owner/repository backend: %s\n' "${name}" "${value}" >&2
       exit 1
       ;;
   esac
@@ -292,127 +284,63 @@ bootstrap_npm_version() {
   bootstrap_version_env SERVERPRO_BOOTSTRAP_NPM_VERSION
 }
 
-bootstrap_pi_version() {
-  bootstrap_version_env SERVERPRO_BOOTSTRAP_PI_VERSION
+# bootstrap_installer_url reads a vendor installer origin from the manifest.
+# The URL reaches curl inside a target-user script, so only a plain HTTPS URL
+# passes.
+bootstrap_installer_url() {
+  local name=$1 url
+  url=$(required_env "${name}") || return 1
+  [[ ${url} =~ ^https://[a-z0-9.-]+(/[A-Za-z0-9._-]+)+$ ]] || { printf 'invalid installer URL in %s: %s\n' "${name}" "${url}" >&2; exit 1; }
+  printf '%s' "${url}"
 }
 
-bootstrap_pi_install_directory() {
-  local directory
-  directory=$(required_env SERVERPRO_BOOTSTRAP_PI_INSTALL_DIRECTORY) || return 1
-  # The name joins paths that reach rm and mv, so only a plain directory name passes.
-  [[ ${directory} =~ ^[a-z0-9][a-z0-9-]*$ ]] || { printf 'invalid Pi install directory: %s\n' "${directory}" >&2; exit 1; }
-  printf '%s' "${directory}"
+# bootstrap_probe decodes a Go-owned readiness probe, so bootstrap and doctor
+# reach one trust decision for each vendor-installed CLI.
+bootstrap_probe() {
+  local name=$1 probe
+  probe=$(printf '%s' "$(required_env "${name}")" | base64 -d) || return 1
+  [[ -n ${probe} ]] || { printf 'empty probe in %s\n' "${name}" >&2; return 1; }
+  printf '%s' "${probe}"
 }
 
-bootstrap_pi_bin() {
-  local bin
-  bin=$(required_env SERVERPRO_BOOTSTRAP_PI_BIN) || return 1
-  # The path becomes a symlink target, so it must stay inside the Pi package.
-  if [[ ! ${bin} =~ ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$ || ${bin} == *..* ]]; then
-    printf 'invalid Pi bin path: %s\n' "${bin}" >&2
-    exit 1
-  fi
-  printf '%s' "${bin}"
+# native_installer_commands prints one target-user subshell that downloads a
+# vendor installer to a private file, then runs it. The script never reaches a
+# shell through a pipe, so a failed or partial download stops here (fail
+# closed). Neither vendor publishes a checksum or signature for its installer
+# script, so HTTPS to the vendor origin is the trust root; Herdr's script then
+# checks its binary against the release manifest digest, and Pi's runs npm ci
+# against the vendor lockfile. setsid detaches the installer from any
+# controlling terminal, so it takes its non-interactive defaults instead of
+# waiting on a prompt. $3 wraps the run, for example to put Node on PATH.
+native_installer_commands() {
+  local label=$1 url=$2 runner=$3
+  printf '%s\n' "("
+  printf '%s\n' "set -euo pipefail"
+  printf '%s\n' "installer_dir=\$(mktemp -d); trap 'rm -rf -- \"\${installer_dir:?}\"' EXIT"
+  printf '%s\n' "curl -fsSL --proto '=https' --tlsv1.2 --retry ${NATIVE_INSTALLER_DOWNLOAD_RETRIES} --connect-timeout ${NATIVE_INSTALLER_CONNECT_TIMEOUT_SECONDS} --max-time ${NATIVE_INSTALLER_DOWNLOAD_TIMEOUT_SECONDS} -o \"\${installer_dir}/install.sh\" '${url}' || { printf '%s installer download failed: %s\\n' '${label}' '${url}' >&2; exit 1; }"
+  printf '%s\n' "head -n1 \"\${installer_dir}/install.sh\" | grep -Eqx '#! ?/bin/sh' || { printf '%s installer from %s is not a POSIX shell script\\n' '${label}' '${url}' >&2; exit 1; }"
+  printf '%s\n' "${runner} setsid -w timeout ${NATIVE_INSTALLER_TIMEOUT_SECONDS} sh \"\${installer_dir}/install.sh\" </dev/null || { status=\$?; printf '%s installer failed (%s)\\n' '${label}' \"\${status}\" >&2; exit \"\${status}\"; }"
+  printf '%s\n' ")"
 }
 
-bootstrap_pi_registry() {
-  local registry
-  registry=$(required_env SERVERPRO_BOOTSTRAP_PI_REGISTRY) || return 1
-  # The value becomes an npm option, so only a plain HTTPS registry URL passes.
-  [[ ${registry} =~ ^https://[a-z0-9.-]+(/[A-Za-z0-9._-]+)*/$ ]] || { printf 'invalid Pi registry: %s\n' "${registry}" >&2; exit 1; }
-  printf '%s' "${registry}"
-}
-
-# write_pi_project materializes the reviewed install project in an existing
-# directory. The digest check runs on the decoded bytes, so a corrupt or
-# swapped manifest value fails before npm reads it.
-write_pi_project() {
-  local dir="$1" expected actual
-  expected=$(bootstrap_sha256_env SERVERPRO_BOOTSTRAP_PI_LOCK_SHA256) || return 1
-  printf '%s' "$(required_env SERVERPRO_BOOTSTRAP_PI_PACKAGE_JSON_BASE64)" | base64 -d >"${dir}/package.json" || return 1
-  printf '%s' "$(required_env SERVERPRO_BOOTSTRAP_PI_LOCK_BASE64)" | base64 -d >"${dir}/package-lock.json" || return 1
-  actual=$(sha256sum "${dir}/package-lock.json" | awk '{print $1}')
-  if [[ ${actual} != "${expected}" ]]; then
-    printf 'Pi lockfile digest mismatch: expected %s, got %s\n' "${expected}" "${actual}" >&2
-    return 1
-  fi
-}
-
-# pi_lock_probe_command prints the metadata-only probe that proves the
-# project at $1 (a target-user path expression) matches the reviewed lock.
-pi_lock_probe_command() {
-  local root="$1" probe probe_quoted sha
-  probe=$(printf '%s' "$(required_env SERVERPRO_BOOTSTRAP_PI_LOCK_PROBE_BASE64)" | base64 -d) || return 1
-  [[ -n ${probe} ]] || { printf 'empty Pi lock probe\n' >&2; return 1; }
-  sha=$(bootstrap_sha256_env SERVERPRO_BOOTSTRAP_PI_LOCK_SHA256) || return 1
-  printf -v probe_quoted '%q' "${probe}"
-  printf '%s' "\"\$HOME/.local/bin/mise\" exec -- node -e ${probe_quoted} \"${root}\" ${sha}"
-}
-
-# pi_check_command mirrors doctor's Go-built Pi check (piCheckCommand), so
-# bootstrap readiness and doctor reach one trust decision.
-pi_check_command() {
-  local node_version="$1" pi_version="$2" pi_tool directory bin node_root pi_root probe
+# legacy_pi_cleanup_commands prints target-user commands that retire the Pi
+# copies older serverpro releases placed in the mise Node tree. Pi's installer
+# refuses to replace an unmanaged pi, and an activated shell would resolve the
+# stale copy ahead of the vendor one. It removes serverpro's legacy directory
+# and the global Pi npm package, which shares the path older releases used;
+# a <node>/bin/pi goes only when it links into one of those two paths.
+legacy_pi_cleanup_commands() {
+  local pi_tool
   pi_tool=$(bootstrap_pi_tool) || return 1
-  directory=$(bootstrap_pi_install_directory) || return 1
-  bin=$(bootstrap_pi_bin) || return 1
-  node_root="\$HOME/.local/share/mise/installs/node/${node_version}"
-  pi_root="${node_root}/lib/${directory}"
-  probe=$(pi_lock_probe_command "${pi_root}") || return 1
-  printf '%s' "expected_pi=\"${node_root}/bin/pi\"; actual_pi=\$(\"\$HOME/.local/bin/mise\" exec -- sh -c 'command -v pi'); test \"\$actual_pi\" = \"\$expected_pi\" || { printf 'expected pi at %s, got %s\\n' \"\$expected_pi\" \"\$actual_pi\" >&2; exit 1; }; pi_target=\$(readlink -f \"\$expected_pi\"); want_target=\$(readlink -f \"${pi_root}\")/node_modules/${pi_tool}/${bin}; test \"\$pi_target\" = \"\$want_target\" || { printf 'expected pi to link to %s, got %s; rerun managed bootstrap\\n' \"\$want_target\" \"\$pi_target\" >&2; exit 1; }; ${probe}; pi_version=\$(\"\$HOME/.local/bin/mise\" exec -- pi --version 2>&1) || { status=\$?; printf 'pi --version failed (%s): %s\\n' \"\$status\" \"\$pi_version\" >&2; exit \"\$status\"; }; test \"\$pi_version\" = \"${pi_version}\" || { printf 'expected pi ${pi_version}, got %s\\n' \"\$pi_version\" >&2; exit 1; }; printf '%s\\n' \"\$pi_version\""
-}
-
-# pi_install_commands prints the target-user commands that install the
-# reviewed project from the handoff directory $2. npm ci installs only the
-# locked tree and rejects any integrity mismatch; the stage is probed and
-# audited before it replaces the live project, so a failed run leaves the
-# previous Pi in place.
-pi_install_commands() {
-  local node_version="$1" handoff="$2" pi_tool directory bin registry node_root lib pi_root
-  pi_tool=$(bootstrap_pi_tool) || return 1
-  directory=$(bootstrap_pi_install_directory) || return 1
-  bin=$(bootstrap_pi_bin) || return 1
-  registry=$(bootstrap_pi_registry) || return 1
-  node_root="\$HOME/.local/share/mise/installs/node/${node_version}"
-  lib="${node_root}/lib"
-  pi_root="${lib}/${directory}"
-  printf '%s\n' "pi_stage=\$(mktemp -d \"${pi_root}.stage.XXXXXX\"); trap 'rm -rf -- \"\${pi_stage:?}\"' EXIT"
-  printf '%s\n' "cp -- \"${handoff}/package.json\" \"${handoff}/package-lock.json\" \"\${pi_stage}/\""
-  printf '%s\n' "(cd \"\${pi_stage}\" && \"\$HOME/.local/bin/mise\" exec -- npm ci --omit=dev --ignore-scripts --no-audit --no-fund --registry=${registry})"
-  printf '%s\n' "test -f \"\${pi_stage}/node_modules/${pi_tool}/${bin}\""
-  pi_lock_probe_command "\${pi_stage}"
-  printf '\n'
-  printf '%s\n' "(cd \"\${pi_stage}\" && \"\$HOME/.local/bin/mise\" exec -- npm audit --omit=dev --registry=${registry})"
-  # Older serverpro releases installed Pi with npm install -g; drop that copy so only the reviewed tree remains.
-  printf '%s\n' "if test -e \"${lib}/node_modules/${pi_tool}\"; then \"\$HOME/.local/bin/mise\" exec -- npm uninstall -g --ignore-scripts ${pi_tool}; fi"
-  printf '%s\n' "rm -rf -- \"${pi_root}.old\"; if test -e \"${pi_root}\"; then mv -- \"${pi_root}\" \"${pi_root}.old\"; fi; mv -- \"\${pi_stage}\" \"${pi_root}\"; rm -rf -- \"${pi_root}.old\""
-  printf '%s\n' "ln -sfn -- \"../lib/${directory}/node_modules/${pi_tool}/${bin}\" \"${node_root}/bin/pi\""
-}
-
-bootstrap_herdr_version() {
-  bootstrap_version_env SERVERPRO_BOOTSTRAP_HERDR_VERSION
-}
-
-bootstrap_herdr_backend() {
-  local backend
-  backend=$(required_env SERVERPRO_BOOTSTRAP_HERDR_BACKEND)
-  validate_mise_backend SERVERPRO_BOOTSTRAP_HERDR_BACKEND "${backend}"
-  printf '%s' "${backend}"
-}
-
-bootstrap_herdr_sha256_for_arch() {
-  # Herdr ships Linux x86_64/arm64 binaries only; map the arch to its manifest
-  # entry and fail closed on anything else.
-  local env_name
-  case "$1" in
-    x86_64) env_name=SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64 ;;
-    aarch64|arm64) env_name=SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_ARM64 ;;
-    *)
-      printf 'unsupported architecture for Herdr release: %s\n' "$1" >&2
-      exit 1
-      ;;
-  esac
-  bootstrap_sha256_env "${env_name}"
+  printf '%s\n' "for node_root in \"\$HOME/.local/share/mise/installs/node\"/*/; do"
+  printf '%s\n' "  test -d \"\${node_root}\" || continue"
+  printf '%s\n' "  pi_link=\"\${node_root}bin/pi\""
+  printf '%s\n' "  if test -L \"\${pi_link}\"; then case \"\$(readlink \"\${pi_link}\")\" in *'/${LEGACY_PI_INSTALL_DIRECTORY}/'*|*'node_modules/${pi_tool}/'*) rm -f -- \"\${pi_link}\" ;; esac; fi"
+  printf '%s\n' "  rm -rf -- \"\${node_root}lib/${LEGACY_PI_INSTALL_DIRECTORY}\" \"\${node_root}lib/node_modules/${pi_tool}\""
+  printf '%s\n' "done"
+  # mise keeps a shim for every bin it saw, so a stale pi shim would still
+  # make Pi's installer see an unmanaged pi; reshim drops it.
+  printf '%s\n' "\"\$HOME/.local/bin/mise\" reshim"
 }
 
 bootstrap_pi_tool() {
@@ -791,16 +719,11 @@ validate_bootstrap_env() {
   bootstrap_sha256_env SERVERPRO_BOOTSTRAP_MISE_SHA256_LINUX_ARM64 >/dev/null
   validate_managed_mise_manifest
   bootstrap_npm_version >/dev/null
-  bootstrap_pi_version >/dev/null
-  bootstrap_pi_install_directory >/dev/null
-  bootstrap_pi_bin >/dev/null
-  bootstrap_pi_registry >/dev/null
-  bootstrap_sha256_env SERVERPRO_BOOTSTRAP_PI_LOCK_SHA256 >/dev/null
-  pi_check_command "$(bootstrap_node_version)" "$(bootstrap_pi_version)" >/dev/null
-  bootstrap_herdr_version >/dev/null
-  bootstrap_herdr_backend >/dev/null
-  bootstrap_sha256_env SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64 >/dev/null
-  bootstrap_sha256_env SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_ARM64 >/dev/null
+  bootstrap_installer_url SERVERPRO_BOOTSTRAP_PI_INSTALLER_URL >/dev/null
+  bootstrap_installer_url SERVERPRO_BOOTSTRAP_HERDR_INSTALLER_URL >/dev/null
+  bootstrap_probe SERVERPRO_BOOTSTRAP_PI_PROBE_BASE64 >/dev/null
+  bootstrap_probe SERVERPRO_BOOTSTRAP_HERDR_PROBE_BASE64 >/dev/null
+  bootstrap_probe SERVERPRO_BOOTSTRAP_HERDR_PI_PROBE_BASE64 >/dev/null
   bootstrap_pi_tool >/dev/null
   if [[ ${BOOTSTRAP_TARGET} == all ]]; then
     # Release-backed tools support Linux x86_64/arm64 only. Reject unsupported
@@ -812,7 +735,6 @@ validate_bootstrap_env() {
         managed_mise_tool_sha256_for_arch "${row}" "$(uname -m)" >/dev/null
       fi
     done <<<"$(managed_mise_tool_rows)"
-    bootstrap_herdr_sha256_for_arch "$(uname -m)" >/dev/null
   fi
   local -a packages
   read_package_env SERVERPRO_BOOTSTRAP_BASE_PACKAGES packages
@@ -1407,6 +1329,21 @@ remove_legacy_sg_tool_for_target() {
   run_as_target 'set -euo pipefail; config="$HOME/.config/mise/config.toml"; if mise config get --file "${config}" tools.sg >/dev/null 2>&1; then mise --yes unuse --path "${config}" sg; fi'
 }
 
+# remove_legacy_herdr_tool_for_target retires the mise-managed Herdr that
+# older serverpro releases configured: `herdr update` cannot update that copy,
+# and an activated shell would resolve it ahead of the vendor install.
+# `mise unuse` edits TOML through mise itself and prunes the unused install.
+# The stale backend alias goes too, so the config holds no Herdr leftovers.
+remove_legacy_herdr_tool_for_target() {
+  if [[ -z ${TARGET_USER:-} || -z ${TARGET_HOME:-} ]]; then
+    return 0
+  fi
+  # shellcheck disable=SC2016 # WHY: $HOME and ${config} must expand as the target user, not as root.
+  run_as_target 'set -euo pipefail; config="$HOME/.config/mise/config.toml"; if mise config get --file "${config}" tools.herdr >/dev/null 2>&1; then mise --yes unuse --path "${config}" herdr; fi'
+  # shellcheck disable=SC2016 # WHY: $HOME and ${config} must expand as the target user; only the backend value expands as root.
+  run_as_target 'set -euo pipefail; config="$HOME/.config/mise/config.toml"; if [ "$(mise config get --file "${config}" tool_alias.herdr 2>/dev/null)" = "'"${LEGACY_HERDR_MISE_BACKEND}"'" ]; then mise tool-alias unset herdr; fi'
+}
+
 configure_managed_mise_tool() {
   local row=$1 version_env alias_key backend_env version_key profile_key profile_env checksum_key
   local version backend profile checksum
@@ -1442,8 +1379,7 @@ configure_user_tools_for_target() {
       while IFS= read -r row; do
         configure_managed_mise_tool "${row}"
       done <<<"$(managed_mise_tool_rows)"
-      configure_mise_value_for_target tool_alias.herdr "$(bootstrap_herdr_backend)"
-      configure_mise_value_for_target tools.herdr "$(bootstrap_herdr_version)"
+      remove_legacy_herdr_tool_for_target
       ;;
   esac
   # Writes run as the target user, preserving ownership without root chown races.
@@ -1514,34 +1450,25 @@ target_node_ready() {
   target_managed_mise_tool_ready "$(managed_mise_tool_row node)"
 }
 
-target_pi_ready() {
-  local node_version="$1"
-  local expected_pi_version="$2"
-  local expected_npm_version
-  expected_npm_version=$(bootstrap_npm_version)
-  local pi_check
-  pi_check=$(pi_check_command "${node_version}" "${expected_pi_version}") || return 1
-  run_as_target "set -euo pipefail; test \"\$(\"\$HOME/.local/bin/mise\" exec -- node --version)\" = \"v${node_version}\"; test \"\$(\"\$HOME/.local/bin/mise\" exec -- npm --version)\" = \"${expected_npm_version}\"; ${pi_check}"
+# run_native_agent_probe resolves the probe before it runs, so a decode
+# failure stops here instead of running an empty script that would pass.
+run_native_agent_probe() {
+  local probe
+  probe=$(bootstrap_probe "$1") || return 1
+  [[ -n ${probe} ]] || return 1
+  run_as_target "set -euo pipefail; ${probe}"
 }
 
-# herdr_integrity_script builds the target-user probe that resolves the herdr
-# binary, verifies its pinned SHA-256 BEFORE any execution, then checks the
-# exact version. Readiness and verification both reuse it so the fail-closed
-# digest gate exists in exactly one place.
-herdr_integrity_script() {
-  local version="$1" expected_sha="$2"
-  printf '%s' "set -euo pipefail; herdr_bin=\$(\"\$HOME/.local/bin/mise\" exec -- sh -c 'command -v herdr'); test -f \"\${herdr_bin}\" && test -x \"\${herdr_bin}\"; actual_sha=\$(sha256sum \"\${herdr_bin}\" | awk '{print \$1}'); test \"\${actual_sha}\" = \"${expected_sha}\"; actual=\$(\"\$HOME/.local/bin/mise\" exec -- herdr --version); test \"\${actual}\" = \"herdr ${version}\""
+target_pi_ready() {
+  run_native_agent_probe SERVERPRO_BOOTSTRAP_PI_PROBE_BASE64
 }
 
 target_herdr_ready() {
-  local version expected_sha
-  version=$(bootstrap_herdr_version)
-  expected_sha=$(bootstrap_herdr_sha256_for_arch "$(uname -m)")
-  run_as_target "$(herdr_integrity_script "${version}" "${expected_sha}")"
+  run_native_agent_probe SERVERPRO_BOOTSTRAP_HERDR_PROBE_BASE64
 }
 
 target_herdr_pi_integration_ready() {
-  run_as_target "set -euo pipefail; \"\$HOME/.local/bin/mise\" exec -- herdr integration status | grep -Fq 'pi: current'"
+  run_native_agent_probe SERVERPRO_BOOTSTRAP_HERDR_PI_PROBE_BASE64
 }
 
 # install_user_tools_for_target probes each managed component and stages only
@@ -1556,10 +1483,8 @@ install_user_tools_for_target() {
   repair_mise_config_for_user
   configure_user_tools_for_target "${target}"
 
-  local node_version pi_version herdr_version
+  local node_version
   node_version=$(bootstrap_node_version)
-  pi_version=$(bootstrap_pi_version)
-  herdr_version=$(bootstrap_herdr_version)
 
   # Probe every managed component and stage only the failures: doctor repair of
   # one stale tool must not reinstall (or re-resolve) the healthy toolchain.
@@ -1576,11 +1501,9 @@ install_user_tools_for_target() {
       target_node_ready || force_mise_installs+=("node@${node_version}")
       ;;
     pi)
-      if ! target_node_ready; then
-        force_mise_installs+=("node@${node_version}")
-        install_pi=1
-      fi
-      target_pi_ready "${node_version}" "${pi_version}" || install_pi=1
+      # Pi's installer and runtime need Node on PATH, so Node comes first.
+      target_node_ready || force_mise_installs+=("node@${node_version}")
+      target_pi_ready || install_pi=1
       ;;
     all)
       while IFS= read -r row; do
@@ -1591,15 +1514,13 @@ install_user_tools_for_target() {
         fi
         if [[ ${force} == true ]]; then
           force_mise_installs+=("${key}@${version}")
-          if [[ ${key} == node ]]; then
-            install_pi=1
-          fi
         else
           mise_installs+=("${key}@${version}")
         fi
       done <<<"$(managed_mise_tool_rows)"
-      target_pi_ready "${node_version}" "${pi_version}" || install_pi=1
-      # Force replacement so doctor repair fixes a corrupt exact-version binary.
+      # A healthy vendor install is left alone: updates belong to `pi update`
+      # and `herdr update`, so bootstrap only installs a missing or broken copy.
+      target_pi_ready || install_pi=1
       target_herdr_ready || install_herdr=1
       ;;
   esac
@@ -1611,21 +1532,22 @@ install_user_tools_for_target() {
   if [[ ${#force_mise_installs[@]} -gt 0 ]]; then
     staged+=("mise --yes install --force ${force_mise_installs[*]}")
   fi
-  if [[ ${install_herdr} -eq 1 ]]; then
-    staged+=("mise --yes install --force herdr@${herdr_version}")
-  fi
   if [[ ${install_pi} -eq 1 ]]; then
-    # Root writes the reviewed project into a fresh root-owned directory that
-    # the target user can read but not change; the lock is public data, so
-    # read access for other local users exposes nothing.
-    local pi_handoff
-    pi_handoff=$(mktemp -d)
-    register_tmp "${pi_handoff}"
-    chmod 0755 "${pi_handoff}"
-    write_pi_project "${pi_handoff}" || exit 1
-    local pi_commands
-    pi_commands=$(pi_install_commands "${node_version}" "${pi_handoff}") || exit 1
+    local pi_commands pi_installer_url
+    pi_installer_url=$(bootstrap_installer_url SERVERPRO_BOOTSTRAP_PI_INSTALLER_URL) || exit 1
+    pi_commands=$(legacy_pi_cleanup_commands) || exit 1
+    # mise exec puts the managed Node and npm on PATH for Pi's installer.
+    # shellcheck disable=SC2016 # WHY: $HOME must expand in the target user's shell, not as root.
+    pi_commands+=$'\n'$(native_installer_commands Pi "${pi_installer_url}" '"$HOME/.local/bin/mise" exec --') || exit 1
     staged+=("${pi_commands}")
+  fi
+  if [[ ${install_herdr} -eq 1 ]]; then
+    local herdr_commands herdr_installer_url
+    herdr_installer_url=$(bootstrap_installer_url SERVERPRO_BOOTSTRAP_HERDR_INSTALLER_URL) || exit 1
+    # The explicit directory keeps herdr where its checks and updater expect it.
+    # shellcheck disable=SC2016 # WHY: $HOME must expand in the target user's shell, not as root.
+    herdr_commands=$(native_installer_commands Herdr "${herdr_installer_url}" 'env HERDR_INSTALL_DIR="$HOME/.local/bin"') || exit 1
+    staged+=("${herdr_commands}")
   fi
 
   if [[ ${#staged[@]} -gt 0 ]]; then
@@ -1633,20 +1555,20 @@ install_user_tools_for_target() {
     install_sequence=$(printf '; %s' "${staged[@]}")
     install_sequence=${install_sequence#; }
     # Explicit tool specs keep focused targets from installing unrelated user
-    # config tools. Exported npm flags force the npm package manager and disable
-    # every npm lifecycle script (install/preinstall/postinstall) so a
-    # compromised or buggy package cannot run arbitrary code during
-    # `npm install -g` as the admin user; they must be exported, not prefixed,
-    # so they also reach the npm command later in the sequence.
-    log "installing missing target-user tools for ${TARGET_USER} with scoped mise install"
-    run_as_target "set -euo pipefail; export MISE_EXPERIMENTAL=1 MISE_YES=1 MISE_NPM_PACKAGE_MANAGER=npm npm_config_ignore_scripts=true NPM_CONFIG_IGNORE_SCRIPTS=true; ${install_sequence}; mise reshim || true"
+    # config tools. The exported npm flags disable every npm lifecycle script
+    # for the vendor Pi installer's npm run as defense in depth, so a
+    # compromised dependency cannot run code at install time even if the
+    # installer stops passing --ignore-scripts itself. They must be exported,
+    # not prefixed, so they reach that npm run inside the installer subshell.
+    log "installing missing target-user tools for ${TARGET_USER} with scoped mise install and vendor installers"
+    run_as_target "set -euo pipefail; export MISE_EXPERIMENTAL=1 MISE_YES=1 npm_config_ignore_scripts=true NPM_CONFIG_IGNORE_SCRIPTS=true; ${install_sequence}; mise reshim || true"
   else
     log "target-user mise tools already installed for ${TARGET_USER}"
   fi
 
   if [[ ${target} == all ]]; then
     if ! target_herdr_ready; then
-      printf 'Herdr integrity verification failed before Pi integration.\n' >&2
+      printf 'Herdr readiness check failed before Pi integration.\n' >&2
       exit 1
     fi
     if ! target_herdr_pi_integration_ready; then
@@ -1655,7 +1577,7 @@ install_user_tools_for_target() {
       integration_script=$(cat <<'TARGET_SCRIPT'
 set -euo pipefail
 install -d -m 0700 "$HOME/.pi/agent"
-"$HOME/.local/bin/mise" exec -- herdr integration install pi
+"$HOME/.local/bin/herdr" integration install pi
 TARGET_SCRIPT
 )
       run_as_target "${integration_script}"
@@ -1701,18 +1623,14 @@ verify_node() {
 verify_pi() {
   verify_node
   if [[ -n ${TARGET_USER:-} ]]; then
-    local pi_check
-    pi_check=$(pi_check_command "$(bootstrap_node_version)" "$(bootstrap_pi_version)") || exit 1
-    run_as_target "set -euo pipefail; ${pi_check}"
+    target_pi_ready
   fi
 }
 
 verify_herdr() {
   if [[ -n ${TARGET_USER:-} ]]; then
-    local version expected_sha
-    version=$(bootstrap_herdr_version)
-    expected_sha=$(bootstrap_herdr_sha256_for_arch "$(uname -m)")
-    run_as_target "$(herdr_integrity_script "${version}" "${expected_sha}"); printf '%s\\nsha256 %s\\n' \"\${actual}\" \"\${actual_sha}\"; integration_status=\$(\"\$HOME/.local/bin/mise\" exec -- herdr integration status); printf '%s\\n' \"\${integration_status}\" | grep -Fq 'pi: current'; printf 'pi: current\\n'"
+    target_herdr_ready
+    target_herdr_pi_integration_ready
   fi
 }
 

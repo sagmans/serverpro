@@ -1,12 +1,12 @@
 # Web Sources for serverpro
 
-Date: 2026-11-02
+Date: 2026-11-18
 Scope: provider-agnostic serverpro references
 
 Prefer official provider/API docs. If guides conflict with API references, trust
 API references.
 
-## Managed-tool review: 2026-10-03, refreshed 2026-10-22, 2026-10-30, and 2026-11-02
+## Managed-tool review: 2026-10-03, refreshed through 2026-11-18
 
 The normal cutoff is 2026-09-26 09:13:29 UTC: stable releases must be at least
 seven days old. Preserve Ubuntu 24.04 packages and Node.js 24 LTS. Keep npm
@@ -90,6 +90,28 @@ deprecated package is `node-domexception`, which Node.js replaces with its
 built-in `DOMException`. The `brace-expansion` and `undici` repairs are gone:
 the lockfile resolves both to fixed releases.
 
+Reviewed 2026-11-18: Pi and Herdr leave mise and the serverpro-owned lockfile.
+Their own `pi update` and `herdr update` commands do not work on mise- or
+npm-managed copies. Bootstrap now downloads each vendor installer
+(`https://pi.dev/install.sh`, `https://herdr.dev/install.sh`) with curl over
+HTTPS, checks the `/bin/sh` shebang, and runs it as the target user. Neither
+vendor publishes a checksum or signature for its script, so HTTPS to the vendor
+origin is the trust root. The Herdr installer checks the binary SHA-256 against
+`https://herdr.dev/latest.json` (stable channel). The Pi installer fetches the
+vendor `package.json` and `package-lock.json` and runs `npm ci --ignore-scripts`.
+Both install the latest stable release: no version pin, no Herdr digest pin, and
+no seven-day age gate, so updates belong to the operator. Serverpro no longer
+generates or audits a Pi lock; the Pi lock, its exemption table above, and
+`scripts/update-pi-lock.sh` are retired. Bootstrap removes a legacy Pi tree and
+the mise `herdr` tool. Past entries above describe the old model and stay as
+history.
+
+- <https://pi.dev/install.sh>
+- <https://pi.dev/docs/latest/quickstart>
+- <https://herdr.dev/install.sh>
+- <https://herdr.dev/latest.json>
+- <https://herdr.dev/docs/install/>
+
 - <https://docs.npmjs.com/cli/v11/using-npm/config#min-release-age>
 - <https://docs.npmjs.com/cli/v11/using-npm/config#min-release-age-exclude>
 - <https://github.com/advisories/GHSA-g3hv-75wg-m249>
@@ -105,13 +127,13 @@ the lockfile resolves both to fixed releases.
 | Compose | 5.6.1 | 2026-10-21 07:54:18 | Approved security exception; Go `CVE-2026-111943` rebuild |
 | mise | 2026.10.24 | 2026-10-30 10:15:02 | Approved security exception; fail-closed verification, GitHub token limited to GitHub hosts, git ref option-injection and fnox secret-grant fixes |
 | Node.js | 24.22.1 LTS | 2026-10-20 | Approved security exception; Node 24 security release |
-| Pi | 1.5.0 | 2026-11-02 11:05:09 | Approved exception; installed from the serverpro-owned lockfile |
+| Pi | Latest stable (not pinned) | n/a | Vendor installer; `pi update` owns updates (2026-11-18). Past pin: 1.5.0 |
 | uv | 0.13.5 | 2026-10-22 01:35:54 | Approved security exception; removes the compromised emSign root (`GHSA-hq85-5cpj-mr62`) |
 | Rust | 1.99.1 | 2026-10-16 04:47:44 | Normal age gate; miscompilation fix |
 | gh | 2.103.3 | 2026-10-26 19:20:08 | Approved security exception; `digitorus/pkcs7` fix for `GHSA-3xqc-rpq8-wgp9` |
 | ast-grep | 0.51.0 | 2026-10-15 15:10:15 | Normal age gate; fixes `GHSA-xx6h-xcfw-vf5j` and `GHSA-cmvf-x8f7-rvp6` |
 | sem | 0.29.0 | 2026-10-30 00:51:43 | Approved security exception; `webpki-roots` `1.0.10` drops compromised eMudhra CAs |
-| Herdr | 0.9.5 | 2026-10-14 16:07:28 | Normal age gate |
+| Herdr | Latest stable (not pinned) | n/a | Vendor installer; `herdr update` owns updates (2026-11-18). Past pin: 0.9.5 |
 | cloudflared | 2026.10.6 | 2026-10-29 12:18:25 | Approved security exception; go-jose (VULN-184686), go-chi (VULN-183456), and metrics debug endpoint (VULN-176088) fixes |
 
 Primary selection and security evidence:
@@ -1119,18 +1141,18 @@ https://mise.jdx.dev/dev-tools/backends/npm.html
 ```
 
 Use: reference for npm-backed mise tools. serverpro does NOT use the `npm:`
-backend; it installs Pi `1.5.0` with `npm ci` from its own lockfile under
-mise-managed Node `24.22.1`, with lifecycle scripts disabled
-(`--ignore-scripts`).
+backend. Pi installs through its vendor installer, which runs `npm ci
+--ignore-scripts` with the mise-managed Node (see Pi quickstart).
 
 ### Pi quickstart
 
 ```text
+https://pi.dev/install.sh
 https://pi.dev/docs/latest/quickstart
-https://www.npmjs.com/package/@earendil-works/pi-coding-agent/v/1.5.0
 ```
 
-Use: optional pinned Pi `1.5.0` bootstrap; reviewed 2026-11-02.
+Use: optional Pi bootstrap through the vendor installer, latest stable release,
+not pinned; reviewed 2026-11-18. The vendor owns updates (`pi update`).
 Authentication remains operator-owned.
 
 ### tmux
@@ -1145,18 +1167,16 @@ Use: pinned tmux `3.7c` build/install reference; reviewed 2026-10-01.
 ### Herdr
 
 ```text
+https://herdr.dev/install.sh
+https://herdr.dev/latest.json
 https://herdr.dev/docs/install/
 https://herdr.dev/docs/integrations/
-https://github.com/herdrdev/herdr/releases/tag/v0.9.5
-https://api.github.com/repos/herdrdev/herdr/releases/tags/v0.9.5
 ```
 
-Use: managed Herdr `0.9.5` installation through mise's explicit GitHub backend,
-package-manager update ownership, and target-user Pi integration status.
-Reviewed 2026-10-22. Pinned release SHA-256 values:
-
-- Linux x64: `14d9e8bc8b4a9e0118d77c32266f76d461f09b40342eb23752960bd89f59929d`
-- Linux arm64: `17d7536f2da50859523680ef279dffcac8e4a235f4e46fe8da6c2ec44141897c`
+Use: Herdr installation through the vendor installer into `~/.local/bin`,
+latest stable release, not pinned; the installer verifies the binary SHA-256
+against `latest.json`. The vendor owns updates (`herdr update`). Target-user Pi
+integration status. Reviewed 2026-11-18.
 
 ### GitHub CLI
 

@@ -21,16 +21,12 @@ const (
 	MiseLinuxArm64TarGzSHA256 = "8c8f5d7f748bf3aef431dc50f0ad776270f36025c788aa21c74e2fabdbbd6d3e"
 	NodeVersion               = "24.22.1"
 	NPMVersion                = "11.19.1"
-	// Pi ships no npm-shrinkwrap.json, so its full dependency tree comes from
-	// the serverpro-owned lock in pi/ (scripts/update-pi-lock.sh); the lock
-	// must install this exact version or every command fails at start-up.
-	PiVersion       = "1.5.0"
-	UVVersion       = "0.13.5"
-	UVMiseBackend   = "aqua:astral-sh/uv"
-	RustVersion     = "1.99.1"
-	RustMiseBackend = "core:rust"
-	RustProfile     = "default"
-	TmuxVersion     = "3.7c"
+	UVVersion                 = "0.13.5"
+	UVMiseBackend             = "aqua:astral-sh/uv"
+	RustVersion               = "1.99.1"
+	RustMiseBackend           = "core:rust"
+	RustProfile               = "default"
+	TmuxVersion               = "3.7c"
 	// 2.103.1 and later carry the digitorus/pkcs7 fix for GHSA-3xqc-rpq8-wgp9.
 	GitHubCLIVersion        = "2.103.3"
 	RipgrepVersion          = "15.2.0"
@@ -48,11 +44,10 @@ const (
 	InspectMiseBackend      = "github:Ataraxy-Labs/inspect"
 	InspectLinuxX64SHA256   = "99cf4ea2a2a1048d8e9369a6a5a11e5f84ee3f3c706e0bde072f9b2bd44e96ba"
 	InspectLinuxArm64SHA256 = "2327c1de10ecf40e5199c15fdc4c4b3c173735640294e779c635f4c15771e4f6"
-	HerdrVersion            = "0.9.5"
-	HerdrLinuxX64SHA256     = "14d9e8bc8b4a9e0118d77c32266f76d461f09b40342eb23752960bd89f59929d"
-	HerdrLinuxArm64SHA256   = "17d7536f2da50859523680ef279dffcac8e4a235f4e46fe8da6c2ec44141897c"
+	// PiToolName is the npm package that older serverpro releases installed
+	// into the mise Node tree; bootstrap removes that copy before it runs the
+	// vendor installer, which refuses to replace an unmanaged pi.
 	PiToolName              = "@earendil-works/pi-coding-agent"
-	HerdrMiseBackend        = "github:herdrdev/herdr"
 	ManagedPackageCheckName = "managed package updates"
 	AuthenticationBoundary  = "Pi authentication remains operator-owned; full GitHub development access requires a PAT, and serverpro stores gh credentials only on the managed remote host"
 )
@@ -120,7 +115,7 @@ func DefaultToolsetDescription() string {
 	gitPackages := hostplatform.GitPackageBaselines()
 	dockerPackages := hostplatform.DockerPackageBaselines()
 	htopPackage := hostplatform.HtopPackageBaselines()[0]
-	return "Git " + gitPackages[0].MinimumVersion + ", OpenSSH " + gitPackages[1].MinimumVersion + ", Docker " + dockerPackages[0].MinimumVersion + ", Docker CLI " + dockerPackages[1].MinimumVersion + ", containerd " + dockerPackages[2].MinimumVersion + ", Buildx " + dockerPackages[3].MinimumVersion + ", Compose " + dockerPackages[4].MinimumVersion + ", mise " + MinimumMiseVersion + "+, Node " + NodeVersion + ", npm " + NPMVersion + ", Pi " + PiVersion + ", uv " + UVVersion + ", Rust " + RustVersion + ", tmux " + TmuxVersion + ", Herdr " + HerdrVersion + ", gh " + GitHubCLIVersion + ", rg " + RipgrepVersion + ", fd " + FdVersion + ", ast-grep " + AstGrepVersion + ", sem " + SemVersion + ", inspect " + InspectVersion + ", and htop " + htopPackage.MinimumVersion
+	return "Git " + gitPackages[0].MinimumVersion + ", OpenSSH " + gitPackages[1].MinimumVersion + ", Docker " + dockerPackages[0].MinimumVersion + ", Docker CLI " + dockerPackages[1].MinimumVersion + ", containerd " + dockerPackages[2].MinimumVersion + ", Buildx " + dockerPackages[3].MinimumVersion + ", Compose " + dockerPackages[4].MinimumVersion + ", mise " + MinimumMiseVersion + "+, Node " + NodeVersion + ", npm " + NPMVersion + ", uv " + UVVersion + ", Rust " + RustVersion + ", tmux " + TmuxVersion + ", gh " + GitHubCLIVersion + ", rg " + RipgrepVersion + ", fd " + FdVersion + ", ast-grep " + AstGrepVersion + ", sem " + SemVersion + ", inspect " + InspectVersion + ", htop " + htopPackage.MinimumVersion + ", and the latest Pi and Herdr from their vendor installers"
 }
 
 func InstallScriptForUser(user string) string {
@@ -156,15 +151,9 @@ func manifestEnvPairs() [][2]string {
 	pairs = append(pairs, managedMiseEnvPairs()...)
 	pairs = append(pairs,
 		[2]string{"SERVERPRO_BOOTSTRAP_NPM_VERSION", NPMVersion},
-		[2]string{"SERVERPRO_BOOTSTRAP_PI_VERSION", PiVersion},
-		[2]string{"SERVERPRO_BOOTSTRAP_PI_INSTALL_DIRECTORY", PiInstallDirectory},
 	)
-	pairs = append(pairs, piLockEnvPairs()...)
+	pairs = append(pairs, nativeAgentEnvPairs()...)
 	return append(pairs,
-		[2]string{"SERVERPRO_BOOTSTRAP_HERDR_VERSION", HerdrVersion},
-		[2]string{"SERVERPRO_BOOTSTRAP_HERDR_BACKEND", HerdrMiseBackend},
-		[2]string{"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64", HerdrLinuxX64SHA256},
-		[2]string{"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_ARM64", HerdrLinuxArm64SHA256},
 		[2]string{"SERVERPRO_BOOTSTRAP_PI_TOOL", PiToolName},
 		[2]string{"SERVERPRO_BOOTSTRAP_BASE_PACKAGES", strings.Join(baseSystemPackages, " ")},
 		[2]string{"SERVERPRO_BOOTSTRAP_GIT_PACKAGES", strings.Join(gitSystemPackages, " ")},
@@ -241,14 +230,13 @@ func Checks(user string) []Check {
 		if tool.key == "node" {
 			checks = append(checks,
 				Check{Name: "npm " + NPMVersion, Command: userHomeCommand(user, `actual_npm=$("$HOME/.local/bin/mise" exec -- npm --version); test "$actual_npm" = "`+NPMVersion+`" || { printf 'expected npm `+NPMVersion+`, got %s\n' "$actual_npm" >&2; exit 1; }; printf '%s\n' "$actual_npm"`)},
-				Check{Name: "pi " + PiVersion, Command: userHomeCommand(user, piCheckCommand())},
+				Check{Name: PiCheckName, Command: userHomeCommand(user, piCheckCommand())},
 			)
 		}
 	}
-	herdrVerified := herdrVerifiedCommand()
 	return append(checks,
-		Check{Name: "herdr " + HerdrVersion, Command: userHomeCommand(user, herdrVerified+`; printf '%s\nsha256 %s\n' "$herdr_version" "$actual_sha"`)},
-		Check{Name: "herdr pi integration", Command: userHomeCommand(user, herdrVerified+`; integration_status=$("$HOME/.local/bin/mise" exec -- herdr integration status); printf '%s\n' "$integration_status" | grep -Fq 'pi: current'; printf 'pi: current\n'`)},
+		Check{Name: HerdrCheckName, Command: userHomeCommand(user, herdrCheckCommand())},
+		Check{Name: HerdrPiIntegrationCheck, Command: userHomeCommand(user, herdrPiIntegrationCommand())},
 	)
 }
 
@@ -282,20 +270,6 @@ func managedPackageUpdatesCommand() string {
 	// A newly-safe apt candidate must displace the managed fallback on repair.
 	baselineChecks.WriteString(`if test "$buildx_source" = managed; then candidate=$(apt-cache policy ` + BuildxPackage + ` | awk '$1 == "Candidate:" {print $2}'); if test -n "$candidate" && test "$candidate" != '(none)' && dpkg --compare-versions "$candidate" ge "$buildx_package_minimum"; then printf 'Buildx apt migration available\n' >&2; exit 1; fi; fi; `)
 	return baselineChecks.String() + "set -- " + strings.Join(quoted, " ") + `; if test "$buildx_source" = apt; then set -- "$@" ` + shell.Quote(BuildxPackage) + `; fi; out=$(apt-get -s -o Debug::NoLocking=1 --no-install-recommends install "$@" 2>&1) || { printf '%s\n' "$out" >&2; exit 1; }; if printf '%s\n' "$out" | grep -q '^Inst '; then printf 'managed package updates available\n' >&2; exit 1; fi; printf 'current\n'`
-}
-
-// herdrMiseInstallRoot is mise's per-version install root for the herdr tool
-// key. The doctor probe reads the version directory from the resolved binary
-// path, so a stale pin is named without executing an unverified binary.
-const herdrMiseInstallRoot = `$HOME/.local/share/mise/installs/herdr/`
-
-// herdrVerifiedCommand keeps the digest gate ahead of any herdr execution,
-// matching the bootstrap readiness probe and the inspect check. A digest
-// mismatch from an older pinned install (for example after a serverpro
-// upgrade) is reported as a version mismatch from the install path, so
-// operators do not read routine drift as tampering.
-func herdrVerifiedCommand() string {
-	return `herdr_bin=$("$HOME/.local/bin/mise" exec -- sh -c 'command -v herdr'); test -f "$herdr_bin" && test -x "$herdr_bin"; case "$(uname -m)" in x86_64) expected_sha=` + HerdrLinuxX64SHA256 + ` ;; aarch64|arm64) expected_sha=` + HerdrLinuxArm64SHA256 + ` ;; *) printf 'unsupported architecture for Herdr release: %s\n' "$(uname -m)" >&2; exit 1 ;; esac; actual_sha=$(sha256sum "$herdr_bin" | awk '{print $1}'); if test "$actual_sha" != "$expected_sha"; then installed_version=; case "$herdr_bin" in "` + herdrMiseInstallRoot + `"*) installed_version=${herdr_bin#"` + herdrMiseInstallRoot + `"}; installed_version=${installed_version%%/*} ;; esac; if test -n "$installed_version" && test "$installed_version" != "` + HerdrVersion + `"; then printf 'expected herdr ` + HerdrVersion + `, got herdr %s (unverified install path); rerun managed bootstrap\n' "$installed_version" >&2; else printf 'Herdr SHA-256 mismatch: expected %s, got %s\n' "$expected_sha" "$actual_sha" >&2; fi; exit 1; fi; herdr_version=$("$HOME/.local/bin/mise" exec -- herdr --version); test "$herdr_version" = "herdr ` + HerdrVersion + `" || { printf 'expected herdr ` + HerdrVersion + `, got %s\n' "$herdr_version" >&2; exit 1; }`
 }
 
 func miseCheckCommand() string {

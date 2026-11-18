@@ -10,8 +10,10 @@ local route metadata; it does not publish publicly routable routes yet.
 
 serverpro also converges the host toolchain — git, Docker, per-user mise, Node,
 Pi, and Herdr — through an integrity-verified bootstrap script over Tailscale
-SSH (see `SECURITY.md`). Herdr is version- and digest-pinned, and its Pi
-integration is installed for authoritative agent lifecycle reporting.
+SSH (see `SECURITY.md`). Pi and Herdr install from their vendor installers, so
+`pi update` and `herdr update` keep working; the operator owns those updates.
+The Herdr Pi integration is installed for authoritative agent lifecycle
+reporting.
 
 serverpro prepares hosts and safe access paths. It does not deploy apps, manage
 DNS records, run databases, or store application secrets.

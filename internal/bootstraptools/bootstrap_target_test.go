@@ -83,7 +83,7 @@ func TestTargetIncludesGitOnlyForGitFamily(t *testing.T) {
 
 func TestDefaultToolsetDescriptionNamesPinnedTools(t *testing.T) {
 	description := DefaultToolsetDescription()
-	for _, want := range []string{"Git " + hostplatform.GitPackageBaselines()[0].MinimumVersion, "OpenSSH " + hostplatform.GitPackageBaselines()[1].MinimumVersion, "Docker " + hostplatform.DockerPackageBaselines()[0].MinimumVersion, "Compose " + hostplatform.DockerPackageBaselines()[4].MinimumVersion, "mise", "Node " + NodeVersion, "npm " + NPMVersion, "Pi " + PiVersion, "uv " + UVVersion, "Rust " + RustVersion, "tmux " + TmuxVersion, "Herdr " + HerdrVersion, "gh " + GitHubCLIVersion, "rg " + RipgrepVersion, "fd " + FdVersion, "ast-grep " + AstGrepVersion, "sem " + SemVersion, "inspect " + InspectVersion, "htop " + hostplatform.HtopPackageBaselines()[0].MinimumVersion} {
+	for _, want := range []string{"Git " + hostplatform.GitPackageBaselines()[0].MinimumVersion, "OpenSSH " + hostplatform.GitPackageBaselines()[1].MinimumVersion, "Docker " + hostplatform.DockerPackageBaselines()[0].MinimumVersion, "Compose " + hostplatform.DockerPackageBaselines()[4].MinimumVersion, "mise", "Node " + NodeVersion, "npm " + NPMVersion, "uv " + UVVersion, "Rust " + RustVersion, "tmux " + TmuxVersion, "gh " + GitHubCLIVersion, "rg " + RipgrepVersion, "fd " + FdVersion, "ast-grep " + AstGrepVersion, "sem " + SemVersion, "inspect " + InspectVersion, "htop " + hostplatform.HtopPackageBaselines()[0].MinimumVersion, "latest Pi and Herdr from their vendor installers"} {
 		if !contains(description, want) {
 			t.Fatalf("description missing %q: %s", want, description)
 		}
@@ -103,7 +103,6 @@ func TestManagedVersionManifestPinsApprovedReleases(t *testing.T) {
 	want := map[string]string{
 		"node":     "24.22.1",
 		"npm":      "11.19.1",
-		"pi":       "1.5.0",
 		"uv":       "0.13.5",
 		"rust":     "1.99.1",
 		"tmux":     "3.7c",
@@ -117,7 +116,6 @@ func TestManagedVersionManifestPinsApprovedReleases(t *testing.T) {
 	got := map[string]string{
 		"node":     NodeVersion,
 		"npm":      NPMVersion,
-		"pi":       PiVersion,
 		"uv":       UVVersion,
 		"rust":     RustVersion,
 		"tmux":     TmuxVersion,
@@ -259,28 +257,12 @@ func TestInstallScriptStagesOnlyFailedComponents(t *testing.T) {
 		`force_mise_installs+=("node@${node_version}")`,
 		`mise --yes install ${mise_installs[*]}`,
 		`mise --yes install --force ${force_mise_installs[*]}`,
-		`target_pi_ready "${node_version}" "${pi_version}" || install_pi=1`,
+		`target_pi_ready || install_pi=1`,
 		`target_herdr_ready || install_herdr=1`,
 	} {
 		if !contains(script, want) {
 			t.Fatalf("install script missing component staging marker %q", want)
 		}
-	}
-}
-
-// TestInstallScriptValidatesHerdrArchBeforeMutation pins the audit fix: the
-// unsupported-architecture failure must happen inside validate_bootstrap_env,
-// which main runs before any install function can mutate the host.
-func TestInstallScriptValidatesHerdrArchBeforeMutation(t *testing.T) {
-	script := InstallScriptForUser("deploy")
-	start := strings.Index(script, "validate_bootstrap_env() {")
-	end := strings.Index(script, "resolve_target_user() {")
-	if start < 0 || end <= start {
-		t.Fatal("missing validate_bootstrap_env boundary")
-	}
-	body := script[start:end]
-	if !contains(body, `bootstrap_herdr_sha256_for_arch "$(uname -m)" >/dev/null`) {
-		t.Fatalf("validate_bootstrap_env missing pre-mutation Herdr arch gate: %s", body)
 	}
 }
 
@@ -328,12 +310,6 @@ func TestInstallScriptConfiguresCuratedManagedTools(t *testing.T) {
 	}
 }
 
-func TestPiManifestPinsRequiredVersion(t *testing.T) {
-	if PiVersion != "1.5.0" {
-		t.Fatalf("pi version = %q, want 1.5.0", PiVersion)
-	}
-}
-
 func TestMiseReleaseManifestPinsRequiredVersion(t *testing.T) {
 	if MinimumMiseVersion != "2026.10.24" {
 		t.Fatalf("mise version = %q, want 2026.10.24", MinimumMiseVersion)
@@ -353,46 +329,53 @@ func TestMiseReleaseManifestPinsRequiredVersion(t *testing.T) {
 	}
 }
 
-func TestInstallScriptExportsPinnedHerdrManifest(t *testing.T) {
+// TestInstallScriptExportsNativeAgentManifest pins the vendor installer
+// origins and proves no pinned Herdr or Pi release survives in the manifest:
+// a pin would fight `herdr update` and `pi update`.
+func TestInstallScriptExportsNativeAgentManifest(t *testing.T) {
 	script := InstallScriptForUser("deploy")
 	for _, want := range []string{
-		"SERVERPRO_BOOTSTRAP_HERDR_VERSION='0.9.5'",
-		"SERVERPRO_BOOTSTRAP_HERDR_BACKEND='github:herdrdev/herdr'",
-		"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64='14d9e8bc8b4a9e0118d77c32266f76d461f09b40342eb23752960bd89f59929d'",
-		"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_ARM64='17d7536f2da50859523680ef279dffcac8e4a235f4e46fe8da6c2ec44141897c'",
+		"SERVERPRO_BOOTSTRAP_PI_INSTALLER_URL='https://pi.dev/install.sh'",
+		"SERVERPRO_BOOTSTRAP_HERDR_INSTALLER_URL='https://herdr.dev/install.sh'",
 	} {
 		if !contains(script, want) {
-			t.Fatalf("install script missing pinned Herdr manifest %q", want)
+			t.Fatalf("install script missing native installer manifest %q", want)
+		}
+	}
+	for _, retired := range []string{"SERVERPRO_BOOTSTRAP_HERDR_VERSION", "SERVERPRO_BOOTSTRAP_HERDR_SHA256", "SERVERPRO_BOOTSTRAP_PI_VERSION", "SERVERPRO_BOOTSTRAP_PI_LOCK", "configure_mise_value_for_target tools.herdr"} {
+		if contains(script, retired) {
+			t.Fatalf("install script retains retired agent pin %q", retired)
 		}
 	}
 }
 
-func TestInstallScriptInstallsPinnedHerdrAndPiIntegration(t *testing.T) {
+func TestInstallScriptInstallsNativeHerdrAndPiIntegration(t *testing.T) {
 	script := InstallScriptForUser("deploy")
 	for _, want := range []string{
-		`configure_mise_value_for_target tool_alias.herdr "$(bootstrap_herdr_backend)"`,
-		`configure_mise_value_for_target tools.herdr "$(bootstrap_herdr_version)"`,
+		`remove_legacy_herdr_tool_for_target`,
 		`target_herdr_ready || install_herdr=1`,
-		`mise --yes install --force herdr@${herdr_version}`,
+		`native_installer_commands Herdr`,
+		// The shell repeats the Go-owned entrypoint; deriving these markers
+		// from herdrEntrypoint makes a path change in one place fail here
+		// instead of failing every host's doctor probe.
+		`HERDR_INSTALL_DIR="` + strings.TrimSuffix(herdrEntrypoint, "/herdr") + `"`,
 		`if ! target_herdr_pi_integration_ready; then`,
-		`sha256sum \"\${herdr_bin}\"`,
-		`Herdr integrity verification failed before Pi integration`,
+		`Herdr readiness check failed before Pi integration`,
 		`install -d -m 0700 "$HOME/.pi/agent"`,
-		`herdr integration install pi`,
-		`pi: current`,
+		`"` + herdrEntrypoint + `" integration install pi`,
 	} {
 		if !contains(script, want) {
-			t.Fatalf("install script missing pinned Herdr marker %q", want)
+			t.Fatalf("install script missing native Herdr marker %q", want)
 		}
 	}
-	for _, forbidden := range []string{"https://herdr.dev/install.sh", "herdr update", "herdr@latest"} {
+	for _, forbidden := range []string{"herdr@latest", "mise --yes install --force herdr@"} {
 		if contains(script, forbidden) {
 			t.Fatalf("install script contains forbidden Herdr marker %q", forbidden)
 		}
 	}
 }
 
-func TestInstallScriptInstallsPiWithPinnedNodeNpm(t *testing.T) {
+func TestInstallScriptInstallsPiWithVendorInstaller(t *testing.T) {
 	script, err := InstallScriptForUserTarget("deploy", TargetPi)
 	if err != nil {
 		t.Fatal(err)
@@ -400,22 +383,24 @@ func TestInstallScriptInstallsPiWithPinnedNodeNpm(t *testing.T) {
 	for _, want := range []string{
 		`force_mise_installs+=("node@${node_version}")`,
 		`mise --yes install --force ${force_mise_installs[*]}`,
-		`export MISE_EXPERIMENTAL=1 MISE_YES=1 MISE_NPM_PACKAGE_MANAGER=npm npm_config_ignore_scripts=true NPM_CONFIG_IGNORE_SCRIPTS=true`,
-		`\"\$HOME/.local/bin/mise\" exec -- npm ci --omit=dev --ignore-scripts --no-audit --no-fund`,
 		`configure_managed_mise_tool "$(managed_mise_tool_row node)"`,
-		`expected_pi=\"${node_root}/bin/pi\"`,
+		`legacy_pi_cleanup_commands`,
+		`native_installer_commands Pi`,
+		`"$HOME/.local/bin/mise" exec --`,
+		`curl -fsSL --proto '=https' --tlsv1.2`,
 	} {
 		if !contains(script, want) {
-			t.Fatalf("install script missing pinned node npm marker %q", want)
+			t.Fatalf("install script missing native Pi marker %q", want)
 		}
 	}
 	for _, forbidden := range []string{
 		`mise --yes install node@${node_version} ${pi_tool}@${pi_version}`,
 		`\"tools.${pi_tool}\"`,
+		"npm ci --omit=dev",
 		"mise --yes bootstrap --only tools",
 	} {
 		if contains(script, forbidden) {
-			t.Fatalf("install script contains stale mise npm-backend marker %q", forbidden)
+			t.Fatalf("install script contains retired Pi install marker %q", forbidden)
 		}
 	}
 }
@@ -439,8 +424,9 @@ func TestChecksUsePinnedToolsAndTargetUser(t *testing.T) {
 	assertCheck(t, checks, "node "+NodeVersion, "runuser -u \"$target_user\"")
 	assertCheck(t, checks, "node "+NodeVersion, `cd "$HOME"`)
 	assertCheck(t, checks, "npm "+NPMVersion, "expected npm "+NPMVersion)
-	assertCheck(t, checks, "pi "+PiVersion, "expected pi at")
-	assertCheck(t, checks, "pi "+PiVersion, "expected pi "+PiVersion)
+	assertCheck(t, checks, PiCheckName, "expected pi at")
+	assertCheck(t, checks, PiCheckName, "pi-managed-install")
+	assertCheck(t, checks, PiCheckName, "pi --version")
 	assertCheck(t, checks, "uv "+UVVersion, "uv --version")
 	assertCheck(t, checks, "uv "+UVVersion, `expected_version="`+UVVersion+`"`)
 	assertCheck(t, checks, "uv "+UVVersion, `case "$uv_version" in "uv $expected_version"|"uv $expected_version "*)`)
@@ -461,11 +447,9 @@ func TestChecksUsePinnedToolsAndTargetUser(t *testing.T) {
 	assertCheck(t, checks, "inspect "+InspectVersion, InspectLinuxX64SHA256)
 	assertCheck(t, checks, "inspect "+InspectVersion, InspectLinuxArm64SHA256)
 	assertCheck(t, checks, "inspect "+InspectVersion, "inspect --help")
-	assertCheck(t, checks, "herdr "+HerdrVersion, "herdr "+HerdrVersion)
-	assertCheck(t, checks, "herdr "+HerdrVersion, HerdrLinuxX64SHA256)
-	assertCheck(t, checks, "herdr "+HerdrVersion, HerdrLinuxArm64SHA256)
-	assertCheck(t, checks, "herdr "+HerdrVersion, "sha256sum")
-	assertCheck(t, checks, "herdr pi integration", "pi: current")
+	assertCheck(t, checks, HerdrCheckName, "expected herdr at")
+	assertCheck(t, checks, HerdrCheckName, "--version")
+	assertCheck(t, checks, HerdrPiIntegrationCheck, "pi: current")
 }
 
 func TestInspectCheckHashesBinaryBeforeExecution(t *testing.T) {
@@ -483,67 +467,27 @@ func TestInspectCheckHashesBinaryBeforeExecution(t *testing.T) {
 	t.Fatal("missing inspect check")
 }
 
-func TestHerdrChecksHashBinaryBeforeExecution(t *testing.T) {
-	for _, check := range Checks("deploy") {
-		if check.Name != "herdr "+HerdrVersion {
-			continue
-		}
-		digestIndex := strings.Index(check.Command, "sha256sum")
-		versionIndex := strings.Index(check.Command, "herdr --version")
-		if digestIndex < 0 || versionIndex < 0 || digestIndex > versionIndex {
-			t.Fatalf("Herdr check must verify digest before execution: %s", check.Command)
-		}
-		return
-	}
-	t.Fatal("missing Herdr check")
-}
-
-// TestInstallScriptHashesHerdrBeforeExecution pins the fail-closed order: the
-// shared integrity probe hashes the resolved binary before any herdr
-// execution, and both readiness and verification go through it.
-func TestInstallScriptHashesHerdrBeforeExecution(t *testing.T) {
-	script := InstallScriptForUser("deploy")
-	start := strings.Index(script, "herdr_integrity_script() {")
-	end := strings.Index(script, "target_herdr_ready() {")
-	if start < 0 || end <= start {
-		t.Fatal("missing herdr_integrity_script boundary")
-	}
-	body := script[start:end]
-	digestIndex := strings.Index(body, "sha256sum")
-	versionIndex := strings.Index(body, "herdr --version")
-	if digestIndex < 0 || versionIndex < 0 || digestIndex > versionIndex {
-		t.Fatal("herdr_integrity_script must verify digest before execution")
-	}
-	for _, caller := range []string{"target_herdr_ready() {", "verify_herdr() {"} {
-		cstart := strings.Index(script, caller)
-		if cstart < 0 {
-			t.Fatalf("missing %s", caller)
-		}
-		cbody := script[cstart : cstart+400]
-		if !strings.Contains(cbody, "herdr_integrity_script") {
-			t.Fatalf("%s must reuse herdr_integrity_script", caller)
-		}
-	}
-}
-
-func TestHerdrIntegrationCheckHashesBeforeExecution(t *testing.T) {
-	for _, check := range Checks("deploy") {
-		if check.Name != "herdr pi integration" {
-			continue
-		}
-		digestIndex := strings.Index(check.Command, "sha256sum")
-		statusIndex := strings.Index(check.Command, "herdr integration status")
-		if digestIndex < 0 || statusIndex < 0 || digestIndex > statusIndex {
-			t.Fatalf("Herdr integration check must verify digest before execution: %s", check.Command)
-		}
-		for _, digest := range []string{HerdrLinuxX64SHA256, HerdrLinuxArm64SHA256} {
-			if !strings.Contains(check.Command, digest) {
-				t.Fatalf("Herdr integration check missing digest %s", digest)
+// TestNativeAgentChecksResolveBeforeExecution pins the fail-closed order:
+// each check proves the vendor-managed path before it runs the CLI, so a
+// shadowing copy fails as itself and is never executed.
+func TestNativeAgentChecksResolveBeforeExecution(t *testing.T) {
+	for name, run := range map[string]string{PiCheckName: "pi --version", HerdrCheckName: `"$expected_herdr" --version`, HerdrPiIntegrationCheck: "integration status"} {
+		found := false
+		for _, check := range Checks("deploy") {
+			if check.Name != name {
+				continue
+			}
+			found = true
+			resolveIndex := strings.Index(check.Command, "command -v")
+			runIndex := strings.Index(check.Command, run)
+			if resolveIndex < 0 || runIndex < 0 || resolveIndex > runIndex {
+				t.Fatalf("%s check must resolve the vendor path before execution: %s", name, check.Command)
 			}
 		}
-		return
+		if !found {
+			t.Fatalf("missing %s check", name)
+		}
 	}
-	t.Fatal("missing Herdr Pi integration check")
 }
 
 func TestHerdrIntegrationCheckKeepsEvidencePathFree(t *testing.T) {

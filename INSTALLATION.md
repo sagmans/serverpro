@@ -59,7 +59,7 @@ reviewed pins, integrity checks, and replacement lifecycle.
 | mise | 2026.10.24 | Minimum release; newer compatible mise remains installed. |
 | Node.js | 24.22.1 LTS | Exact mise-managed runtime. |
 | npm | 11.19.1 | Exact npm bundled with the managed Node.js release. |
-| Pi | 1.5.0 | Exact serverpro-owned lockfile tree under managed Node.js. |
+| Pi | Latest stable | Vendor installer; not pinned. Update with `pi update`. |
 | uv | 0.13.5 | Exact mise-managed release. |
 | Rust | 1.99.1 | Exact rustup toolchain with default profile. |
 | tmux | 3.7c | Exact mise-managed release. |
@@ -69,21 +69,20 @@ reviewed pins, integrity checks, and replacement lifecycle.
 | ast-grep | 0.51.0 | Exact release and architecture-specific asset digest. |
 | sem | 0.29.0 | Exact release and architecture-specific asset digest. |
 | inspect | 0.1.1 | Exact architecture-specific binary digest. |
-| Herdr | 0.9.5 | Exact release and architecture-specific binary digest. |
+| Herdr | Latest stable | Vendor installer; not pinned. Update with `herdr update`. |
 | cloudflared | 2026.10.6 | Minimum Cloudflare apt package version when ingress is enabled. |
 
-Pi 1.x publishes no `npm-shrinkwrap.json`. Serverpro owns the lockfile in
-`internal/bootstraptools/pi/`, which pins all 121 packages of the Pi `1.5.0`
-tree with exact versions and SHA-512 integrity.
-`scripts/update-pi-lock.sh` generates it under npm’s seven-day minimum age;
-`WEB_SOURCES.md` lists each exemption and its reason.
-Bootstrap installs the tree with `npm ci` into
-`<node>/lib/serverpro-pi`, with lifecycle scripts disabled and development
-dependencies omitted, and links `<node>/bin/pi` to it.
-It probes and audits the new tree before it replaces the old one.
-Bootstrap removes a Pi from an older serverpro `npm install -g`.
-Doctor rejects a changed lockfile or any package version drift, even when
-Pi’s own version matches.
+Pi and Herdr do not install through mise or an npm lockfile, because their
+own `pi update` and `herdr update` commands do not work on those copies.
+Bootstrap downloads the vendor installers (`https://pi.dev/install.sh`,
+`https://herdr.dev/install.sh`) and runs them as the target user. Pi installs
+under `~/.pi/agent/` with a launcher link at `~/.local/bin/pi`; Herdr installs
+to `~/.local/bin/herdr`. Pi uses the mise-managed Node and npm. Bootstrap
+installs only a missing or broken copy. The operator runs `pi update` and
+`herdr update` later. Neither vendor publishes a checksum for its script, so
+trust rests on HTTPS to the vendor origin; see `SECURITY.md`. Bootstrap removes
+a Pi or mise-managed Herdr from older serverpro versions. Doctor checks that
+each CLI resolves to its `~/.local/bin` entrypoint and prints a semver version.
 
 ### Managed apt package floors
 
@@ -252,12 +251,14 @@ NAME all` converges the complete tool and package baseline above. Run
 targets are `git`, `docker`, `mise`, `node`, and `pi`; `git` includes
 Git/OpenSSH, target-user mise, and gh before interactive GitHub setup.
 
-Checksum-pinned GitHub artifacts support only managed-host amd64 and arm64.
+Checksum-pinned GitHub artifacts support only managed-host amd64 and arm64. The
+vendor installers for Pi and Herdr decide their own architecture support.
 Existing hosts with the deprecated active `sg` mise key migrate to `ast-grep`.
 Herdr includes its target-user Pi integration, but serverpro never starts,
-stops, or restarts Herdr sessions. Pi and optional inspect authentication remain
-operator tasks; full GitHub development access requires a masked PAT stored only
-on the managed host.
+stops, or restarts Herdr sessions. Update Pi and Herdr with `pi update` and
+`herdr update`; rerunning bootstrap does not upgrade a working copy. Pi and
+optional inspect authentication remain operator tasks; full GitHub development
+access requires a masked PAT stored only on the managed host.
 
 `serverpro server doctor` reports exact-pin drift, packages below their reviewed
 floors, newer apt candidates, Tailscale client/daemon drift, and cloudflared

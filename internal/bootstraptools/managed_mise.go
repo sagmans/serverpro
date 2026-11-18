@@ -46,8 +46,8 @@ type managedMiseTool struct {
 }
 
 // managedMiseTools is the authority for ordinary mise-managed tools. Pi and
-// Herdr stay separate because npm lifecycle policy and binary digest checks
-// require purpose-built repair flows.
+// Herdr stay out of mise because their own updaters (`pi update`, `herdr
+// update`) maintain only copies that their vendor installers created.
 var managedMiseTools = []managedMiseTool{
 	{key: "node", version: NodeVersion, versionEnv: "SERVERPRO_BOOTSTRAP_NODE_VERSION", versionKey: "tools.node", forceRepair: true, probe: managedMiseProbeNode},
 	{key: "uv", version: UVVersion, versionEnv: "SERVERPRO_BOOTSTRAP_UV_VERSION", aliasKey: "tool_alias.uv", backend: UVMiseBackend, backendEnv: "SERVERPRO_BOOTSTRAP_UV_BACKEND", versionKey: "tools.uv", probe: managedMiseProbeUV},

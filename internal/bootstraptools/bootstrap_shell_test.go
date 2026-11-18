@@ -241,16 +241,6 @@ func TestShellValidateUserToken(t *testing.T) {
 	})
 }
 
-func TestShellValidateMiseBackend(t *testing.T) {
-	assertShellValidator(t, `validate_mise_backend NAME "$TESTVAL"`, []validatorCase{
-		{"github", "github:herdrdev/herdr", false},
-		{"missing-backend", "herdrdev/herdr", true},
-		{"missing-repository", "github:herdrdev", true},
-		{"extra-path", "github:herdrdev/herdr/release", true},
-		{"shell-metacharacter", "github:owner/repo;id", true},
-	})
-}
-
 func TestShellValidateMiseToolBackend(t *testing.T) {
 	assertShellValidator(t, `validate_mise_tool_backend NAME "$TESTVAL"`, []validatorCase{
 		{"aqua-repository", "aqua:astral-sh/uv", false},
@@ -551,38 +541,6 @@ func TestShellVerifyPackageMinimums(t *testing.T) {
 			}
 			if !tc.wantOK && code == 0 {
 				t.Fatal("invalid package floor accepted")
-			}
-		})
-	}
-}
-
-func TestShellHerdrSHA256ForArch(t *testing.T) {
-	cases := []struct {
-		name    string
-		arch    string
-		want    string
-		wantErr bool
-	}{
-		{name: "x86-64", arch: "x86_64", want: HerdrLinuxX64SHA256},
-		{name: "aarch64", arch: "aarch64", want: HerdrLinuxArm64SHA256},
-		{name: "arm64", arch: "arm64", want: HerdrLinuxArm64SHA256},
-		{name: "unsupported", arch: "armv7l", wantErr: true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			code, stdout, _ := runHelper(t,
-				`bootstrap_herdr_sha256_for_arch "$TESTARCH"`,
-				"TESTARCH="+tc.arch,
-				"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64="+HerdrLinuxX64SHA256,
-				"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_ARM64="+HerdrLinuxArm64SHA256)
-			if tc.wantErr {
-				if code == 0 {
-					t.Fatalf("arch %q: want failure, got %q", tc.arch, stdout)
-				}
-				return
-			}
-			if code != 0 || stdout != tc.want {
-				t.Fatalf("arch %q: got code=%d sha=%q, want %q", tc.arch, code, stdout, tc.want)
 			}
 		})
 	}
@@ -1225,10 +1183,10 @@ printf 'rc=%d out=[%s]' "$rc" "$actual"
 	}
 }
 
-// TestShellValidateBootstrapEnvRejectsUnsupportedHerdrArch pins the audit fix:
-// the default `all` target must fail before any host mutation when the machine
-// architecture has no pinned Herdr release binary.
-func TestShellValidateBootstrapEnvRejectsUnsupportedHerdrArch(t *testing.T) {
+// TestShellValidateBootstrapEnvRejectsUnsupportedReleaseArch pins the audit
+// fix: the default `all` target must fail before any host mutation when the
+// machine architecture has no pinned release binary.
+func TestShellValidateBootstrapEnvRejectsUnsupportedReleaseArch(t *testing.T) {
 	cases := []struct {
 		name    string
 		target  string
@@ -1366,8 +1324,6 @@ configure_user_tools_for_target all
 		"config set --file " + config + " tool_alias.inspect " + InspectMiseBackend,
 		"config set --file " + config + " tools.inspect.version " + InspectVersion,
 		"config set --file " + config + " tools.inspect.checksum sha256:" + InspectLinuxX64SHA256,
-		"config set --file " + config + " tool_alias.herdr " + HerdrMiseBackend,
-		"config set --file " + config + " tools.herdr " + HerdrVersion,
 	}
 	contents, err := os.ReadFile(miseLog)
 	if err != nil {
@@ -1378,7 +1334,18 @@ configure_user_tools_for_target all
 	}
 }
 
-func TestRemoveLegacySGToolForTarget(t *testing.T) {
+// TestRemoveLegacyMiseToolsForTarget covers each retired mise tool: sg moved
+// to ast-grep, and herdr moved to its vendor installer so `herdr update` works.
+func TestRemoveLegacyMiseToolsForTarget(t *testing.T) {
+	for _, tool := range []struct{ key, function string }{
+		{key: "sg", function: "remove_legacy_sg_tool_for_target"},
+		{key: "herdr", function: "remove_legacy_herdr_tool_for_target"},
+	} {
+		t.Run(tool.key, func(t *testing.T) { testRemoveLegacyMiseTool(t, tool.key, tool.function) })
+	}
+}
+
+func testRemoveLegacyMiseTool(t *testing.T, key, function string) {
 	for _, tc := range []struct {
 		name       string
 		legacySG   string
@@ -1413,7 +1380,7 @@ if [ "${1:-}" = --yes ] && [ "${2:-}" = unuse ] && [ "${UNUSE_FAILS:-}" = 1 ]; t
 TARGET_USER=deploy
 TARGET_HOME="$FAKE_HOME"
 run_as_target() { HOME="$FAKE_HOME" PATH="$FAKE_BIN:$PATH" MISE_LOG="$MISE_LOG" LEGACY_SG="$LEGACY_SG" UNUSE_FAILS="$UNUSE_FAILS" bash -c "$1"; }
-remove_legacy_sg_tool_for_target
+`+function+`
 `, "FAKE_HOME="+home, "FAKE_BIN="+binDir, "MISE_LOG="+miseLog, "LEGACY_SG="+tc.legacySG, "UNUSE_FAILS="+tc.unuseFails)
 			if code != tc.wantCode {
 				t.Fatalf("exit = %d, want %d (stderr: %s)", code, tc.wantCode, stderr)
@@ -1423,7 +1390,7 @@ remove_legacy_sg_tool_for_target
 				t.Fatal(err)
 			}
 			config := filepath.Join(home, ".config", "mise", "config.toml")
-			want := "--yes unuse --path " + config + " sg"
+			want := "--yes unuse --path " + config + " " + key
 			if strings.Contains(string(contents), want) != tc.wantUnuse {
 				t.Fatalf("mise log = %q, want unuse=%v", contents, tc.wantUnuse)
 			}
@@ -1462,99 +1429,102 @@ func TestInstallUserToolsRepairsOnlyFailedComponents(t *testing.T) {
 			name:           "all-healthy",
 			target:         "all",
 			wantLog:        "already installed",
-			mustNotContain: []string{"mise --yes install", "npm ci", "integration install"},
+			mustNotContain: []string{"mise --yes install", "install.sh", "integration install"},
 		},
 		{
+			// Pi no longer lives in the Node tree, so a Node repair leaves the
+			// vendor-managed Pi alone.
 			name:           "all-npm-drift",
 			target:         "all",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != node\|* ]]; }`,
-			mustContain:    []string{"mise --yes install --force node@" + NodeVersion, "npm ci --omit=dev --ignore-scripts"},
-			mustNotContain: []string{"mise --yes install node@", "--force rust@", "--force herdr@"},
+			mustContain:    []string{"mise --yes install --force node@" + NodeVersion},
+			mustNotContain: []string{"mise --yes install node@", "--force rust@", PiInstallerURL, HerdrInstallerURL},
 		},
 		{
 			name:           "node-npm-drift",
 			target:         "node",
 			stubs:          "target_node_ready() { return 1; }",
 			mustContain:    []string{"mise --yes install --force node@" + NodeVersion},
-			mustNotContain: []string{"mise --yes install node@", "npm ci", "herdr@"},
+			mustNotContain: []string{"mise --yes install node@", PiInstallerURL, HerdrInstallerURL},
 		},
 		{
 			name:           "pi-npm-drift",
 			target:         "pi",
 			stubs:          "target_node_ready() { return 1; }",
-			mustContain:    []string{"mise --yes install --force node@" + NodeVersion, "npm ci --omit=dev --ignore-scripts"},
-			mustNotContain: []string{"mise --yes install node@", "herdr@"},
+			mustContain:    []string{"mise --yes install --force node@" + NodeVersion},
+			mustNotContain: []string{"mise --yes install node@", PiInstallerURL, HerdrInstallerURL},
 		},
 		{
 			name:           "integration-stale-only",
 			target:         "all",
 			stubs:          "target_herdr_pi_integration_ready() { return 1; }",
-			mustContain:    []string{"herdr integration install pi"},
-			mustNotContain: []string{"mise --yes install", "npm ci"},
+			mustContain:    []string{`"$HOME/.local/bin/herdr" integration install pi`},
+			mustNotContain: []string{"mise --yes install", "install.sh"},
 		},
 		{
 			name:           "tmux-stale-only",
 			target:         "all",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != tmux\|* ]]; }`,
 			mustContain:    []string{"mise --yes install tmux@" + TmuxVersion},
-			mustNotContain: []string{"node@", "--force herdr", "npm ci", "integration install"},
+			mustNotContain: []string{"node@", HerdrInstallerURL, PiInstallerURL, "integration install"},
 		},
 		{
 			name:           "uv-stale-only",
 			target:         "all",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != uv\|* ]]; }`,
 			mustContain:    []string{"mise --yes install uv@" + UVVersion},
-			mustNotContain: []string{"node@", "rust@", "--force herdr", "npm ci", "integration install"},
+			mustNotContain: []string{"node@", "rust@", HerdrInstallerURL, PiInstallerURL, "integration install"},
 		},
 		{
 			name:           "rust-stale-only",
 			target:         "all",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != rust\|* ]]; }`,
 			mustContain:    []string{"mise --yes install --force rust@" + RustVersion},
-			mustNotContain: []string{"node@", "uv@", "--force herdr", "npm ci", "integration install"},
+			mustNotContain: []string{"node@", "uv@", HerdrInstallerURL, PiInstallerURL, "integration install"},
 		},
 		{
 			name:           "ast-grep-stale-only",
 			target:         "all",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != ast-grep\|* ]]; }`,
 			mustContain:    []string{"mise --yes install --force ast-grep@" + AstGrepVersion},
-			mustNotContain: []string{"sem@", "inspect@", "--force herdr", "npm ci", "integration install"},
+			mustNotContain: []string{"sem@", "inspect@", HerdrInstallerURL, PiInstallerURL, "integration install"},
 		},
 		{
 			name:           "sem-stale-only",
 			target:         "all",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != sem\|* ]]; }`,
 			mustContain:    []string{"mise --yes install --force sem@" + SemVersion},
-			mustNotContain: []string{"ast-grep@", "inspect@", "--force herdr", "npm ci", "integration install"},
+			mustNotContain: []string{"ast-grep@", "inspect@", HerdrInstallerURL, PiInstallerURL, "integration install"},
 		},
 		{
 			name:           "inspect-stale-only",
 			target:         "all",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != inspect\|* ]]; }`,
 			mustContain:    []string{"mise --yes install --force inspect@" + InspectVersion},
-			mustNotContain: []string{"ast-grep@", "sem@", "--force herdr", "npm ci", "integration install"},
+			mustNotContain: []string{"ast-grep@", "sem@", HerdrInstallerURL, PiInstallerURL, "integration install"},
 		},
 		{
 			name:           "git-gh-stale-only",
 			target:         "git",
 			stubs:          `target_managed_mise_tool_ready() { [[ $1 != gh\|* ]]; }`,
 			mustContain:    []string{"mise --yes install gh@" + GitHubCLIVersion},
-			mustNotContain: []string{"node@", "npm ci", "herdr@"},
+			mustNotContain: []string{"node@", PiInstallerURL, HerdrInstallerURL},
 		},
 		{
-			name:           "pi-stale-only",
-			target:         "pi",
-			stubs:          "target_pi_ready() { return 1; }",
-			mustContain:    []string{"npm ci --omit=dev --ignore-scripts"},
-			mustNotContain: []string{"mise --yes install node@"},
+			name:   "pi-stale-only",
+			target: "pi",
+			stubs:  "target_pi_ready() { return 1; }",
+			// The legacy copy goes first: Pi's installer refuses an unmanaged pi.
+			mustContain:    []string{"/" + legacyPiDirectoryForTest + "/", PiInstallerURL, `"$HOME/.local/bin/mise" exec -- setsid -w timeout`},
+			mustNotContain: []string{"mise --yes install node@", HerdrInstallerURL},
 		},
 		{
-			name:           "herdr-digest-unfixable",
+			name:           "herdr-broken-unfixable",
 			target:         "all",
 			stubs:          "target_herdr_ready() { return 1; }",
 			wantCode:       1,
-			mustContain:    []string{"--force herdr@" + HerdrVersion},
-			mustNotContain: []string{"integration install pi"},
+			mustContain:    []string{HerdrInstallerURL, `env HERDR_INSTALL_DIR="$HOME/.local/bin" setsid -w timeout`},
+			mustNotContain: []string{"integration install pi", PiInstallerURL},
 		},
 	}
 	for _, tc := range cases {
@@ -1599,7 +1569,10 @@ install_user_tools_for_target ` + tc.target + `
 	}
 }
 
-func TestInstallUserToolsRepairsWrongNPMAndRestoresPi(t *testing.T) {
+// TestInstallUserToolsRepairsWrongNPMWithoutReinstallingPi proves a Node
+// repair converges npm and leaves the vendor-managed Pi alone: Pi lives
+// outside the Node tree now, and its updates belong to `pi update`.
+func TestInstallUserToolsRepairsWrongNPMWithoutReinstallingPi(t *testing.T) {
 	for _, target := range []string{"node", "pi", "all"} {
 		t.Run(target, func(t *testing.T) {
 			dir := t.TempDir()
@@ -1610,52 +1583,18 @@ func TestInstallUserToolsRepairsWrongNPMAndRestoresPi(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			// mise creates these when it installs Node; the Pi stage lives beside them.
-			for _, sub := range []string{"lib", "bin"} {
-				if err := os.MkdirAll(filepath.Join(dir, ".local/share/mise/installs/node", NodeVersion, sub), 0o700); err != nil {
-					t.Fatal(err)
-				}
-			}
 			npmState := filepath.Join(dir, "npm-version")
-			piState := filepath.Join(dir, "pi-installed")
 			miseLog := filepath.Join(dir, "mise.log")
 			if err := os.WriteFile(npmState, []byte("0.0.0\n"), 0o600); err != nil {
 				t.Fatal(err)
-			}
-			if target != "node" {
-				if err := os.WriteFile(piState, []byte("installed\n"), 0o600); err != nil {
-					t.Fatal(err)
-				}
 			}
 			fakeMise := `#!/bin/sh
 set -eu
 printf '%s\n' "$*" >>"$MISE_LOG"
 [ "${1:-}" != --yes ] || shift
-case "${1:-}" in
-  install)
-    shift
-    if [ "${1:-}" = --force ]; then
-      shift
-      case " ${*} " in
-        *" node@"*)
-          printf '%s\n' "$EXPECTED_NPM" >"$NPM_STATE"
-          rm -f "$PI_STATE"
-          ;;
-      esac
-    fi
-    ;;
-  exec)
-    shift
-    [ "${1:-}" != -- ] || shift
-    # npm ci runs inside the Pi stage, so it leaves the CLI the install checks for.
-    if [ "${1:-}" = npm ] && [ "${2:-}" = ci ]; then
-      mkdir -p "node_modules/$PI_TOOL/$PI_BIN_DIR"
-      : >"node_modules/$PI_TOOL/$PI_BIN"
-      printf 'installed\n' >"$PI_STATE"
-    fi
-    ;;
-  reshim) ;;
-esac
+if [ "${1:-}" = install ] && [ "${2:-}" = --force ]; then
+  case " $* " in *" node@"*) printf '%s\n' "$EXPECTED_NPM" >"$NPM_STATE" ;; esac
+fi
 `
 			for _, path := range []string{filepath.Join(binDir, "mise"), filepath.Join(miseBinDir, "mise")} {
 				if err := os.WriteFile(path, []byte(fakeMise), 0o700); err != nil {
@@ -1669,30 +1608,25 @@ TARGET_GID=1000
 ensure_mise_shell_activation() { :; }
 repair_mise_config_for_user() { :; }
 configure_user_tools_for_target() { :; }
-run_as_target() { HOME="$FAKE_HOME" PATH="$FAKE_BIN:$PATH" NPM_STATE="$NPM_STATE" PI_STATE="$PI_STATE" MISE_LOG="$MISE_LOG" EXPECTED_NPM="$EXPECTED_NPM" PI_TOOL="$PI_TOOL" PI_BIN="$PI_BIN" PI_BIN_DIR="$PI_BIN_DIR" bash -c "$1"; }
+run_as_target() { HOME="$FAKE_HOME" PATH="$FAKE_BIN:$PATH" NPM_STATE="$NPM_STATE" MISE_LOG="$MISE_LOG" EXPECTED_NPM="$EXPECTED_NPM" bash -c "$1"; }
 target_node_ready() { [[ $(cat "$NPM_STATE") == "$EXPECTED_NPM" ]]; }
 target_managed_mise_tool_ready() { case "$1" in node\|*) target_node_ready ;; *) return 0 ;; esac; }
-target_pi_ready() { target_node_ready && [[ -f $PI_STATE ]]; }
+target_pi_ready() { return 0; }
 target_herdr_ready() { return 0; }
 target_herdr_pi_integration_ready() { return 0; }
 install_user_tools_for_target "$TEST_TARGET"
 target_node_ready
-if [[ $TEST_TARGET != node ]]; then target_pi_ready; fi
 `
 			code, _, stderr := runHelper(t, snippet, append(manifestEnv(),
 				"FAKE_HOME="+dir,
 				"FAKE_BIN="+binDir,
 				"NPM_STATE="+npmState,
-				"PI_STATE="+piState,
 				"MISE_LOG="+miseLog,
 				"EXPECTED_NPM="+NPMVersion,
 				"TEST_TARGET="+target,
-				"PI_TOOL="+PiToolName,
-				"PI_BIN="+piLock.bin,
-				"PI_BIN_DIR="+filepath.Dir(piLock.bin),
 			)...)
 			if code != 0 {
-				t.Fatalf("%s failed to converge npm/Pi state: %s", target, stderr)
+				t.Fatalf("%s failed to converge npm state: %s", target, stderr)
 			}
 			log, err := os.ReadFile(miseLog)
 			if err != nil {
@@ -1701,92 +1635,192 @@ if [[ $TEST_TARGET != node ]]; then target_pi_ready; fi
 			if !strings.Contains(string(log), "install --force node@"+NodeVersion) {
 				t.Fatalf("%s did not force Node replacement: %s", target, log)
 			}
-			if target != "node" && !strings.Contains(string(log), "exec -- npm ci --omit=dev --ignore-scripts") {
-				t.Fatalf("%s did not restore Pi after Node replacement: %s", target, log)
+			if strings.Contains(string(log), "setsid") {
+				t.Fatalf("%s reran the Pi installer after a Node repair: %s", target, log)
 			}
 		})
 	}
 }
 
-// TestShellTargetHerdrReadyVerifiesDigestBeforeExecution drives the real
-// target_herdr_ready against a fake mise/herdr pair and proves a wrong SHA-256
-// blocks herdr execution entirely (audit: the digest gate must precede any
-// execution, not just the reported result).
-func TestShellTargetHerdrReadyVerifiesDigestBeforeExecution(t *testing.T) {
-	requireBash(t)
-	if _, err := exec.LookPath("sha256sum"); err != nil {
-		t.Skip("sha256sum not available on this host")
+// legacyPiDirectoryForTest mirrors LEGACY_PI_INSTALL_DIRECTORY, the directory
+// older releases used, so the cleanup tests pin the exact retired path.
+const legacyPiDirectoryForTest = "serverpro-pi"
+
+// nativeProbeHome builds a fake target home whose mise exec runs the command
+// with the test PATH, so the Go-owned probes resolve CLIs as a host would.
+func nativeProbeHome(t *testing.T) (home, extraBin string) {
+	t.Helper()
+	dir := t.TempDir()
+	home = filepath.Join(dir, "home")
+	extraBin = filepath.Join(dir, "shadow")
+	for _, d := range []string{filepath.Join(home, ".local", "bin"), extraBin} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	miseScript := "#!/bin/sh\nif [ \"${1:-}\" = exec ]; then shift; [ \"${1:-}\" != -- ] || shift; fi\nexec \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(home, ".local", "bin", "mise"), []byte(miseScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return home, extraBin
+}
+
+func writeExecutable(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestShellNativeAgentProbes drives the Go-owned Pi and Herdr probes through
+// the real readiness functions: only the vendor-managed copy at the vendor
+// path passes, any self-updated release version passes, and a shadowing copy
+// fails without being executed.
+func TestShellNativeAgentProbes(t *testing.T) {
+	const marker = "{\n  \"kind\": \"pi-managed-install\",\n  \"schemaVersion\": 1\n}\n"
+	cases := []struct {
+		name     string
+		function string
+		setup    func(t *testing.T, home, shadow string)
+		wantOK   bool
+	}{
+		{"pi-vendor-managed", "target_pi_ready", func(t *testing.T, home, _ string) {
+			writeExecutable(t, filepath.Join(home, ".local/bin/pi"), "#!/bin/sh\nprintf '1.7.3\\n'\n")
+			writeExecutable(t, filepath.Join(home, ".pi/agent/install/managed-install.json"), marker)
+		}, true},
+		{"pi-without-managed-marker", "target_pi_ready", func(t *testing.T, home, _ string) {
+			writeExecutable(t, filepath.Join(home, ".local/bin/pi"), "#!/bin/sh\nprintf '1.7.3\\n'\n")
+		}, false},
+		{"pi-shadowed-by-legacy-copy", "target_pi_ready", func(t *testing.T, home, shadow string) {
+			writeExecutable(t, filepath.Join(home, ".local/bin/pi"), "#!/bin/sh\nprintf '1.7.3\\n'\n")
+			writeExecutable(t, filepath.Join(home, ".pi/agent/install/managed-install.json"), marker)
+			writeExecutable(t, filepath.Join(shadow, "pi"), "#!/bin/sh\nprintf 'executed\\n' >\"$EXEC_LOG\"\n")
+		}, false},
+		{"pi-garbage-version", "target_pi_ready", func(t *testing.T, home, _ string) {
+			writeExecutable(t, filepath.Join(home, ".local/bin/pi"), "#!/bin/sh\nprintf 'not a version\\n'\n")
+			writeExecutable(t, filepath.Join(home, ".pi/agent/install/managed-install.json"), marker)
+		}, false},
+		{"herdr-vendor-installed", "target_herdr_ready", func(t *testing.T, home, _ string) {
+			writeExecutable(t, filepath.Join(home, ".local/bin/herdr"), "#!/bin/sh\nprintf 'herdr 0.9.9\\n'\n")
+		}, true},
+		{"herdr-shadowed-by-mise-copy", "target_herdr_ready", func(t *testing.T, home, shadow string) {
+			writeExecutable(t, filepath.Join(home, ".local/bin/herdr"), "#!/bin/sh\nprintf 'herdr 0.9.9\\n'\n")
+			writeExecutable(t, filepath.Join(shadow, "herdr"), "#!/bin/sh\nprintf 'executed\\n' >\"$EXEC_LOG\"\n")
+		}, false},
+		{"herdr-missing", "target_herdr_ready", func(*testing.T, string, string) {}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home, shadow := nativeProbeHome(t)
+			execLog := filepath.Join(t.TempDir(), "exec.log")
+			tc.setup(t, home, shadow)
+			// The shadow directory precedes ~/.local/bin, as an activated
+			// mise shell puts the Node or tool bin directory first.
+			code, _, stderr := runHelper(t, `
+TARGET_USER=deploy
+run_as_target() { HOME="$FAKE_HOME" PATH="$SHADOW:$FAKE_HOME/.local/bin:$PATH" EXEC_LOG="$EXEC_LOG" bash -c "$1"; }
+`+tc.function, append(manifestEnv(), "FAKE_HOME="+home, "SHADOW="+shadow, "EXEC_LOG="+execLog)...)
+			if (code == 0) != tc.wantOK {
+				t.Fatalf("exit = %d, want ok=%v (stderr: %s)", code, tc.wantOK, stderr)
+			}
+			if _, err := os.Stat(execLog); err == nil {
+				t.Fatal("probe executed a shadowing copy")
+			}
+		})
+	}
+}
+
+// TestShellNativeInstallerFailsClosed runs the generated installer commands
+// against a fake curl: a complete shell script runs detached from the
+// terminal, while a failed download or a non-script body stops before
+// anything executes.
+func TestShellNativeInstallerFailsClosed(t *testing.T) {
+	if _, err := exec.LookPath("setsid"); err != nil {
+		t.Skip("setsid not available on this host")
 	}
 	cases := []struct {
-		name         string
-		herdrVersion string
-		realDigest   bool
-		wantOK       bool
-		wantExecuted bool
+		name    string
+		curl    string
+		wantOK  bool
+		wantRan bool
 	}{
-		{"valid-binary", HerdrVersion, true, true, true},
-		{"wrong-digest", HerdrVersion, false, false, false},
-		{"wrong-version", "9.9.9", true, false, true},
+		{"runs-downloaded-script", "#!/bin/sh\nwhile [ $# -gt 0 ]; do [ \"$1\" = -o ] && out=$2; shift; done\nprintf '#!/bin/sh\\nprintf ran >\"$RAN_LOG\"\\n' >\"$out\"\n", true, true},
+		{"download-fails", "#!/bin/sh\nexit 22\n", false, false},
+		{"not-a-shell-script", "#!/bin/sh\nwhile [ $# -gt 0 ]; do [ \"$1\" = -o ] && out=$2; shift; done\nprintf '<html>printf ran >\"$RAN_LOG\"</html>\\n' >\"$out\"\n", false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			fakeHome := filepath.Join(dir, "home")
 			fakeBin := filepath.Join(dir, "bin")
-			miseBin := filepath.Join(fakeHome, ".local", "bin")
-			for _, d := range []string{fakeBin, miseBin} {
-				if err := os.MkdirAll(d, 0o700); err != nil {
-					t.Fatal(err)
-				}
+			writeExecutable(t, filepath.Join(fakeBin, "curl"), tc.curl)
+			ranLog := filepath.Join(dir, "ran.log")
+			code, _, stderr := runHelper(t, `
+commands=$(native_installer_commands Test https://example.invalid/install.sh '')
+PATH="$FAKE_BIN:$PATH" RAN_LOG="$RAN_LOG" bash -c "$commands"
+`, "FAKE_BIN="+fakeBin, "RAN_LOG="+ranLog)
+			if (code == 0) != tc.wantOK {
+				t.Fatalf("exit = %d, want ok=%v (stderr: %s)", code, tc.wantOK, stderr)
 			}
-			herdrScript := "#!/bin/sh\n" +
-				"printf 'executed %s\\n' \"${1:-}\" >>\"$HERDR_LOG\"\n" +
-				"if [ \"${1:-}\" = --version ]; then printf 'herdr " + tc.herdrVersion + "\\n'; fi\n"
-			digest := sha256.Sum256([]byte(herdrScript))
-			if err := os.WriteFile(filepath.Join(fakeBin, "herdr"), []byte(herdrScript), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			miseScript := "#!/bin/sh\n" +
-				"if [ \"${1:-}\" = exec ]; then shift; if [ \"${1:-}\" = -- ]; then shift; fi; fi\n" +
-				"exec \"$@\"\n"
-			if err := os.WriteFile(filepath.Join(miseBin, "mise"), []byte(miseScript), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			sha := strings.Repeat("0", 64)
-			if tc.realDigest {
-				sha = hex.EncodeToString(digest[:])
-			}
-			// Duplicate env keys resolve to the last value (os/exec), so the
-			// override simply appends after manifestEnv().
-			env := append(manifestEnv(),
-				"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_X64="+sha,
-				"SERVERPRO_BOOTSTRAP_HERDR_SHA256_LINUX_ARM64="+sha,
-				"FAKE_HOME="+fakeHome,
-				"FAKE_BIN="+fakeBin,
-				"HERDR_LOG="+filepath.Join(dir, "herdr.log"))
-			snippet := `
-TARGET_USER=deploy
-export HERDR_LOG
-run_as_target() { HOME="$FAKE_HOME" PATH="$FAKE_BIN:$PATH" bash -c "$1"; }
-status=0
-target_herdr_ready || status=$?
-printf 'LOG=['
-cat "$HERDR_LOG" 2>/dev/null
-printf ']'
-exit "$status"
-`
-			code, stdout, stderr := runHelper(t, snippet, env...)
-			if tc.wantOK && code != 0 {
-				t.Fatalf("want ready, got exit %d (stderr: %s)", code, stderr)
-			}
-			if !tc.wantOK && code == 0 {
-				t.Fatal("want not-ready, got exit 0")
-			}
-			executed := strings.Contains(stdout, "executed --version")
-			if executed != tc.wantExecuted {
-				t.Fatalf("herdr executed = %v, want %v (stdout: %s)", executed, tc.wantExecuted, stdout)
+			_, err := os.Stat(ranLog)
+			if ran := err == nil; ran != tc.wantRan {
+				t.Fatalf("installer ran = %v, want %v (stderr: %s)", ran, tc.wantRan, stderr)
 			}
 		})
+	}
+}
+
+// TestShellLegacyPiCleanupRemovesOnlyRetiredCopies proves the migration
+// removes the Pi that older releases placed in the mise Node tree and keeps
+// an operator's own pi link.
+func TestShellLegacyPiCleanupRemovesOnlyRetiredCopies(t *testing.T) {
+	home := t.TempDir()
+	nodeRoot := filepath.Join(home, ".local/share/mise/installs/node", NodeVersion)
+	otherRoot := filepath.Join(home, ".local/share/mise/installs/node", "22.0.0")
+	legacyBin := "../lib/" + legacyPiDirectoryForTest + "/node_modules/" + PiToolName + "/dist/cli.js"
+	for _, d := range []string{
+		filepath.Join(nodeRoot, "bin"),
+		filepath.Join(nodeRoot, "lib", legacyPiDirectoryForTest, "node_modules"),
+		filepath.Join(nodeRoot, "lib", "node_modules", PiToolName),
+		filepath.Join(otherRoot, "bin"),
+	} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(legacyBin, filepath.Join(nodeRoot, "bin", "pi")); err != nil {
+		t.Fatal(err)
+	}
+	operatorLink := filepath.Join(otherRoot, "bin", "pi")
+	if err := os.Symlink("/opt/operator/pi", operatorLink); err != nil {
+		t.Fatal(err)
+	}
+	miseLog := filepath.Join(home, "mise.log")
+	writeExecutable(t, filepath.Join(home, ".local", "bin", "mise"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >>\""+miseLog+"\"\n")
+	code, _, stderr := runHelper(t, `
+commands=$(legacy_pi_cleanup_commands)
+HOME="$FAKE_HOME" bash -c "set -euo pipefail; $commands"
+`, append(manifestEnv(), "FAKE_HOME="+home)...)
+	if code != 0 {
+		t.Fatalf("cleanup failed: %s", stderr)
+	}
+	for _, gone := range []string{
+		filepath.Join(nodeRoot, "bin", "pi"),
+		filepath.Join(nodeRoot, "lib", legacyPiDirectoryForTest),
+		filepath.Join(nodeRoot, "lib", "node_modules", PiToolName),
+	} {
+		if _, err := os.Lstat(gone); !os.IsNotExist(err) {
+			t.Fatalf("legacy path still present: %s", gone)
+		}
+	}
+	if _, err := os.Lstat(operatorLink); err != nil {
+		t.Fatalf("operator pi link removed: %v", err)
+	}
+	// A stale shim would still make Pi's installer refuse, so shims rebuild.
+	if log, err := os.ReadFile(miseLog); err != nil || strings.TrimSpace(string(log)) != "reshim" {
+		t.Fatalf("mise calls = %q (%v), want reshim", log, err)
 	}
 }
 

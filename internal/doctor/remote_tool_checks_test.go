@@ -27,7 +27,7 @@ func TestRemoteToolChecksPassWhenInstalled(t *testing.T) {
 		{name: "mise", out: bootstraptools.MinimumMiseVersion},
 		{name: "node " + bootstraptools.NodeVersion, out: "v" + bootstraptools.NodeVersion},
 		{name: "npm " + bootstraptools.NPMVersion, out: bootstraptools.NPMVersion},
-		{name: "pi " + bootstraptools.PiVersion, out: bootstraptools.PiVersion},
+		{name: bootstraptools.PiCheckName, out: "pi 1.5.2 (vendor-managed; update with pi update)"},
 		{name: "uv " + bootstraptools.UVVersion, out: "uv " + bootstraptools.UVVersion},
 		{name: "rust " + bootstraptools.RustVersion, out: "rustc " + bootstraptools.RustVersion + "\ncargo " + bootstraptools.RustVersion + "\nrustfmt " + bootstraptools.RustVersion + "\nclippy 0.1.97\nrust-docs-x86_64-unknown-linux-gnu"},
 		{name: "tmux " + bootstraptools.TmuxVersion, out: "tmux " + bootstraptools.TmuxVersion},
@@ -37,8 +37,8 @@ func TestRemoteToolChecksPassWhenInstalled(t *testing.T) {
 		{name: "ast-grep " + bootstraptools.AstGrepVersion, out: "ast-grep " + bootstraptools.AstGrepVersion},
 		{name: "sem " + bootstraptools.SemVersion, out: "sem " + bootstraptools.SemVersion},
 		{name: "inspect " + bootstraptools.InspectVersion, out: "inspect " + bootstraptools.InspectVersion + "\nsha256 " + bootstraptools.InspectLinuxX64SHA256},
-		{name: "herdr " + bootstraptools.HerdrVersion, out: "herdr " + bootstraptools.HerdrVersion + "\nsha256 " + bootstraptools.HerdrLinuxX64SHA256},
-		{name: "herdr pi integration", out: "pi: current"},
+		{name: bootstraptools.HerdrCheckName, out: "herdr 0.9.5 (vendor-managed; update with herdr update)"},
+		{name: bootstraptools.HerdrPiIntegrationCheck, out: "pi: current"},
 	}
 	responses := make(map[string][]remoteCall, len(toolEvidence))
 	for _, tool := range toolEvidence {
@@ -69,15 +69,15 @@ func TestRemoteToolChecksFixRunsBootstrapOnce(t *testing.T) {
 		out  string
 	}{
 		{name: "node " + bootstraptools.NodeVersion, err: "node missing", out: "v" + bootstraptools.NodeVersion},
-		{name: "pi " + bootstraptools.PiVersion, err: "pi missing", out: bootstraptools.PiVersion},
+		{name: bootstraptools.PiCheckName, err: "pi missing", out: "pi 1.5.2"},
 		{name: "uv " + bootstraptools.UVVersion, err: "uv missing", out: "uv " + bootstraptools.UVVersion},
 		{name: "rust " + bootstraptools.RustVersion, err: "rust missing", out: "rustc " + bootstraptools.RustVersion + "\ncargo " + bootstraptools.RustVersion + "\nrustfmt " + bootstraptools.RustVersion + "\nclippy 0.1.97\nrust-docs-x86_64-unknown-linux-gnu"},
 		{name: "rg " + bootstraptools.RipgrepVersion, err: "rg missing", out: "ripgrep " + bootstraptools.RipgrepVersion},
 		{name: "ast-grep " + bootstraptools.AstGrepVersion, err: "ast-grep missing", out: "ast-grep " + bootstraptools.AstGrepVersion},
 		{name: "sem " + bootstraptools.SemVersion, err: "sem missing", out: "sem " + bootstraptools.SemVersion},
 		{name: "inspect " + bootstraptools.InspectVersion, err: "inspect missing", out: "inspect " + bootstraptools.InspectVersion},
-		{name: "herdr " + bootstraptools.HerdrVersion, err: "herdr missing", out: "herdr " + bootstraptools.HerdrVersion},
-		{name: "herdr pi integration", err: "pi integration missing", out: "pi: current"},
+		{name: bootstraptools.HerdrCheckName, err: "herdr missing", out: "herdr 0.9.5"},
+		{name: bootstraptools.HerdrPiIntegrationCheck, err: "pi integration missing", out: "pi: current"},
 		{name: "managed package updates", err: "updates available", out: "current"},
 	}
 	responses := make(map[string][]remoteCall, len(missingTools))
@@ -245,7 +245,7 @@ func TestRemoteToolChecksKeepWarningOutputRaw(t *testing.T) {
 
 func TestRemoteToolChecksWithoutFixFailsMissingTool(t *testing.T) {
 	cfg := config.Example("prod")
-	piName := "pi " + bootstraptools.PiVersion
+	piName := bootstraptools.PiCheckName
 	check := remoteToolCheckByName(t, bootstraptools.Checks(cfg.Admin.Username), piName)
 	r := &scriptedRemote{responses: map[string][]remoteCall{
 		check.Command: {{err: errors.New("pi missing")}},
@@ -305,7 +305,7 @@ func TestRemoteToolChecksFixAppliedButStillFails(t *testing.T) {
 	cfg := config.Example("prod")
 	user := cfg.Admin.Username
 	checks := bootstraptools.Checks(user)
-	piName := "pi " + bootstraptools.PiVersion
+	piName := bootstraptools.PiCheckName
 	piCheck := remoteToolCheckByName(t, checks, piName)
 	r := &scriptedRemote{responses: map[string][]remoteCall{
 		// Fails initially, then fails again after the (default-success) fix.

@@ -710,19 +710,18 @@ exposes optional hosted/API and model authentication that serverpro does not
 configure. Pi is an AI coding agent with arbitrary shell-execution
 capability: installing it on a hardened host widens the admin-user trust
 boundary, so enable the `pi` or `all` target only where that is intended.
-Pi is installed with `npm ci` from the serverpro-owned lockfile into
-`<node>/lib/serverpro-pi` under the mise-managed Node, with lifecycle scripts
-disabled. Bootstrap requires a clean runtime dependency audit; doctor also
-rejects a changed lockfile or package version drift. Packages still download
-from the npm registry, so registry trust remains; the lockfile limits it to
-the reviewed versions and integrity hashes. The `all`
-target also installs Node.js `24.22.1` LTS with bundled npm `11.19.1`, Pi
-`1.5.0`, uv `0.13.5` through mise's explicit `aqua:astral-sh/uv` backend, and
+Pi installs from its vendor installer (`https://pi.dev/install.sh`), not from
+mise or an npm lockfile. It runs as the target user with the mise-managed Node
+and installs the latest stable Pi under `~/.pi/agent/`, with a launcher link at
+`~/.local/bin/pi`. Bootstrap installs only a missing or broken copy; update Pi
+later with `pi update`. Doctor requires the `~/.local/bin/pi` entrypoint, Pi's
+managed-install marker, and a semver `pi --version`. The `all`
+target also installs Node.js `24.22.1` LTS with bundled npm `11.19.1`, uv
+`0.13.5` through mise's explicit `aqua:astral-sh/uv` backend, and
 Rust `1.99.1` through `core:rust` with the default rustc, Cargo, rustfmt, Clippy,
 and docs profile. Doctor checks those exact versions and all Rust
 default-profile components. Wrong Node/npm state forces same-version Node
-replacement; `pi` and `all` reinstall Pi afterward because its global npm
-package belongs to that Node installation. It also installs tmux `3.7c`, gh
+replacement; Pi is not affected. It also installs tmux `3.7c`, gh
 `2.103.3`, rg
 `15.2.0`, fd `10.5.0`, ast-grep `0.51.0`, sem `0.29.0`, and inspect `0.1.1`.
 ast-grep, sem, and inspect use checksum-pinned GitHub release assets; inspect's
@@ -730,19 +729,19 @@ bare binary
 digest is checked before execution. On existing hosts, `all` removes the active
 deprecated `sg` mise key before managing `ast-grep`; mise prunes the old install
 when unused.
-The same target installs Herdr `0.9.5` through mise's explicit GitHub backend,
-verifies the installed Linux release
-binary against its architecture-specific SHA-256 digest, and runs
-`herdr integration install pi` as the admin user; the
-Ubuntu 24.04 and x86_64/arm64 restriction from `INSTALLATION.md` is enforced
-before any host change. Directly installed apt packages use reviewed minimums:
+The same target installs Herdr from its vendor installer
+(`https://herdr.dev/install.sh`) into `~/.local/bin`, latest stable release.
+That installer verifies the binary SHA-256 against `https://herdr.dev/latest.json`.
+Bootstrap then runs `~/.local/bin/herdr integration install pi` as the admin
+user. Directly installed apt packages use reviewed minimums:
 bootstrap checks candidates before package scripts run, accepts newer signed
-security updates, never downgrades them, and doctor reports both below-floor
-packages and cached newer candidates. Doctor
-requires the exact Herdr version, digest, and current Pi integration. Serverpro
-does not use Herdr's self-updater and never starts, stops, or restarts running
-Herdr sessions; rerun managed bootstrap for package updates, then restart sessions
-only when the operator chooses. See `INSTALLATION.md` for the install-time
+security updates, and never downgrades them; doctor reports both below-floor
+packages and cached newer candidates. The Ubuntu 24.04 restriction from
+`INSTALLATION.md` is enforced before any host change. Doctor checks `herdr`
+(entrypoint and semver `--version`) and `herdr pi integration`. Update Herdr
+with `herdr update`; rerunning bootstrap does not upgrade a working copy.
+Serverpro never starts, stops, or restarts running Herdr sessions, so restart
+sessions only when the operator chooses. See `INSTALLATION.md` for the install-time
 toolset summary.
 
 ### Drift checks

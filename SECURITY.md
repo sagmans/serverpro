@@ -456,8 +456,9 @@ old, except explicitly approved fixes for disclosed vulnerabilities. Tailscale
 Node.js `24.22.1`, uv `0.13.5`, gh `2.103.3`, and sem `0.29.0` use those
 exceptions; `WEB_SOURCES.md` records the evidence. The age
 threshold governs release selection. Signed apt candidates can be newer.
-The serverpro-owned Pi lockfile is generated under seven days through npm’s
-`--min-release-age` option, with each exemption recorded in `WEB_SOURCES.md`.
+Pi and Herdr are the exception: they install as the latest stable release
+from their vendor installers and have no age gate (see the Pi and Herdr items
+below).
 containerd `2.4.2` meets seven days and
 fixes `CVE-2026-95839`, `GHSA-8647-2jxj-p2rc`, and `GHSA-hc94-p972-ch66`.
 Docker Engine, Buildx, and Compose are rebuilt with Go releases that reject
@@ -501,25 +502,12 @@ plugins. Docker warns that manual downloads do not receive automatic security
 updates. Keep ServerPro pins reviewed and run doctor with repair. Checksums
 prove agreement with reviewed bytes, not absence of upstream compromise.
 Release age and checksums do not prove that an artifact or its dependencies
-are uncompromised. Pi 1.x publishes no `npm-shrinkwrap.json`, so a plain
-`npm install -g` would resolve each transitive package to the newest match at
-install time. Serverpro owns the Pi lockfile instead. The binary embeds it and
-refuses to start unless it installs exactly the pinned Pi version, and unless
-every package is a production download from `registry.npmjs.org` with SHA-512
-integrity. Bootstrap verifies the lockfile digest, then installs it with
-`npm ci`, which rejects any integrity mismatch. Bootstrap passes the registry
-to npm, so a host or user `.npmrc` cannot redirect the downloads. Lifecycle scripts
-are disabled and development dependencies are omitted. Bootstrap and doctor
-check the
-lockfile digest and every installed package version from metadata only,
-without executing dependency code. Bootstrap also requires a clean runtime
-dependency audit before the new tree replaces the old one. Audit failure or
-unavailability stops the installer; an exact Pi CLI version alone is
-insufficient. `make check` audits the lockfile, so a new advisory blocks the
-next push.
+are uncompromised.
 
 Managed host tools install through integrity-checked sources, not
-`curl ... | sh`:
+`curl ... | sh`. Pi and Herdr are the exception: their vendor scripts have no
+published digest, so the trust root is HTTPS to the vendor origin (see below).
+Bootstrap still saves them to disk before it runs them. The other tools:
 
 - Docker is added via its official apt repository only when the downloaded
   keyring contains exactly one primary key with fingerprint
@@ -546,16 +534,42 @@ Managed host tools install through integrity-checked sources, not
   deprecated binary. Inspect has no upstream version flag, so its bare release
   binary is hashed before any inspect execution and reported with
   sanitized evidence. A failed integrity probe forces same-version replacement.
-- Herdr `0.9.5` is installed for the target user through mise's explicit GitHub
-  backend; bootstrap and doctor verify the resulting Linux binary
-  against the architecture-specific SHA-256 digest published with that GitHub
-  release. Bootstrap installs the bundled Pi integration under the target user's
-  private Pi agent directory and does not invoke Herdr self-update or session
-  lifecycle commands. Doctor verifies the digest before it runs Herdr at all.
-  On a mismatch it reads the installed version from the mise install path
-  without running the binary, so an older pinned install reports as
-  `expected herdr X, got herdr Y`. Any other mismatch reports as a SHA-256
-  mismatch.
+- Pi and Herdr use their vendor installers, not mise or a serverpro npm
+  lockfile. Their own `pi update` and `herdr update` commands do not work on
+  mise- or npm-managed copies, so serverpro installs each CLI once with the
+  vendor script and leaves later updates to the operator. Bootstrap downloads
+  `https://pi.dev/install.sh` and `https://herdr.dev/install.sh` over HTTPS
+  (`--proto '=https' --tlsv1.2`, retries, connect and total timeouts) into a
+  private temporary directory. It checks that the script starts with a
+  `/bin/sh` shebang, then runs it as the target user with stdin closed under
+  `timeout 900`. Nothing is piped into a shell. A failed download or run
+  stops bootstrap.
+- Trust in the Pi and Herdr scripts. Neither vendor publishes a checksum or
+  signature for its installer script, so the only trust root is HTTPS to the
+  vendor origin. A compromise of that origin or its TLS path reaches the
+  target user. The Herdr installer verifies the binary SHA-256 against
+  `https://herdr.dev/latest.json` (stable channel); that digest comes from
+  the same origin, so it detects corruption, not origin compromise. The Pi
+  installer fetches the vendor's `package.json` and `package-lock.json` from
+  `pi.dev` and runs `npm ci --ignore-scripts` with the mise-managed Node.
+  Packages still download from the npm registry, and the lock is the
+  vendor's, not serverpro's. Serverpro no longer embeds, digest-checks, or
+  audits a Pi lock, and the Pi runtime dependency audit is gone.
+- Accepted tradeoff. Pi and Herdr install at the latest stable release, with
+  no version pin and no seven-day age gate. Pinned copies cannot self-update,
+  so pinning would break `pi update` and `herdr update`. The operator owns
+  updates from then on. Bootstrap installs only a missing or broken copy and
+  never upgrades a working one. Review the vendor release notes before you run
+  an update on a host that holds sensitive data.
+- Doctor checks `pi`, `herdr`, and `herdr pi integration`. It requires
+  resolution to `~/.local/bin/pi` and `~/.local/bin/herdr`, Pi's managed-install
+  marker (`~/.pi/agent/install/managed-install.json`), and a semver
+  `--version` output. It does not check a version or digest. Bootstrap
+  installs the Herdr Pi integration with `herdr integration install pi` and
+  does not start, stop, or restart Herdr sessions.
+- Pi is an AI agent with shell execution. Installing it on a hardened host
+  widens the admin-user trust boundary; enable the `pi` or `all` target only
+  where that is intended.
 - Tailscale `1.104.4` first-boot and repair binaries are fetched only for
   reviewed amd64 or arm64 architectures, checked against pinned SHA-256 digests,
   and extracted by exact member name. Unsupported architectures and mismatches
@@ -618,11 +632,8 @@ Managed host tools install through integrity-checked sources, not
   repository, signature, and network errors are never retried or hidden, and
   keep apt's exit status and output.
 - Node.js `24.22.1` LTS and bundled npm `11.19.1` are exact. Node/npm drift
-  forces same-version Node replacement; `pi` and `all` reinstall Pi afterward
-  because replacing Node removes the Pi tree under it. Pi `1.5.0` is
-  installed from the serverpro-owned lockfile with lifecycle scripts
-  disabled. Packages still download from the npm registry, so enabling Pi
-  keeps a registry trust boundary that the pinned integrity hashes limit.
+  forces same-version Node replacement. Pi no longer lives in the Node tree,
+  so a Node replacement does not reinstall Pi.
 - The bootstrap script runs as root, including system-package and apt work plus
   managed-artifact download, verification, extraction, and staging. Read-only
   doctor uses existing apt candidate metadata; `--fix` refreshes metadata before
