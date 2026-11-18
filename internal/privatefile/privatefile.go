@@ -322,26 +322,34 @@ func AtomicWriteJSON(path string, value any, opt WriteOptions) error {
 }
 
 func ReadJSON(path string, out any, kind string) error {
-	if err := EnsurePrivateDir(path, kind); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	if info.Mode().Perm()&0o077 != 0 {
-		return fmt.Errorf("%s file is group/world accessible: %s", kind, path)
-	}
-	body, err := io.ReadAll(f)
+	body, err := ReadPrivate(path, kind)
 	if err != nil {
 		return err
 	}
 	return json.Unmarshal(body, out)
+}
+
+// ReadPrivate returns the raw body of a private file after the same
+// directory, symlink, and permission checks ReadJSON applies. WHY: encrypted
+// credential files and key files are not JSON, yet must keep the identical
+// fail-closed access rules as every other private artifact.
+func ReadPrivate(path, kind string) ([]byte, error) {
+	if err := EnsurePrivateDir(path, kind); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return nil, fmt.Errorf("%s file is group/world accessible: %s", kind, path)
+	}
+	return io.ReadAll(f)
 }
 
 func EnsurePrivateDir(path, kind string) error {
