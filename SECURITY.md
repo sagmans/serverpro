@@ -304,7 +304,10 @@ The keyring item is service `serverpro`, account
 `credential-key:<config root>`. The key file is
 `~/.local/share/serverpro/credential-key.txt` (`0600`, directory `0700`).
 Keyring calls have a 10 s timeout. A locked or absent keyring reads as
-"unavailable", never as "no key", so it cannot cause a replacement key.
+"unavailable", never as "no key", so it cannot cause a replacement key. On
+macOS a HOME without `~/Library/Keychains` counts as no keyring, and
+serverpro never calls `security` there, because macOS would open a
+"Keychain Not Found" dialog instead of failing.
 
 Rules:
 

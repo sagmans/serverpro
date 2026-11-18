@@ -26,12 +26,15 @@ const (
 // variable of this type so tests swap in an in-memory keyring and never touch
 // the operator's login keyring.
 type keyringBackend struct {
+	// ready reports whether the platform keyring can be used at all without
+	// a GUI dialog; nil means always ready. It runs before every call.
+	ready  func() error
 	get    func(service, user string) (string, error)
 	set    func(service, user, secret string) error
 	delete func(service, user string) error
 }
 
-var systemKeyring = keyringBackend{get: keyring.Get, set: keyring.Set, delete: keyring.Delete}
+var systemKeyring = keyringBackend{ready: systemKeyringReady, get: keyring.Get, set: keyring.Set, delete: keyring.Delete}
 
 // keyringKeyStore keeps the key in the OS keyring: the login Keychain on
 // macOS (unlocked with the login session, encrypted with the login password)
@@ -55,7 +58,7 @@ func (s keyringKeyStore) Describe() string {
 // ErrKeyStoreUnavailable, so a locked keyring never reads as "no key".
 func (s keyringKeyStore) Load() (string, error) {
 	var secret string
-	err := withKeyringTimeout(func() error {
+	err := s.call(func() error {
 		var err error
 		secret, err = s.backend.get(keyringService, s.account)
 		return err
@@ -82,20 +85,33 @@ func (s keyringKeyStore) Create(identity string) error {
 // Replace writes the item unconditionally; rotation and restore own that
 // decision.
 func (s keyringKeyStore) Replace(identity string) error {
-	return withKeyringTimeout(func() error {
+	return s.call(func() error {
 		return s.backend.set(keyringService, s.account, identity)
 	})
 }
 
 // Delete removes the item; a missing item already means "deleted".
 func (s keyringKeyStore) Delete() error {
-	err := withKeyringTimeout(func() error {
+	err := s.call(func() error {
 		return s.backend.delete(keyringService, s.account)
 	})
 	if errors.Is(err, ErrKeyNotFound) {
 		return nil
 	}
 	return err
+}
+
+// call checks the backend is ready before any keyring call. WHY: on macOS a
+// HOME without a keychain makes /usr/bin/security open a "Keychain Not
+// Found" dialog that waits for a click, which an agent run never gives;
+// failing as unavailable lets automatic selection use the key file instead.
+func (s keyringKeyStore) call(op func() error) error {
+	if s.backend.ready != nil {
+		if err := s.backend.ready(); err != nil {
+			return err
+		}
+	}
+	return withKeyringTimeout(op)
 }
 
 // withKeyringTimeout runs one keyring call under keyringTimeout and maps its

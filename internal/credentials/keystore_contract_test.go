@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -348,5 +349,39 @@ func TestAutoStoreFallsBackWhenKeyringRefusesWrite(t *testing.T) {
 	}
 	if status := Status(); !status.KeyPresent || !status.FileBacked {
 		t.Fatalf("status after fallback = %+v", status)
+	}
+}
+
+// TestMissingKeychainNeverReachesSecurity covers a macOS HOME with no
+// keychain folder, where security(1) would open a "Keychain Not Found"
+// dialog: the keyring must not be called at all, and the key goes to the file.
+func TestMissingKeychainNeverReachesSecurity(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("the keychain folder guard is macOS-only")
+	}
+	home := credentialsTestHome(t)
+	useMemoryKeyring(t)
+	guarded := systemKeyring
+	guarded.ready = systemKeyringReady
+	calls := 0
+	get := guarded.get
+	guarded.get = func(service, user string) (string, error) { calls++; return get(service, user) }
+	guarded.set = func(string, string, string) error { calls++; return nil }
+	systemKeyring = guarded
+	t.Setenv("TMPDIR", t.TempDir())
+	if before := Status(); !strings.Contains(before.Store, "OS keyring unavailable") {
+		t.Fatalf("status before the first key = %+v", before)
+	}
+	if err := SetField(ServerConfig("prod", "web"), "github_pat", "ghp-no-keychain"); err != nil {
+		t.Fatal(err)
+	}
+	if status := Status(); calls != 0 || !status.FileBacked || !status.KeyPresent {
+		t.Fatalf("keyring calls = %d, status = %+v", calls, status)
+	}
+	if err := os.MkdirAll(filepath.Join(home, "Library", "Keychains"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := systemKeyringReady(); err != nil {
+		t.Fatalf("ready with a keychain folder = %v", err)
 	}
 }
