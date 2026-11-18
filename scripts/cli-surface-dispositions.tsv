@@ -35,3 +35,14 @@ serverpro server status	server status token guard
 serverpro server stop	server stop dry-run
 serverpro tailnet	parent help: tailnet
 serverpro tailnet reconcile	tailnet reconcile token guard
+serverpro auth	parent help: auth
+serverpro auth init	auth init
+serverpro auth list	auth list names fields
+serverpro auth migrate	auth migrate
+serverpro auth recovery-key	auth recovery-key
+serverpro auth remove	auth remove field
+serverpro auth restore	auth restore current key
+serverpro auth rotate-key	auth rotate-key
+serverpro auth set	auth set tailscale token
+serverpro auth status	auth status before key
+serverpro auth verify	auth verify after migrate

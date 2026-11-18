@@ -38,13 +38,13 @@ func TestRootHelpShowsResourceFirstSurface(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"namespace", "server", "provider", "location", "size", "image", "tailnet"} {
+	for _, want := range []string{"namespace", "server", "provider", "location", "size", "image", "tailnet", "auth"} {
 		listing := "\n  " + want
 		if !strings.Contains(out.String(), listing) {
 			t.Fatalf("missing %q in help:\n%s", want, out.String())
 		}
 	}
-	for _, removed := range []string{"Secure Hetzner", "\n  account", "--account", "\n  create", "\n  bootstrap", "\n  start", "\n  stop", "\n  status", "\n  info", "\n  ssh", "\n  breakglass", "\n  destroy", "\n  init", "\n  up", "\n  down", "\n  rescue", "\n  auth", "\n  plan", "\n  provision", "\n  registry", "\n  completion", "verbose"} {
+	for _, removed := range []string{"Secure Hetzner", "\n  account", "--account", "\n  create", "\n  bootstrap", "\n  start", "\n  stop", "\n  status", "\n  info", "\n  ssh", "\n  breakglass", "\n  destroy", "\n  init", "\n  up", "\n  down", "\n  rescue", "\n  plan", "\n  provision", "\n  registry", "\n  completion", "verbose"} {
 		if strings.Contains(out.String(), removed) {
 			t.Fatalf("removed surface %q still shown:\n%s", removed, out.String())
 		}
@@ -152,7 +152,6 @@ func TestRemovedRootSurfaceIsRejected(t *testing.T) {
 		{name: "breakglass", args: []string{"breakglass"}, want: "unknown command"},
 		{name: "destroy", args: []string{"destroy"}, want: "unknown command"},
 		{name: "init", args: []string{"init"}, want: "unknown command"},
-		{name: "auth", args: []string{"auth"}, want: "unknown command"},
 		{name: "plan", args: []string{"plan"}, want: "unknown command"},
 		{name: "provision", args: []string{"provision"}, want: "unknown command"},
 		{name: "registry", args: []string{"registry"}, want: "unknown command"},

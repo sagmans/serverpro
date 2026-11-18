@@ -121,6 +121,17 @@ serverpro server ingress add SERVER --type cloudflare-tunnel --hostname HOSTNAME
 serverpro server ingress remove SERVER --hostname HOSTNAME
 
 serverpro tailnet reconcile TAILNET
+
+serverpro auth init
+serverpro auth status
+serverpro auth list [-n NAMESPACE]
+serverpro auth set SERVER FIELD -n NAMESPACE   # value on stdin or masked prompt
+serverpro auth remove SERVER FIELD -n NAMESPACE
+serverpro auth verify [-n NAMESPACE]
+serverpro auth migrate [--dry-run]
+serverpro auth recovery-key
+serverpro auth rotate-key [--store keyring|file]
+serverpro auth restore [--force]                # recovery key on stdin or masked prompt
 ```
 
 ## Namespaces and server credentials
@@ -1369,7 +1380,8 @@ remaining servers intact so the operation can be retried.
 ```text
 ~/.config/serverpro/namespaces/<namespace>/servers/<server>.yaml
 ~/.config/serverpro/namespaces/<namespace>/servers/<server>/credentials.json
-~/.local/share/serverpro/credential-key.txt
+~/.local/share/serverpro/credential-key.txt       # only with the key file store
+~/.local/share/serverpro/credential-key.next.txt  # only during a key rotation
 ~/.local/state/serverpro/registry.json
 ~/.local/state/serverpro/namespaces/<namespace>/servers/<server>.json
 ```
@@ -1385,11 +1397,10 @@ name.
 credentials.json holds service tokens (`server_provider_token`,
 `tailscale_token`, `cloudflare_token`) and stored operator auth
 (`admin_sudo_password`, `github_pat`, optional `tailscale_auth_key`),
-encrypted with age under the data key in `credential-key.txt` (both `0600`);
-the key is created on the first write with no prompt. Back up the key file:
-without it the credential files cannot be read. A legacy plaintext file is read
-and re-encrypted on the next write. To inspect a file by hand, run age v1.3.0
-or later: `age -d -i ~/.local/share/serverpro/credential-key.txt <path>`. A stored
+encrypted with age under one per-install data key; the key is created on the
+first write with no prompt. See "Credential key" below for where it lives and
+how to back it up. A legacy plaintext file is read and re-encrypted on the next
+write; `serverpro auth migrate` seals all of them at once. A stored
 `tailscale_auth_key` is never used, because serverpro always mints its own
 short-lived tagged bootstrap key. The sudo password resolves from in-process
 cache, then the
@@ -1406,3 +1417,69 @@ runtime-only.
 State is provider-neutral. Managed access policies are stored as typed
 `compute.managed_resources` references. Legacy provider-state policy keys are
 migrated on read; opaque adapter state remains only for adapter compatibility.
+
+## Credential key
+
+One data key encrypts every credential file. serverpro finds it in this order:
+
+| Order | Source | Notes |
+| --- | --- | --- |
+| 1 | `SERVERPRO_CREDENTIAL_KEY` | The key itself. Read-only; for CI and throwaway hosts. |
+| 2 | `SERVERPRO_CREDENTIAL_KEY_COMMAND` | A shell command that prints the key, for example a password manager CLI. Read-only; 30 s timeout. |
+| 3 | `SERVERPRO_KEY_STORE=keyring` or `file` | Pins one store. |
+| 4 | Automatic | An existing key file; else the macOS Keychain or Linux Secret Service; else the key file. A HOME under the temp directory always uses the key file. |
+
+Nothing prompts. Agents and automation that run as the same user get the key
+without an unlock step.
+
+```bash
+# Create the key now and print its recovery key once (also done on first write)
+serverpro auth init
+
+# Save the recovery key in a password manager, away from this machine
+serverpro auth recovery-key
+
+# See which store holds the key and the state of every credential file
+serverpro auth status
+serverpro auth verify            # nonzero exit on plaintext or unreadable files
+
+# Encrypt files left in plaintext by an older release, then rotate those tokens
+serverpro auth migrate --dry-run
+serverpro auth migrate
+
+# Store or clear one value; secrets come from stdin, never arguments
+printf '%s' "$TOKEN" | serverpro auth set webapp cloudflare_token -n demoapp
+serverpro auth remove webapp cloudflare_token -n demoapp
+
+# New key; or move a file key into the OS keyring
+serverpro auth rotate-key
+serverpro auth rotate-key --store keyring
+
+# New machine or lost keyring: install the recovery key
+serverpro auth restore < recovery-key.txt
+```
+
+`auth set` fields: `server_provider_token`, `server_provider_name`,
+`tailscale_token`, `tailscale_auth_key`, `cloudflare_token`,
+`admin_sudo_password`, `github_pat`.
+
+`auth restore` checks that the key opens every encrypted file before it stores
+anything. Use `--force` to replace a different key already in the store.
+`auth rotate-key` can resume after a crash: run it again. It does not work
+with `SERVERPRO_CREDENTIAL_KEY` or a key command, also with `--store`: rotate
+the key where it is managed, or unset the variable and import the key with
+`auth restore` first. When `SERVERPRO_KEY_STORE` is set, `--store` must match
+it. Under a HOME in the temp directory, `--store keyring` also needs
+`SERVERPRO_KEY_STORE=keyring`.
+
+To read a file without serverpro, use age v1.3.0 or later:
+
+```bash
+serverpro auth recovery-key > /tmp/key.txt
+age -d -i /tmp/key.txt ~/.config/serverpro/namespaces/<namespace>/servers/<server>/credentials.json
+rm /tmp/key.txt
+```
+
+`serverpro server doctor` reports `credential storage`: fail while any
+plaintext credential file exists, warn when the key is in the key file next to
+the ciphertext, pass when it is in the OS keyring or an external store.

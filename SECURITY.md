@@ -286,29 +286,65 @@ Credential files are encrypted at rest. Each write seals the whole set with
 [age](https://age-encryption.org) (ASCII armored, post-quantum hybrid
 X25519 + ML-KEM-768 recipient) before the bytes reach the temp file, so no
 plaintext secret touches the disk. One per-install data key unlocks every
-file. It lives outside the config tree, at
-`~/.local/share/serverpro/credential-key.txt` (`0600`, directory `0700`), so a
-backup, dotfile sync, or support bundle of `~/.config/serverpro` carries only
-ciphertext. The key is created silently on the first write; nothing prompts,
-so agents and automation run unattended. Rules:
+file. The key never lives in `~/.config/serverpro`, so a backup, dotfile sync,
+or support bundle of the config tree carries only ciphertext. The key is
+created silently on the first write; nothing prompts, so agents and automation
+run unattended.
+
+The key store is chosen per process, most explicit first:
+
+| Order | Store | Writable | Use |
+| --- | --- | --- | --- |
+| 1 | `SERVERPRO_CREDENTIAL_KEY` | No | CI and ephemeral hosts inject the key; it is never persisted. |
+| 2 | `SERVERPRO_CREDENTIAL_KEY_COMMAND` | No | A secret manager CLI prints the key (`/bin/sh -c`, own process group killed after 30 s, stderr not echoed). |
+| 3 | `SERVERPRO_KEY_STORE=keyring` or `file` | Yes | Pin one backend; an unknown value fails closed. |
+| 4 | Automatic | Yes | An existing key file wins; a HOME under the temp directory uses the key file; otherwise the macOS Keychain or Linux Secret Service, falling back to the key file when no keyring answers. |
+
+The keyring item is service `serverpro`, account
+`credential-key:<config root>`. The key file is
+`~/.local/share/serverpro/credential-key.txt` (`0600`, directory `0700`).
+Keyring calls have a 10 s timeout. A locked or absent keyring reads as
+"unavailable", never as "no key", so it cannot cause a replacement key.
+
+Rules:
 
 - A missing key with existing ciphertext fails closed on read and write.
-  serverpro never mints a replacement key over sealed files.
+  serverpro never mints a replacement key over sealed files; restore it with
+  `serverpro auth restore`.
+- One lock (`~/.local/share/serverpro/credential-key.lock`) orders key
+  creation, rotation, restore, and store moves across processes. Credential
+  writers hold it shared, so they run in parallel but never during a
+  rotation or restore. Every path takes it before any per-file lock.
 - Tampered ciphertext, and ciphertext copied to another server's path, fail
   to load.
 - A legacy plaintext `credentials.json` is still read, and the next write
-  replaces it atomically with ciphertext. Until a command writes credentials,
-  an upgraded host keeps that file in plaintext; an explicit migration step is
-  planned.
+  replaces it atomically with ciphertext. `serverpro auth migrate` seals every
+  plaintext file at once, each only after the ciphertext decrypts back to the
+  same set. Doctor fails while any plaintext file remains. Rotate tokens that
+  were stored in plaintext.
+- `serverpro auth rotate-key` saves a pending key
+  (`~/.local/share/serverpro/credential-key.next.txt`) first, reseals every
+  file for it, then replaces the active key. Reads accept both keys and writes
+  seal for both until it finishes, so a crash at any step loses nothing and a
+  rerun resumes. It refuses environment and command stores, also with
+  `--store`; import such a key with `auth restore` first.
+- `serverpro auth restore` installs a recovery key only after it opens every
+  encrypted file. Replacing a different stored key needs `--force`.
+- `serverpro auth set` takes values from stdin or a masked prompt only, never
+  from arguments, so secrets stay out of shell history and process lists.
+  `auth list` prints field names, never values.
 - Recovery needs only the age CLI, v1.3.0 or later (hybrid keys):
-  `age -d -i ~/.local/share/serverpro/credential-key.txt credentials.json`.
+  `serverpro auth recovery-key > key.txt` then
+  `age -d -i key.txt credentials.json`. Keep the recovery key in a password
+  manager, apart from the machine.
 
 Threat model, stated plainly: encryption protects leaked backups, synced
-dotfiles, grep-style token scrapers, and copied config trees. It does not
-protect against a process running as the same user, which can read the key
-file, nor against root. That access is accepted on purpose so automation is
-never blocked. A stolen disk exposes both key and ciphertext until the key
-moves into an OS keyring.
+dotfiles, grep-style token scrapers, and copied config trees. With the key in
+the OS keyring it also protects a stolen powered-off disk. It does not protect
+against a process running as the same user, which can ask the keyring or read
+the key file, nor against root. That access is accepted on purpose so
+automation and agents are never blocked. With the key file store, a stolen disk
+exposes both key and ciphertext, so doctor warns on it.
 
 Stored operator auth, encrypted at rest as above: the remote admin
 sudo password (`admin_sudo_password`, gated by `admin.store_console_password`,
@@ -332,10 +368,6 @@ toolchain, so a missing or unrepaired tool never reads as a dead credential:
 only a token GitHub rejects (or a host with no token at all) is replaced, a
 working but different token is reported for a human decision, and an
 unanswered probe stays unresolved with the egress lead.
-
-Planned hardening keeps the no-prompt rule: hold the data key in the macOS
-Keychain or Linux Secret Service where available, and add a recovery key and
-`serverpro auth` lifecycle commands.
 
 Never expose provider tokens, tunnel tokens, Tailscale auth keys, sudo
 passwords, password hashes, or cloud-init bootstrap data in logs, state, JSON,

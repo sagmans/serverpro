@@ -305,6 +305,80 @@ else
 	fail=$((fail + 1))
 fi
 
+# Credential encryption journey: key lifecycle, per-field set/remove, legacy
+# migration, rotation, and restore, all under the throwaway HOME (which pins
+# the key file store, so the operator's login keyring is never touched).
+# It runs in its own HOME so later cases still see a credential-free tree.
+main_home="$HOME"
+export HOME="$work_dir/auth-home"
+mkdir -p "$HOME"
+auth_secret="harness-tailscale-secret-value"
+auth_cred="$HOME/.config/serverpro/namespaces/mynamespace/servers/webapp/credentials.json"
+auth_legacy="$HOME/.config/serverpro/namespaces/mynamespace/servers/legacyapp/credentials.json"
+
+# auth_set pipes a value on stdin, the only way `auth set` accepts a secret.
+auth_set() {
+	printf '%s' "$2" | "$bin" -n mynamespace auth set webapp "$1"
+}
+
+# auth_restore pipes a recovery key into `auth restore`.
+auth_restore() {
+	printf '%s\n' "$1" | "$bin" auth restore
+}
+
+run_ok_grep "auth status before key" '"key_present": false' "$bin" auth status
+run_ok_grep "auth init" '"recovery_key": "AGE-SECRET-KEY-PQ-1' "$bin" auth init
+run_ok_grep "auth init existing key" '"status": "exists"' "$bin" auth init
+run_ok_text_grep "auth recovery-key" '^AGE-SECRET-KEY-PQ-1' "$bin" auth recovery-key
+auth_original_key="$("$bin" auth recovery-key)"
+run_ok_grep "auth set tailscale token" '"status": "stored"' auth_set tailscale_token "$auth_secret"
+run_fail_grep "auth set unknown field" 'unknown credential field "nope"' auth_set nope value
+run_fail_grep "auth set requires namespace" '--namespace is required' "$bin" auth set webapp tailscale_token
+if head -n 1 "$auth_cred" | grep -Fqx -- '-----BEGIN AGE ENCRYPTED FILE-----' && ! grep -Fq -- "$auth_secret" "$auth_cred"; then
+	log "PASS | auth set seals the file"
+	pass=$((pass + 1))
+else
+	log "FAIL | auth set seals the file"
+	fail=$((fail + 1))
+fi
+run_ok_grep "auth list names fields" '"tailscale_token"' "$bin" auth list
+if grep -Fq -- "$auth_secret" "$out_dir/auth_list_names_fields.out"; then
+	log "FAIL | auth list hides values"
+	fail=$((fail + 1))
+else
+	log "PASS | auth list hides values"
+	pass=$((pass + 1))
+fi
+run_ok_grep "auth verify encrypted" '"state": "encrypted"' "$bin" auth verify
+
+mkdir -p "$(dirname "$auth_legacy")"
+chmod 700 "$(dirname "$auth_legacy")"
+printf '{"namespace":"mynamespace","server":"legacyapp","cloudflare_token":"harness-legacy-cloudflare"}\n' >"$auth_legacy"
+chmod 600 "$auth_legacy"
+run_fail_grep "auth verify rejects plaintext" 'is plaintext' "$bin" auth verify
+run_ok_grep "auth migrate dry-run" '"dry_run": true' "$bin" --dry-run auth migrate
+run_ok_grep "auth migrate" '"status": "migrated"' "$bin" auth migrate
+run_ok_grep "auth migrate idempotent" '"status": "migrated"' "$bin" auth migrate
+# A rerun must find nothing left to seal: no per-file detail in its output.
+if grep -q '"paths"' "$out_dir/auth_migrate_idempotent.out"; then
+	log "FAIL | auth migrate rerun seals nothing"
+	fail=$((fail + 1))
+else
+	log "PASS | auth migrate rerun seals nothing"
+	pass=$((pass + 1))
+fi
+run_ok_grep "auth verify after migrate" '"cloudflare_token"' "$bin" auth verify
+
+run_ok_grep "auth rotate-key" '"status": "rotated"' "$bin" auth rotate-key
+run_fail_grep "auth rotate-key read-only store" 'read-only' env SERVERPRO_CREDENTIAL_KEY="$auth_original_key" "$bin" auth rotate-key
+run_ok_grep "auth verify after rotate" '"state": "encrypted"' "$bin" auth verify
+auth_rotated_key="$("$bin" auth recovery-key)"
+run_fail_grep "auth restore rejects stale key" 'recovery key does not open' auth_restore "$auth_original_key"
+run_ok_grep "auth restore current key" '"status": "restored"' auth_restore "$auth_rotated_key"
+run_fail_grep "auth verify with wrong key" 'restore it with serverpro auth restore|credential key' env SERVERPRO_KEY_STORE=file SERVERPRO_CREDENTIAL_KEY="$auth_original_key" "$bin" auth verify
+run_ok_grep "auth remove field" '"status": "removed"' "$bin" -n mynamespace auth remove webapp tailscale_token
+export HOME="$main_home"
+
 run_ok_grep "provider list" 'digitalocean|hetzner|vultr' "$bin" provider list
 for provider in digitalocean hetzner vultr; do
 	run_ok_grep "provider status $provider" "\"name\": \"$provider\"" "$bin" provider status "$provider"
