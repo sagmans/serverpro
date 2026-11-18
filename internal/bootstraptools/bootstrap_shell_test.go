@@ -1410,21 +1410,38 @@ func TestBootstrapPackageSetUpgradesInstalledPackages(t *testing.T) {
 	}
 }
 
+// installRepairCase is one readiness failure and the repair commands it
+// must, and must not, stage.
+type installRepairCase struct {
+	name           string
+	target         string
+	stubs          string
+	wantCode       int
+	wantLog        string
+	mustContain    []string
+	mustNotContain []string
+}
+
 // TestInstallUserToolsRepairsOnlyFailedComponents executes the install
 // orchestration with stubbed readiness probes and asserts only failed
 // components are reinstalled (audit: doctor repair of one stale tool must not
-// reinstall the healthy toolchain, and a digest that stays wrong must block
+// reinstall the healthy toolchain, and a Herdr that stays broken must block
 // the Pi integration step).
 func TestInstallUserToolsRepairsOnlyFailedComponents(t *testing.T) {
-	cases := []struct {
-		name           string
-		target         string
-		stubs          string
-		wantCode       int
-		wantLog        string
-		mustContain    []string
-		mustNotContain []string
-	}{
+	for _, tc := range installRepairCases() {
+		t.Run(tc.name, func(t *testing.T) { runInstallRepairCase(t, tc) })
+	}
+}
+
+// installRepairCases lives apart from its runner so each stays readable as
+// the managed tool matrix grows.
+func installRepairCases() []installRepairCase {
+	return append(agentRepairCases(), miseToolRepairCases()...)
+}
+
+// agentRepairCases cover Node and the vendor-installed agent CLIs.
+func agentRepairCases() []installRepairCase {
+	return []installRepairCase{
 		{
 			name:           "all-healthy",
 			target:         "all",
@@ -1461,6 +1478,29 @@ func TestInstallUserToolsRepairsOnlyFailedComponents(t *testing.T) {
 			mustContain:    []string{`"$HOME/.local/bin/herdr" integration install pi`},
 			mustNotContain: []string{"mise --yes install", "install.sh"},
 		},
+		{
+			name:   "pi-stale-only",
+			target: "pi",
+			stubs:  "target_pi_ready() { return 1; }",
+			// The legacy copy goes first: Pi's installer refuses an unmanaged pi.
+			mustContain:    []string{"/" + legacyPiDirectoryForTest + "/", PiInstallerURL, `"$HOME/.local/bin/mise" exec -- setsid -w timeout`},
+			mustNotContain: []string{"mise --yes install node@", HerdrInstallerURL},
+		},
+		{
+			name:           "herdr-broken-unfixable",
+			target:         "all",
+			stubs:          "target_herdr_ready() { return 1; }",
+			wantCode:       1,
+			mustContain:    []string{HerdrInstallerURL, `env HERDR_INSTALL_DIR="$HOME/.local/bin" setsid -w timeout`},
+			mustNotContain: []string{"integration install pi", PiInstallerURL},
+		},
+	}
+}
+
+// miseToolRepairCases cover the ordinary mise-managed tools, each repaired
+// alone without reinstalling the agent CLIs.
+func miseToolRepairCases() []installRepairCase {
+	return []installRepairCase{
 		{
 			name:           "tmux-stale-only",
 			target:         "all",
@@ -1510,27 +1550,15 @@ func TestInstallUserToolsRepairsOnlyFailedComponents(t *testing.T) {
 			mustContain:    []string{"mise --yes install gh@" + GitHubCLIVersion},
 			mustNotContain: []string{"node@", PiInstallerURL, HerdrInstallerURL},
 		},
-		{
-			name:   "pi-stale-only",
-			target: "pi",
-			stubs:  "target_pi_ready() { return 1; }",
-			// The legacy copy goes first: Pi's installer refuses an unmanaged pi.
-			mustContain:    []string{"/" + legacyPiDirectoryForTest + "/", PiInstallerURL, `"$HOME/.local/bin/mise" exec -- setsid -w timeout`},
-			mustNotContain: []string{"mise --yes install node@", HerdrInstallerURL},
-		},
-		{
-			name:           "herdr-broken-unfixable",
-			target:         "all",
-			stubs:          "target_herdr_ready() { return 1; }",
-			wantCode:       1,
-			mustContain:    []string{HerdrInstallerURL, `env HERDR_INSTALL_DIR="$HOME/.local/bin" setsid -w timeout`},
-			mustNotContain: []string{"integration install pi", PiInstallerURL},
-		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			capture := filepath.Join(t.TempDir(), "capture")
-			snippet := `
+}
+
+// runInstallRepairCase stubs every readiness probe healthy except the case's
+// failures, then captures what install_user_tools_for_target hands the target.
+func runInstallRepairCase(t *testing.T, tc installRepairCase) {
+	t.Helper()
+	capture := filepath.Join(t.TempDir(), "capture")
+	snippet := `
 BOOTSTRAP_TARGET=` + tc.target + `
 TARGET_USER=deploy
 TARGET_HOME=/home/deploy
@@ -1546,26 +1574,24 @@ target_herdr_pi_integration_ready() { return 0; }
 ` + tc.stubs + `
 install_user_tools_for_target ` + tc.target + `
 `
-			env := append(manifestEnv(), "CAPTURE="+capture)
-			code, _, stderr := runHelper(t, snippet, env...)
-			if code != tc.wantCode {
-				t.Fatalf("exit = %d, want %d (stderr: %s)", code, tc.wantCode, stderr)
-			}
-			if tc.wantLog != "" && !strings.Contains(stderr, tc.wantLog) {
-				t.Fatalf("stderr missing %q: %s", tc.wantLog, stderr)
-			}
-			_, captured, _ := runHelper(t, `cat "$CAPTURE"`, "CAPTURE="+capture)
-			for _, want := range tc.mustContain {
-				if !strings.Contains(captured, want) {
-					t.Fatalf("captured commands missing %q:\n%s", want, captured)
-				}
-			}
-			for _, unwanted := range tc.mustNotContain {
-				if strings.Contains(captured, unwanted) {
-					t.Fatalf("captured commands contain %q:\n%s", unwanted, captured)
-				}
-			}
-		})
+	env := append(manifestEnv(), "CAPTURE="+capture)
+	code, _, stderr := runHelper(t, snippet, env...)
+	if code != tc.wantCode {
+		t.Fatalf("exit = %d, want %d (stderr: %s)", code, tc.wantCode, stderr)
+	}
+	if tc.wantLog != "" && !strings.Contains(stderr, tc.wantLog) {
+		t.Fatalf("stderr missing %q: %s", tc.wantLog, stderr)
+	}
+	_, captured, _ := runHelper(t, `cat "$CAPTURE"`, "CAPTURE="+capture)
+	for _, want := range tc.mustContain {
+		if !strings.Contains(captured, want) {
+			t.Fatalf("captured commands missing %q:\n%s", want, captured)
+		}
+	}
+	for _, unwanted := range tc.mustNotContain {
+		if strings.Contains(captured, unwanted) {
+			t.Fatalf("captured commands contain %q:\n%s", unwanted, captured)
+		}
 	}
 }
 
