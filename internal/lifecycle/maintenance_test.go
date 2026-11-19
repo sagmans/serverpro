@@ -66,8 +66,11 @@ func TestUpgradeServerModesAndValidation(t *testing.T) {
 	if len(got.PendingPackages) != 2 || !got.RebootRequired || len(got.RebootRequiredPackages) != 1 {
 		t.Fatalf("unexpected check result: %+v", got)
 	}
-	if !strings.Contains(checkRunner.scripts[0], "apt-get -s -o Debug::NoLocking=1 --with-new-pkgs upgrade") {
-		t.Fatalf("check script missing apt simulation:\n%s", checkRunner.scripts[0])
+	if !strings.Contains(checkRunner.scripts[0], "apt-get -s -o Debug::NoLocking=1 -o Dir::Etc::Preferences=\"$tmp_dir/preferences\" --with-new-pkgs upgrade") {
+		t.Fatalf("check script missing apt simulation with temporary preferences:\n%s", checkRunner.scripts[0])
+	}
+	if !strings.Contains(checkRunner.scripts[0], "for pkg in tailscale cloudflared;") || !strings.Contains(checkRunner.scripts[0], "Pin-Priority: 1001") {
+		t.Fatalf("check script missing temporary hold for tailscale and cloudflared:\n%s", checkRunner.scripts[0])
 	}
 
 	secRunner := &scriptedMaintenanceRunner{

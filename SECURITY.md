@@ -168,8 +168,11 @@ default.
   `admin.store_console_password` is enabled, never passing secrets on argv or
   writing them to logs, and redacting errors and structured output). Every
   remote upgrade enforces the Ubuntu 24.04 (`noble`) guard and a fixed root
-  `PATH` before mutating packages, validates required credentials before apt
-  runs when `--fix` is set, requires explicit confirmation (`--yes`
+  `PATH` before mutating packages, temporarily pins installed `tailscale` and
+  `cloudflared` apt packages to their running versions so apt never cuts the
+  active Tailscale SSH transport or breaks
+  `/var/lib/serverpro/cloudflared.receipt`, validates required credentials
+  before apt runs when `--fix` is set, requires explicit confirmation (`--yes`
   non-interactively) before rebooting, and fails closed on `rebootgate`
   survivability gaps unless `--force` or `--force-reboot` is explicitly passed.
 - Doctor drift checks report what weakens this model after provisioning:

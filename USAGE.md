@@ -989,7 +989,12 @@ serverpro server upgrade webapp --fix -n mynamespace
 
 - Default mode runs `apt-get -y --with-new-pkgs upgrade` (retaining existing
   config files with `--force-confdef`/`--force-confold`) and reports upgraded
-  packages by diffing `dpkg-query` before and after.
+  packages by diffing `dpkg-query` before and after. Installed `tailscale` and
+  `cloudflared` apt packages are temporarily pinned to their current version
+  for that invocation only (without changing `/etc/apt` or dpkg holds), so an
+  upgrade never restarts `tailscaled` mid-SSH or invalidates
+  `/var/lib/serverpro/cloudflared.receipt`; use `--fix` or `server doctor --fix`
+  for their dedicated safe updaters.
 - `--security` applies only Ubuntu security-origin upgrades through
   `unattended-upgrade -v`.
 - `--check` refreshes apt lists and simulates upgrades without mutating the

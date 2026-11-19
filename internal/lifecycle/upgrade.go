@@ -43,6 +43,14 @@ const (
 	// maintenanceRootPath restricts root script execution to system directories
 	// so user PATH entries never hijack apt, dpkg, or systemd binaries.
 	maintenanceRootPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+	// upgradeManagedHoldPackages lists apt packages owned by dedicated serverpro
+	// updaters: upgrading tailscale over Tailscale SSH restarts tailscaled and
+	// drops the active session, and upgrading cloudflared outside doctor --fix
+	// invalidates /var/lib/serverpro/cloudflared.receipt.
+	upgradeManagedHoldPackages = "tailscale cloudflared"
+	upgradeManagedPinPriority  = "1001"
+	aptSystemPreferencesPath   = "/etc/apt/preferences"
 )
 
 // UpgradeOptions controls an on-demand OS package upgrade on a managed server.
@@ -127,6 +135,7 @@ func upgradeScript(mode UpgradeMode) string {
 	b.WriteString(hostplatform.APTUpdateShellFunction())
 	b.WriteString(supportedUbuntuGuard())
 	b.WriteString("apt_update >/dev/null\n")
+	writeUpgradeTempDirPrologue(&b)
 	switch mode {
 	case UpgradeModeCheck:
 		writeCheckUpgradeBody(&b)
@@ -157,37 +166,64 @@ func supportedUbuntuGuard() string {
 		"test \"${actual_codename}\" = " + shell.Quote(hostplatform.ManagedHostCodename) + " || { printf 'unsupported host codename: %s\\n' \"${actual_codename:-unknown}\" >&2; exit 1; }\n"
 }
 
+func writeUpgradeTempDirPrologue(b *strings.Builder) {
+	b.WriteString("tmp_dir=$(mktemp -d)\n")
+	b.WriteString("cleanup_upgrade_tmp() { rm -rf \"$tmp_dir\"; }\n")
+	b.WriteString("trap cleanup_upgrade_tmp EXIT\n")
+}
+
+// writeManagedUpgradePreferences pins installed serverpro-managed transport and
+// ingress packages to their current versions for this apt invocation only,
+// leaving /etc/apt and dpkg hold state untouched.
+func writeManagedUpgradePreferences(b *strings.Builder) {
+	prefsPath := shell.Quote(aptSystemPreferencesPath)
+	b.WriteString("if [ -r " + prefsPath + " ]; then\n" +
+		"  cat " + prefsPath + " >\"$tmp_dir/preferences\"\n" +
+		"  printf '\\n' >>\"$tmp_dir/preferences\"\n" +
+		"else\n" +
+		"  : >\"$tmp_dir/preferences\"\n" +
+		"fi\n" +
+		"for pkg in " + upgradeManagedHoldPackages + "; do\n" +
+		"  rec=$(dpkg-query -W -f='${db:Status-Status}|${Version}' \"$pkg\" 2>/dev/null || true)\n" +
+		"  case \"$rec\" in\n" +
+		"    installed'|'*)\n" +
+		"      ver=${rec#installed|}\n" +
+		"      printf 'Package: %s\\nPin: version %s\\nPin-Priority: " + upgradeManagedPinPriority + "\\n\\n' \"$pkg\" \"$ver\" >>\"$tmp_dir/preferences\"\n" +
+		"      ;;\n" +
+		"  esac\n" +
+		"done\n")
+}
+
 func writeCheckUpgradeBody(b *strings.Builder) {
-	b.WriteString("sim_out=$(apt-get -s -o Debug::NoLocking=1 --with-new-pkgs upgrade 2>&1)\n")
+	writeManagedUpgradePreferences(b)
+	b.WriteString("sim_out=$(apt-get -s -o Debug::NoLocking=1 -o Dir::Etc::Preferences=\"$tmp_dir/preferences\" --with-new-pkgs upgrade 2>&1)\n")
 	b.WriteString("printf '%s\\n' \"$sim_out\" | awk '/^Inst / { print \"" + markerPendingPkg + "\" $2 }'\n")
 }
 
 func writeFullUpgradeBody(b *strings.Builder) {
-	writePackageSnapshotPrologue(b)
+	writeManagedUpgradePreferences(b)
+	writePackageSnapshotBefore(b)
 	// --with-new-pkgs installs new kernel ABI security packages without ever
 	// removing installed packages, unlike dist-upgrade.
-	b.WriteString("apt-get -y --with-new-pkgs -o " + shell.Quote(hostplatform.APTLockTimeoutOption()) +
+	b.WriteString("apt-get -y --with-new-pkgs -o Dir::Etc::Preferences=\"$tmp_dir/preferences\" -o " + shell.Quote(hostplatform.APTLockTimeoutOption()) +
 		" -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold upgrade >/dev/null\n")
-	writePackageSnapshotEpilogue(b)
+	writePackageSnapshotAfter(b)
 }
 
 func writeSecurityUpgradeBody(b *strings.Builder) {
-	writePackageSnapshotPrologue(b)
+	writePackageSnapshotBefore(b)
 	// Waiting on dpkg lock first avoids failing unattended-upgrade immediately
 	// when apt-daily holds the frontend lock.
 	b.WriteString("apt-get -o " + shell.Quote(hostplatform.APTLockTimeoutOption()) + " check >/dev/null\n")
 	b.WriteString("unattended-upgrade -v >/dev/null\n")
-	writePackageSnapshotEpilogue(b)
+	writePackageSnapshotAfter(b)
 }
 
-func writePackageSnapshotPrologue(b *strings.Builder) {
-	b.WriteString("tmp_dir=$(mktemp -d)\n")
-	b.WriteString("cleanup_upgrade_tmp() { rm -rf \"$tmp_dir\"; }\n")
-	b.WriteString("trap cleanup_upgrade_tmp EXIT\n")
+func writePackageSnapshotBefore(b *strings.Builder) {
 	b.WriteString("dpkg-query -W -f='${Package}=${Version}\\n' | sort >\"$tmp_dir/before\"\n")
 }
 
-func writePackageSnapshotEpilogue(b *strings.Builder) {
+func writePackageSnapshotAfter(b *strings.Builder) {
 	b.WriteString("dpkg-query -W -f='${Package}=${Version}\\n' | sort >\"$tmp_dir/after\"\n")
 	b.WriteString("comm -13 \"$tmp_dir/before\" \"$tmp_dir/after\" | sed 's/^/" + markerUpgradedPkg + "/'\n")
 }
