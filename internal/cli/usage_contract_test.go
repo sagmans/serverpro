@@ -17,11 +17,11 @@ func TestUsageDocumentsScopedPathsAndNamespaceDelete(t *testing.T) {
 		"--state <path>",
 		"serverpro namespace delete NAME",
 		"`--config` is accepted only by",
-		"`server create`, `server doctor`, and `server bootstrap`",
+		"`server create`, `server doctor`, `server bootstrap`, `server upgrade`, and `server reboot`",
 		"`--state` is accepted only by",
 		"`server create`, `server status`, `server doctor`, `server ssh`",
 		"`server delete`, `server start`, `server stop`, `server restart`",
-		"`server bootstrap`, `server ingress add`, `server ingress list`, and `server ingress remove`",
+		"`server bootstrap`, `server upgrade`, `server reboot`, `server ingress add`, `server ingress list`, and `server ingress remove`",
 	} {
 		if !strings.Contains(doc, want) {
 			t.Fatalf("USAGE.md missing %q", want)

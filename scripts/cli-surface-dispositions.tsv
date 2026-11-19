@@ -27,12 +27,14 @@ serverpro server discover	server discover token guard
 serverpro server doctor	server doctor dry-run
 serverpro server import	server import token guard
 serverpro server list	server list fixture
+serverpro server reboot	server reboot dry-run
 serverpro server restart	server restart dry-run
 serverpro server ssh	server ssh dry-run
 serverpro server ssh-policy	server ssh-policy dry-run
 serverpro server start	server start dry-run
 serverpro server status	server status token guard
 serverpro server stop	server stop dry-run
+serverpro server upgrade	server upgrade dry-run
 serverpro tailnet	parent help: tailnet
 serverpro tailnet reconcile	tailnet reconcile token guard
 serverpro auth	parent help: auth

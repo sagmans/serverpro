@@ -107,7 +107,9 @@ access paths for app-owned deployment flows.
   - Provider-neutral registry, per-server JSON state, and context-cancellable
     workflow lock ordering.
 - Lifecycle: `internal/lifecycle`
-  - Provision flow using generic compute and optional ingress.
+  - Provision flow using generic compute and optional ingress, plus on-demand
+    Ubuntu OS upgrades (`upgrade.go`) and gated OS reboots (`reboot.go`) over
+    Tailscale SSH.
 - Gated reboot: `internal/rebootgate`
   - Embedded `serverpro-reboot` script and the timer, window, and verify
     units, rendered from the `reboot` config section. Provisioning installs

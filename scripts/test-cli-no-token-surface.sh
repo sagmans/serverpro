@@ -534,6 +534,8 @@ run_fail_grep "provider flag mismatch status" "$mismatch_pattern" "$bin" --non-i
 run_fail_grep "provider flag mismatch power" "$mismatch_pattern" "$bin" --non-interactive -y -n mynamespace -p vultr server restart webapp
 run_fail_grep "provider flag mismatch delete" "$mismatch_pattern" "$bin" --non-interactive -y -n mynamespace -p vultr server delete webapp
 run_fail_grep "provider flag mismatch bootstrap" "$mismatch_pattern" "$bin" --non-interactive -n mynamespace -p vultr server bootstrap webapp all
+run_fail_grep "provider flag mismatch upgrade" "$mismatch_pattern" "$bin" --non-interactive -n mynamespace -p vultr server upgrade webapp
+run_fail_grep "provider flag mismatch reboot" "$mismatch_pattern" "$bin" --non-interactive -y -n mynamespace -p vultr server reboot webapp
 run_fail_grep "provider flag mismatch create rerun" "$mismatch_pattern" "$bin" --non-interactive -y -n mynamespace -p vultr server create webapp --location ewr --size vc2-2c-4gb
 if [[ "$(cksum <"$config_path")" == "$config_before_mismatch" ]]; then
 	log "PASS | provider flag mismatch leaves config unchanged"
@@ -568,6 +570,20 @@ for target in all git docker mise node pi; do
 done
 run_fail_grep "server bootstrap invalid target" 'unsupported bootstrap target' "$bin" --non-interactive --dry-run -n mynamespace server bootstrap webapp badtarget
 skip_case "server bootstrap live" "requires remote sudo password and tailscale SSH"
+
+run_ok_grep "server upgrade dry-run" '"action": "upgrade"' "$bin" --non-interactive --dry-run -n mynamespace server upgrade webapp
+run_ok_grep "server upgrade security dry-run" '"mode": "security"' "$bin" --non-interactive --dry-run -n mynamespace server upgrade webapp --security
+run_ok_grep "server upgrade reboot dry-run" '"reboot_planned": true' "$bin" --non-interactive --dry-run -n mynamespace server upgrade webapp --reboot
+run_fail_grep "server upgrade check security conflict" '--check cannot be used with --security' "$bin" --non-interactive -n mynamespace server upgrade webapp --check --security
+run_fail_grep "server upgrade fix dry-run conflict" '--fix cannot be used with --dry-run' "$bin" --non-interactive --dry-run -n mynamespace server upgrade webapp --fix
+run_fail_grep "server upgrade force-reboot guard" '--force-reboot and --no-wait require --reboot' "$bin" --non-interactive -n mynamespace server upgrade webapp --force-reboot
+run_fail_grep "server upgrade reboot requires yes" '--yes required for non-interactive upgrade --reboot' "$bin" --non-interactive -n mynamespace server upgrade webapp --reboot
+skip_case "server upgrade live" "requires remote sudo password and tailscale SSH"
+
+run_ok_grep "server reboot dry-run" '"action": "reboot"' "$bin" --non-interactive --dry-run -n mynamespace server reboot webapp
+run_ok_grep "server reboot if-required dry-run" '"if_required": true' "$bin" --non-interactive --dry-run -n mynamespace server reboot webapp --if-required
+run_fail_grep "server reboot requires yes" '--yes required for non-interactive reboot' "$bin" --non-interactive -n mynamespace server reboot webapp
+skip_case "server reboot live" "requires remote sudo password and tailscale SSH"
 
 for action in start stop restart; do
 	run_ok_grep "server $action dry-run" "\"action\": \"$action\"" "$bin" --non-interactive --dry-run -n mynamespace server "$action" webapp

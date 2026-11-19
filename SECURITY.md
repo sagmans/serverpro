@@ -162,6 +162,16 @@ default.
   since. A stopped or failed check never reads as a checked boot. Doctor
   compares the installed script and units with the rendered copy by SHA-256,
   mode, and owner.
+- On-demand OS upgrades (`serverpro server upgrade`) and OS reboots
+  (`serverpro server reboot`) run over Tailscale SSH with the server's admin
+  sudo password piped on stdin (reusing the encrypted stored copy when
+  `admin.store_console_password` is enabled, never passing secrets on argv or
+  writing them to logs, and redacting errors and structured output). Every
+  remote upgrade enforces the Ubuntu 24.04 (`noble`) guard and a fixed root
+  `PATH` before mutating packages, validates required credentials before apt
+  runs when `--fix` is set, requires explicit confirmation (`--yes`
+  non-interactively) before rebooting, and fails closed on `rebootgate`
+  survivability gaps unless `--force` or `--force-reboot` is explicitly passed.
 - Doctor drift checks report what weakens this model after provisioning:
   restricted egress not in force (UFW policy, every lockdown rule, and a real
   connect to a port the lockdown never allows), OpenSSH running or able to

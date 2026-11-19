@@ -21,6 +21,8 @@ func (a *app) serverCmd() *cobra.Command {
 	cmd.AddCommand(
 		a.serverCreateCmd(),
 		a.serverBootstrapCmd(),
+		a.serverUpgradeCmd(),
+		a.serverRebootCmd(),
 		a.serverListCmd(),
 		a.serverStatusCmd(),
 		a.serverDoctorCmd(),

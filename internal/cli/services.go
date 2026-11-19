@@ -39,6 +39,8 @@ type serviceHooks struct {
 	doctorClients                  func(context.Context, config.Config, state.State, credentials.Set, string) (doctor.Clients, compute.Account, error)
 	retryDoctorSudoReport          func(context.Context, config.Config, state.State, credentials.Set, doctor.Report, string) doctor.Report
 	bootstrapTools                 func(context.Context, config.Config, state.State, string, bootstraptools.Target) error
+	upgradeServer                  func(context.Context, config.Config, state.State, string, lifecycle.UpgradeOptions) (lifecycle.UpgradeResult, error)
+	rebootServer                   func(context.Context, config.Config, state.State, string, lifecycle.RebootOptions) (lifecycle.RebootResult, error)
 	deleteTrackedExternalResources func(context.Context, serverDeleteCleanup) (state.State, error)
 	cleanupClients                 func(serverDeleteCleanup) serverCleanupClients
 	generateGitDeployKey           func(context.Context, config.Config, state.State, string, string) (string, error)
@@ -220,6 +222,20 @@ func (a *app) bootstrapTools(ctx context.Context, cfg config.Config, st state.St
 		return a.services.bootstrapTools(ctx, cfg, st, sudoPassword, target)
 	}
 	return lifecycle.BootstrapTools(ctx, remoteRunner(cfg, sudoPassword), cfg, st, target)
+}
+
+func (a *app) upgradeServer(ctx context.Context, cfg config.Config, st state.State, sudoPassword string, opts lifecycle.UpgradeOptions) (lifecycle.UpgradeResult, error) {
+	if a.services.upgradeServer != nil {
+		return a.services.upgradeServer(ctx, cfg, st, sudoPassword, opts)
+	}
+	return lifecycle.UpgradeServer(ctx, remoteRunner(cfg, sudoPassword), cfg, st, opts)
+}
+
+func (a *app) rebootServer(ctx context.Context, cfg config.Config, st state.State, sudoPassword string, opts lifecycle.RebootOptions) (lifecycle.RebootResult, error) {
+	if a.services.rebootServer != nil {
+		return a.services.rebootServer(ctx, cfg, st, sudoPassword, opts)
+	}
+	return lifecycle.RebootServer(ctx, remoteRunner(cfg, sudoPassword), cfg, st, opts)
 }
 
 func (a *app) generateGitDeployKey(ctx context.Context, cfg config.Config, st state.State, sudoPassword, repoURL string) (string, error) {

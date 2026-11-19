@@ -13,6 +13,8 @@ const (
 	progressPhaseProvision   progressPhase = "provision"
 	progressPhaseDoctor      progressPhase = "doctor"
 	progressPhaseBootstrap   progressPhase = "bootstrap"
+	progressPhaseUpgrade     progressPhase = "upgrade"
+	progressPhaseReboot      progressPhase = "reboot"
 	progressPhaseGitDeploy   progressPhase = "git-deploy"
 	progressPhaseGitIdentity progressPhase = "git-identity"
 	progressInitialAttempt                 = 1

@@ -33,7 +33,7 @@ widen support. `INSTALLATION.md` owns the full tool and package version matrix.
 ## Global flags
 
 ```text
---config <path>          config override: server create, server doctor, and server bootstrap
+--config <path>          config override: server create, doctor, bootstrap, upgrade, reboot
 --state <path>           state override: supported server and server ingress commands
 -n, --namespace <id>     serverpro namespace
 -p, --provider <name>    compute provider, e.g. hetzner, vultr, or digitalocean
@@ -50,17 +50,17 @@ uses the token or calls a provider. Commands on an existing server do not need
 `-p`. `server list` and a `server status` lookup without `-n` use `-p` as a
 filter, so they skip servers of another provider.
 
+<!-- The usage contract test matches each list line below as one line. -->
+<!-- markdownlint-disable MD013 -->
+
 Persistent flags are command-scoped; each command's `--help` shows only flags
 that command accepts. `--config` is accepted only by
-`server create`, `server doctor`, and `server bootstrap`.
+`server create`, `server doctor`, `server bootstrap`, `server upgrade`, and `server reboot`.
 `--state` is accepted only by:
-
-<!-- The usage contract test matches each item below as one line. -->
-<!-- markdownlint-disable MD013 -->
 
 - `server create`, `server status`, `server doctor`, `server ssh`
 - `server delete`, `server start`, `server stop`, `server restart`
-- `server bootstrap`, `server ingress add`, `server ingress list`, and `server ingress remove`
+- `server bootstrap`, `server upgrade`, `server reboot`, `server ingress add`, `server ingress list`, and `server ingress remove`
 
 <!-- markdownlint-enable MD013 -->
 
@@ -98,6 +98,8 @@ serverpro namespace delete NAME
 
 serverpro server create NAME
 serverpro server bootstrap NAME [all|git|docker|mise|node|pi]
+serverpro server upgrade NAME [--security|--check] [--reboot [--force-reboot] [--no-wait]] [--fix]
+serverpro server reboot NAME [--if-required] [--force] [--no-wait]
 serverpro server list
 serverpro server status NAME
 serverpro server doctor NAME [--fix] [--full]
@@ -519,6 +521,9 @@ serverpro server status webapp -n mynamespace
 serverpro server doctor webapp -n mynamespace
 serverpro server bootstrap webapp all -n mynamespace
 serverpro server bootstrap webapp git -n mynamespace
+serverpro server upgrade webapp --check -n mynamespace
+serverpro server upgrade webapp -n mynamespace
+serverpro server reboot webapp --if-required -n mynamespace --yes
 serverpro server ssh webapp -n mynamespace
 serverpro server start webapp -n mynamespace -p hetzner --yes
 serverpro server stop webapp -n mynamespace -p hetzner --yes
@@ -966,6 +971,51 @@ action. The wrapper and every directory above it must be root-owned and not
 writable by group or others, or the rule fails too. If the rule grants `ALL`,
 limit it to those commands and run
 `visudo -c`.
+
+### OS upgrades and on-demand reboots
+
+`serverpro server upgrade NAME` refreshes apt metadata and applies Ubuntu 24.04
+package updates over Tailscale SSH using the server's admin sudo password. When
+`admin.store_console_password` is enabled, it reuses the encrypted
+`admin_sudo_password` stored in the server's credential file; otherwise it reads
+`<NAMESPACE>_<SERVER>_SUDOPASS` or prompts interactively.
+
+```sh
+serverpro server upgrade webapp --check -n mynamespace
+serverpro server upgrade webapp --security -n mynamespace
+serverpro server upgrade webapp --reboot --yes -n mynamespace
+serverpro server upgrade webapp --fix -n mynamespace
+```
+
+- Default mode runs `apt-get -y --with-new-pkgs upgrade` (retaining existing
+  config files with `--force-confdef`/`--force-confold`) and reports upgraded
+  packages by diffing `dpkg-query` before and after.
+- `--security` applies only Ubuntu security-origin upgrades through
+  `unattended-upgrade -v`.
+- `--check` refreshes apt lists and simulates upgrades without mutating the
+  host.
+- `--reboot` chains an on-demand gated reboot when `/var/run/reboot-required`
+  exists after upgrading; `--yes` is required in `--non-interactive` mode.
+- `--fix` validates credentials before remote mutations, then runs
+  `doctor --fix` after upgrading and embeds the redacted `doctor` summary
+  inside the single JSON response.
+
+`serverpro server reboot NAME` performs an OS-level reboot over Tailscale SSH
+with `rebootgate` survivability preflight enabled by default:
+
+```sh
+serverpro server reboot webapp --if-required -n mynamespace --yes
+serverpro server reboot webapp -n mynamespace --yes
+```
+
+- Preflight fails closed with status `blocked` and `preflight_gaps` when any
+  running workload would not come back after boot. Pass `--force` (or
+  `--force-reboot` on `server upgrade`) to bypass preflight intentionally.
+- `--if-required` returns status `skipped` with zero downtime when
+  `/var/run/reboot-required` is absent.
+- The reboot is scheduled with `systemd-run` so the SSH command exits cleanly.
+  Unless `--no-wait` is set, serverpro polls until the kernel boot ID changes
+  and `serverpro-reboot-verify.service` reports `ok`.
 
 ### Reboots and kernel cleanup
 
