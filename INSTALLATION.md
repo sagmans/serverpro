@@ -57,7 +57,7 @@ reviewed pins, integrity checks, and replacement lifecycle.
 | Docker Compose | 5.6.1 | Minimum vendor package version `5.6.1-1~ubuntu.24.04~noble`. |
 | htop | 3.3.0 | Minimum Ubuntu package version `3.3.0-4build1`. |
 | mise | 2026.10.24 | Minimum release; newer compatible mise remains installed. |
-| Node.js | 24.22.1 LTS | Exact mise-managed runtime. |
+| Node.js | 24.22.3 LTS | Exact mise-managed runtime. |
 | npm | 11.19.1 | Exact npm bundled with the managed Node.js release. |
 | Pi | Latest stable | Vendor installer; not pinned. Update with `pi update`. |
 | uv | 0.13.5 | Exact mise-managed release. |

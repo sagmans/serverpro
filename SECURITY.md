@@ -453,7 +453,7 @@ The 2026-10-03 managed-tool review, refreshed 2026-10-22 and 2026-10-30, selects
 stable releases at least seven days
 old, except explicitly approved fixes for disclosed vulnerabilities. Tailscale
 `1.104.4`, Docker Engine `29.9.2`, Buildx `0.38.1`, Compose `5.6.1`, mise `2026.10.24`,
-Node.js `24.22.1`, uv `0.13.5`, gh `2.103.3`, and sem `0.29.0` use those
+Node.js `24.22.3`, uv `0.13.5`, gh `2.103.3`, and sem `0.29.0` use those
 exceptions; `WEB_SOURCES.md` records the evidence. The age
 threshold governs release selection. Signed apt candidates can be newer.
 Pi and Herdr are the exception: they install as the latest stable release
@@ -631,7 +631,7 @@ Bootstrap still saves them to disk before it runs them. The other tools:
   Package-list refreshes retry only apt's C-locale package-lists lock error;
   repository, signature, and network errors are never retried or hidden, and
   keep apt's exit status and output.
-- Node.js `24.22.1` LTS and bundled npm `11.19.1` are exact. Node/npm drift
+- Node.js `24.22.3` LTS and bundled npm `11.19.1` are exact. Node/npm drift
   forces same-version Node replacement. Pi no longer lives in the Node tree,
   so a Node replacement does not reinstall Pi.
 - The bootstrap script runs as root, including system-package and apt work plus

@@ -101,7 +101,7 @@ func TestManagedAstGrepContractOmitsDeprecatedSGIdentity(t *testing.T) {
 
 func TestManagedVersionManifestPinsApprovedReleases(t *testing.T) {
 	want := map[string]string{
-		"node":     "24.22.1",
+		"node":     "24.22.3",
 		"npm":      "11.19.1",
 		"uv":       "0.13.5",
 		"rust":     "1.99.1",
@@ -207,7 +207,7 @@ func TestSystemPackageBaselinesReachRemoteManifest(t *testing.T) {
 func TestSystemPackagesForTarget(t *testing.T) {
 	assertStrings(t, SystemPackagesForTarget(TargetGit), []string{"apt:git", "apt:openssh-client"})
 	assertStrings(t, SystemPackagesForTarget(TargetDocker), []string{"apt:docker-ce", "apt:docker-ce-cli", "apt:containerd.io", "apt:docker-buildx-plugin", "apt:docker-compose-plugin"})
-	assertStrings(t, SystemPackagesForTarget(TargetAll), []string{"apt:ca-certificates", "apt:curl", "apt:gnupg", "apt:ufw", "apt:apparmor", "apt:unattended-upgrades", "apt:jq", "apt:git", "apt:openssh-client", "apt:docker-ce", "apt:docker-ce-cli", "apt:containerd.io", "apt:docker-buildx-plugin", "apt:docker-compose-plugin", "apt:htop"})
+	assertStrings(t, SystemPackagesForTarget(TargetAll), []string{"apt:ca-certificates", "apt:curl", "apt:gnupg", "apt:ufw", "apt:apparmor", "apt:unattended-upgrades", "apt:jq", "apt:libbrotli1", "apt:git", "apt:openssh-client", "apt:docker-ce", "apt:docker-ce-cli", "apt:containerd.io", "apt:docker-buildx-plugin", "apt:docker-compose-plugin", "apt:htop"})
 	assertStrings(t, SystemPackagesForTarget(TargetNode), nil)
 	assertStrings(t, SystemPackagesForTarget(TargetMise), nil)
 	assertStrings(t, SystemPackagesForTarget(TargetPi), nil)

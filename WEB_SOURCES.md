@@ -126,7 +126,8 @@ history.
 | Buildx | 0.38.1 | 2026-10-20 22:09:11 | Approved security exception; Go `CVE-2026-111943` rebuild; reviewed official binary fallback |
 | Compose | 5.6.1 | 2026-10-21 07:54:18 | Approved security exception; Go `CVE-2026-111943` rebuild |
 | mise | 2026.10.24 | 2026-10-30 10:15:02 | Approved security exception; fail-closed verification, GitHub token limited to GitHub hosts, git ref option-injection and fnox secret-grant fixes |
-| Node.js | 24.22.1 LTS | 2026-10-20 | Approved security exception; Node 24 security release |
+| Node.js | 24.22.3 LTS | 2026-11-11 | Normal age gate and security release; 16 CVEs incl. `CVE-2026-123863`, `CVE-2026-123864`, `CVE-2026-126051` |
+| libbrotli1 | 1.1.0-2ubuntu0.1 | 2026-10-21 | Ubuntu `USN-8956-1` security floor for `CVE-2026-111497` |
 | Pi | Latest stable (not pinned) | n/a | Vendor installer; `pi update` owns updates (2026-11-18). Past pin: 1.5.0 |
 | uv | 0.13.5 | 2026-10-22 01:35:54 | Approved security exception; removes the compromised emSign root (`GHSA-hq85-5cpj-mr62`) |
 | Rust | 1.99.1 | 2026-10-16 04:47:44 | Normal age gate; miscompilation fix |
@@ -1097,16 +1098,18 @@ scoped managed-tool installs through `mise install`.
 ### Node.js
 
 ```text
-https://nodejs.org/en/blog/release/v24.22.1
-https://nodejs.org/dist/v24.22.1/SHASUMS256.txt
+https://nodejs.org/en/blog/release/v24.22.3
+https://nodejs.org/dist/v24.22.3/SHASUMS256.txt
 https://nodejs.org/en/about/previous-releases
-https://nodejs.org/en/blog/vulnerability/july-2026-security-releases/
+https://nodejs.org/en/blog/vulnerability/november-2026-security-releases/
 ```
 
-Use: pinned Node `24.22.1` LTS security release and bundled npm `11.19.1`;
-reviewed 2026-10-22 on the supported Node 24 LTS line. Published GNU/Linux
-SHA-256 values: x64 `6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6`;
-arm64 `dbabf7a1cbf947e6059ffad2c27b80041db97dea1e553b62afdee7f13fca336e` (`.tar.xz`).
+Use: pinned Node `24.22.3` LTS security release and bundled npm `11.19.1`;
+reviewed 2026-11-18 on the supported Node 24 LTS line (fixes 16 CVEs including
+`CVE-2026-123863`, `CVE-2026-123864`, and `CVE-2026-126051`, and retains the
+`CVE-2026-111497` Brotli fix). Published GNU/Linux SHA-256 values: x64
+`4f2b175a6d53a5c617a80dba2676238a0688cef28c6da4eba35c7d844e66fcfb`; arm64
+`6e51a2ada00f0011cc266f65d98922b403d7ad88f809ca2aa615a5fe1ce6e86c` (`.tar.xz`).
 
 ### uv
 

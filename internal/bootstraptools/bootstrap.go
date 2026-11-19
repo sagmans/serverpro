@@ -19,14 +19,17 @@ const (
 	MinimumMiseVersion        = "2026.10.24"
 	MiseLinuxX64TarGzSHA256   = "9a6c9c55f5c6372d0af70a9979fe6d742aea3793267a929e1738022143c466cc"
 	MiseLinuxArm64TarGzSHA256 = "8c8f5d7f748bf3aef431dc50f0ad776270f36025c788aa21c74e2fabdbbd6d3e"
-	NodeVersion               = "24.22.1"
-	NPMVersion                = "11.19.1"
-	UVVersion                 = "0.13.5"
-	UVMiseBackend             = "aqua:astral-sh/uv"
-	RustVersion               = "1.99.1"
-	RustMiseBackend           = "core:rust"
-	RustProfile               = "default"
-	TmuxVersion               = "3.7c"
+	// 24.22.3 carries the 2026-11-11 Node.js security fixes (16 CVEs, including
+	// CVE-2026-123863, CVE-2026-123864, and CVE-2026-126051) and keeps the
+	// CVE-2026-111497 Brotli fix from 24.22.1.
+	NodeVersion     = "24.22.3"
+	NPMVersion      = "11.19.1"
+	UVVersion       = "0.13.5"
+	UVMiseBackend   = "aqua:astral-sh/uv"
+	RustVersion     = "1.99.1"
+	RustMiseBackend = "core:rust"
+	RustProfile     = "default"
+	TmuxVersion     = "3.7c"
 	// 2.103.1 and later carry the digitorus/pkcs7 fix for GHSA-3xqc-rpq8-wgp9.
 	GitHubCLIVersion        = "2.103.3"
 	RipgrepVersion          = "15.2.0"

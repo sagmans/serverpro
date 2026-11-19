@@ -37,6 +37,9 @@ const (
 	unattendedVersion = "2.9.1+nmu4ubuntu1"
 	jqPackage         = "jq"
 	jqVersion         = "1.7.1-3ubuntu0.24.04.2"
+	libbrotli1Package = "libbrotli1"
+	// USN-8956-1 fixes CVE-2026-111497 (Brotli decoder out-of-bounds write RCE).
+	libbrotli1Version = "1.1.0-2ubuntu0.1"
 
 	gitPackage = "git"
 	// Repairs the LP#2171054 regression the curl security update causes, so
@@ -86,6 +89,7 @@ var basePackageBaselines = []PackageBaseline{
 	{Name: apparmorPackage, MinimumVersion: apparmorVersion},
 	{Name: unattendedPackage, MinimumVersion: unattendedVersion},
 	{Name: jqPackage, MinimumVersion: jqVersion},
+	{Name: libbrotli1Package, MinimumVersion: libbrotli1Version},
 }
 
 var tailscalePrerequisitePackageBaselines = []PackageBaseline{

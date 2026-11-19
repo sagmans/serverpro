@@ -32,6 +32,7 @@ func TestReviewedPackageBaselines(t *testing.T) {
 		"apparmor":              "4.0.1really4.0.1-0ubuntu0.24.04.9",
 		"unattended-upgrades":   "2.9.1+nmu4ubuntu1",
 		"jq":                    "1.7.1-3ubuntu0.24.04.2",
+		"libbrotli1":            "1.1.0-2ubuntu0.1",
 		"git":                   "1:2.43.0-1ubuntu7.4",
 		"openssh-client":        "1:9.6p1-3ubuntu13.20",
 		"htop":                  "3.3.0-4build1",

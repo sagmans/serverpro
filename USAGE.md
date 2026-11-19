@@ -716,7 +716,7 @@ and installs the latest stable Pi under `~/.pi/agent/`, with a launcher link at
 `~/.local/bin/pi`. Bootstrap installs only a missing or broken copy; update Pi
 later with `pi update`. Doctor requires the `~/.local/bin/pi` entrypoint, Pi's
 managed-install marker, and a semver `pi --version`. The `all`
-target also installs Node.js `24.22.1` LTS with bundled npm `11.19.1`, uv
+target also installs Node.js `24.22.3` LTS with bundled npm `11.19.1`, uv
 `0.13.5` through mise's explicit `aqua:astral-sh/uv` backend, and
 Rust `1.99.1` through `core:rust` with the default rustc, Cargo, rustfmt, Clippy,
 and docs profile. Doctor checks those exact versions and all Rust
