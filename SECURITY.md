@@ -171,7 +171,9 @@ default.
   `PATH` before mutating packages, temporarily pins installed `tailscale` and
   `cloudflared` apt packages to their running versions so apt never cuts the
   active Tailscale SSH transport or breaks
-  `/var/lib/serverpro/cloudflared.receipt`, validates required credentials
+  `/var/lib/serverpro/cloudflared.receipt`, runs `needrestart` after apt with
+  `tailscaled.service` excluded so other services restart safely without
+  severing the SSH session, validates required credentials
   before apt runs when `--fix` is set, requires explicit confirmation (`--yes`
   non-interactively) before rebooting, and fails closed on `rebootgate`
   survivability gaps unless `--force` or `--force-reboot` is explicitly passed.

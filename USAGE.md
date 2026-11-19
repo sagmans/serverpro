@@ -994,7 +994,10 @@ serverpro server upgrade webapp --fix -n mynamespace
   for that invocation only (without changing `/etc/apt` or dpkg holds), so an
   upgrade never restarts `tailscaled` mid-SSH or invalidates
   `/var/lib/serverpro/cloudflared.receipt`; use `--fix` or `server doctor --fix`
-  for their dedicated safe updaters.
+  for their dedicated safe updaters. During package installation, `needrestart`
+  is suspended inside apt and then run with `tailscaled.service` excluded so
+  other daemons pick up patched libraries without severing the active SSH
+  session.
 - `--security` applies only Ubuntu security-origin upgrades through
   `unattended-upgrade -v`.
 - `--check` refreshes apt lists and simulates upgrades without mutating the

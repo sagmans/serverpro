@@ -51,6 +51,15 @@ const (
 	upgradeManagedHoldPackages = "tailscale cloudflared"
 	upgradeManagedPinPriority  = "1001"
 	aptSystemPreferencesPath   = "/etc/apt/preferences"
+
+	// needrestart hooks restart daemons synchronously inside apt's Post-Invoke.
+	// Suspending the hook during apt and running needrestart with tailscaled
+	// excluded lets other daemons pick up patched libraries without killing the
+	// active Tailscale SSH session.
+	needrestartBinaryPath    = "/usr/sbin/needrestart"
+	needrestartConfigPath    = "/etc/needrestart/needrestart.conf"
+	needrestartUnpackedFlag  = "/run/needrestart/unpacked"
+	needrestartTailscaleRule = `$nrconf{override_rc}->{q(^tailscaled\.service$)} = 0;`
 )
 
 // UpgradeOptions controls an on-demand OS package upgrade on a managed server.
@@ -205,8 +214,9 @@ func writeFullUpgradeBody(b *strings.Builder) {
 	writePackageSnapshotBefore(b)
 	// --with-new-pkgs installs new kernel ABI security packages without ever
 	// removing installed packages, unlike dist-upgrade.
-	b.WriteString("apt-get -y --with-new-pkgs -o Dir::Etc::Preferences=\"$tmp_dir/preferences\" -o " + shell.Quote(hostplatform.APTLockTimeoutOption()) +
+	b.WriteString("NEEDRESTART_SUSPEND=1 apt-get -y --with-new-pkgs -o Dir::Etc::Preferences=\"$tmp_dir/preferences\" -o " + shell.Quote(hostplatform.APTLockTimeoutOption()) +
 		" -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold upgrade >/dev/null\n")
+	writeSafeNeedrestartStep(b)
 	writePackageSnapshotAfter(b)
 }
 
@@ -215,8 +225,21 @@ func writeSecurityUpgradeBody(b *strings.Builder) {
 	// Waiting on dpkg lock first avoids failing unattended-upgrade immediately
 	// when apt-daily holds the frontend lock.
 	b.WriteString("apt-get -o " + shell.Quote(hostplatform.APTLockTimeoutOption()) + " check >/dev/null\n")
-	b.WriteString("unattended-upgrade -v >/dev/null\n")
+	b.WriteString("NEEDRESTART_SUSPEND=1 unattended-upgrade -v >/dev/null\n")
+	writeSafeNeedrestartStep(b)
 	writePackageSnapshotAfter(b)
+}
+
+func writeSafeNeedrestartStep(b *strings.Builder) {
+	binPath := shell.Quote(needrestartBinaryPath)
+	cfgPath := shell.Quote(needrestartConfigPath)
+	flagPath := shell.Quote(needrestartUnpackedFlag)
+	b.WriteString("if [ -x " + binPath + " ] && [ -r " + cfgPath + " ]; then\n" +
+		"  rm -f " + flagPath + "\n" +
+		"  cat " + cfgPath + " >\"$tmp_dir/needrestart.conf\"\n" +
+		"  printf '\\n%s\\n' " + shell.Quote(needrestartTailscaleRule) + " >>\"$tmp_dir/needrestart.conf\"\n" +
+		"  " + binPath + " -c \"$tmp_dir/needrestart.conf\" -r a >/dev/null\n" +
+		"fi\n")
 }
 
 func writePackageSnapshotBefore(b *strings.Builder) {

@@ -85,8 +85,11 @@ func TestUpgradeServerModesAndValidation(t *testing.T) {
 	if len(gotSec.UpgradedPackages) != 1 || gotSec.RebootRequired {
 		t.Fatalf("unexpected security result: %+v", gotSec)
 	}
-	if !strings.Contains(secRunner.scripts[0], "unattended-upgrade -v") {
-		t.Fatalf("security script missing unattended-upgrade:\n%s", secRunner.scripts[0])
+	if !strings.Contains(secRunner.scripts[0], "NEEDRESTART_SUSPEND=1 unattended-upgrade -v") {
+		t.Fatalf("security script missing suspended unattended-upgrade:\n%s", secRunner.scripts[0])
+	}
+	if !strings.Contains(secRunner.scripts[0], needrestartTailscaleRule) {
+		t.Fatalf("security script missing tailscaled needrestart exclusion:\n%s", secRunner.scripts[0])
 	}
 
 	errRunner := &scriptedMaintenanceRunner{errs: []error{errors.New("apt mirror unreachable")}}
