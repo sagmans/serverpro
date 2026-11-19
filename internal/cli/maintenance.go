@@ -133,18 +133,27 @@ func (a *app) serverRebootCmd() *cobra.Command {
 	return cmd
 }
 
+func validateCheckModeConflicts(flags serverUpgradeFlags, dryRun bool) error {
+	if !flags.check {
+		return nil
+	}
+	switch {
+	case flags.security:
+		return errors.New("--check cannot be used with --security")
+	case flags.reboot || flags.forceReboot || flags.noWait:
+		return errors.New("--check cannot be used with reboot flags")
+	case flags.fix:
+		return errors.New("--check cannot be used with --fix")
+	case dryRun:
+		return errors.New("--check cannot be used with --dry-run")
+	default:
+		return nil
+	}
+}
+
 func resolveUpgradeMode(flags serverUpgradeFlags, dryRun bool) (lifecycle.UpgradeMode, error) {
-	if flags.check && flags.security {
-		return "", errors.New("--check cannot be used with --security")
-	}
-	if flags.check && (flags.reboot || flags.forceReboot || flags.noWait) {
-		return "", errors.New("--check cannot be used with reboot flags")
-	}
-	if flags.check && flags.fix {
-		return "", errors.New("--check cannot be used with --fix")
-	}
-	if flags.check && dryRun {
-		return "", errors.New("--check cannot be used with --dry-run")
+	if err := validateCheckModeConflicts(flags, dryRun); err != nil {
+		return "", err
 	}
 	if dryRun && flags.fix {
 		return "", errors.New("--fix cannot be used with --dry-run")

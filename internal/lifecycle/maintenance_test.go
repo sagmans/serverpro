@@ -38,7 +38,7 @@ func maintenanceFixture() (config.Config, state.State) {
 	return cfg, st
 }
 
-func TestUpgradeServerModesAndValidation(t *testing.T) {
+func TestUpgradeServerValidation(t *testing.T) {
 	cfg, st := maintenanceFixture()
 
 	if _, err := UpgradeServer(context.Background(), nil, cfg, st, UpgradeOptions{Mode: UpgradeModeAll}); err == nil {
@@ -53,6 +53,14 @@ func TestUpgradeServerModesAndValidation(t *testing.T) {
 	if _, err := UpgradeServer(context.Background(), &scriptedMaintenanceRunner{}, cfg, st, UpgradeOptions{Mode: UpgradeModeAll, ForceReboot: true}); err == nil {
 		t.Fatal("expected error when force-reboot is set without reboot")
 	}
+	errRunner := &scriptedMaintenanceRunner{errs: []error{errors.New("apt mirror unreachable")}}
+	if _, err := UpgradeServer(context.Background(), errRunner, cfg, st, UpgradeOptions{Mode: UpgradeModeAll}); err == nil || !strings.Contains(err.Error(), "upgrade all") {
+		t.Fatalf("expected wrapped upgrade error, got %v", err)
+	}
+}
+
+func TestUpgradeServerCheckAndSecurityModes(t *testing.T) {
+	cfg, st := maintenanceFixture()
 
 	checkRunner := &scriptedMaintenanceRunner{
 		outputs: []string{
@@ -91,11 +99,6 @@ func TestUpgradeServerModesAndValidation(t *testing.T) {
 	if !strings.Contains(secRunner.scripts[0], needrestartTailscaleRule) {
 		t.Fatalf("security script missing tailscaled needrestart exclusion:\n%s", secRunner.scripts[0])
 	}
-
-	errRunner := &scriptedMaintenanceRunner{errs: []error{errors.New("apt mirror unreachable")}}
-	if _, err := UpgradeServer(context.Background(), errRunner, cfg, st, UpgradeOptions{Mode: UpgradeModeAll}); err == nil || !strings.Contains(err.Error(), "upgrade all") {
-		t.Fatalf("expected wrapped upgrade error, got %v", err)
-	}
 }
 
 func TestUpgradeServerTriggersGatedRebootWhenRequired(t *testing.T) {
@@ -129,7 +132,7 @@ func TestUpgradeServerTriggersGatedRebootWhenRequired(t *testing.T) {
 	}
 }
 
-func TestRebootServerPaths(t *testing.T) {
+func TestRebootServerSkipAndPreflightPaths(t *testing.T) {
 	cfg, st := maintenanceFixture()
 
 	if _, err := RebootServer(context.Background(), nil, cfg, st, RebootOptions{}); err == nil {
@@ -154,6 +157,19 @@ func TestRebootServerPaths(t *testing.T) {
 	if !errors.As(err, &preflightErr) || len(preflightErr.Gaps) != 1 || !strings.Contains(preflightErr.Error(), "restart policy is no") {
 		t.Fatalf("expected RebootPreflightError, got %v", err)
 	}
+
+	// NoWait returns immediately with rebooting status.
+	noWaitRunner := &scriptedMaintenanceRunner{
+		outputs: []string{"SERVERPRO_BOOT_ID=boot-1\nSERVERPRO_REBOOT_GATED=0\nSERVERPRO_REBOOT_ACTION=rebooting\n"},
+	}
+	noWaitRes, err := RebootServer(context.Background(), noWaitRunner, cfg, st, RebootOptions{NoWait: true})
+	if err != nil || noWaitRes.Status != RebootStatusRebooting || !noWaitRes.Rebooted {
+		t.Fatalf("unexpected no-wait result=%+v err=%v", noWaitRes, err)
+	}
+}
+
+func TestRebootServerForceAndFailurePaths(t *testing.T) {
+	cfg, st := maintenanceFixture()
 
 	// Forced ungated reboot completes once boot ID changes without waiting for verify.
 	forceRunner := &scriptedMaintenanceRunner{
@@ -186,15 +202,6 @@ func TestRebootServerPaths(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "degraded") || degradedRes.VerifyStatus != RebootVerifyStatusDegraded || len(degradedRes.VerifyFindings) != 1 {
 		t.Fatalf("expected degraded verification error, got res=%+v err=%v", degradedRes, err)
-	}
-
-	// NoWait returns immediately with rebooting status.
-	noWaitRunner := &scriptedMaintenanceRunner{
-		outputs: []string{"SERVERPRO_BOOT_ID=boot-1\nSERVERPRO_REBOOT_GATED=0\nSERVERPRO_REBOOT_ACTION=rebooting\n"},
-	}
-	noWaitRes, err := RebootServer(context.Background(), noWaitRunner, cfg, st, RebootOptions{NoWait: true})
-	if err != nil || noWaitRes.Status != RebootStatusRebooting || !noWaitRes.Rebooted {
-		t.Fatalf("unexpected no-wait result=%+v err=%v", noWaitRes, err)
 	}
 
 	// Unexpected or empty trigger output fails closed.

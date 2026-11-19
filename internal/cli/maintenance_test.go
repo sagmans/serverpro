@@ -244,7 +244,7 @@ func TestServerUpgradeHandlesPreflightBlockAndRedactsErrors(t *testing.T) {
 	}
 }
 
-func TestServerRebootDryRunConfirmAndExecution(t *testing.T) {
+func TestServerRebootDryRunAndConfirmation(t *testing.T) {
 	cfgPath, stPath := writeDoctorFixture(t)
 
 	t.Run("dry-run", func(t *testing.T) {
@@ -282,6 +282,10 @@ func TestServerRebootDryRunConfirmAndExecution(t *testing.T) {
 			t.Fatal("expected declined confirmation error")
 		}
 	})
+}
+
+func TestServerRebootExecutionAndFailureModes(t *testing.T) {
+	cfgPath, stPath := writeDoctorFixture(t)
 
 	t.Run("live complete", func(t *testing.T) {
 		t.Setenv("DEMO_WEB_SUDOPASS", "correct horse battery staple")
