@@ -22,8 +22,9 @@ DOGFOOD_SCENARIO_ORDER="create status doctor fix bootstrap power import identity
 # Scenarios that do not need an existing server; every other one does, so
 # without keep mode it needs create in the same run.
 DOGFOOD_LIFECYCLE_SCENARIOS="create delete"
-# The default keeps the historical create→status→doctor→bootstrap→delete run.
-DOGFOOD_DEFAULT_SCENARIOS="create,status,doctor,bootstrap,delete"
+# The default covers the whole operator lifecycle except the identity decoy,
+# which reruns the full bootstrap and is opt-in for that cost.
+DOGFOOD_DEFAULT_SCENARIOS="create,status,doctor,fix,bootstrap,power,import,delete"
 # Recovery waits cover provider power transitions and a full reboot.
 DOGFOOD_DEFAULT_RECOVERY_TIMEOUT=600
 DOGFOOD_DEFAULT_POLL_INTERVAL=15
@@ -229,13 +230,18 @@ report_server_facts() {
 }
 
 # scenario_create marks the server ready only after create proved it, so
-# server scenarios never run against a half-built host.
+# server scenarios never run against a half-built host. Create is the first
+# credential write, so it also proves where the key went and that every
+# credential file on disk is encrypted; later scenarios decrypt with that key.
 scenario_create() {
 	if ! run_live_ok doctor-report "live server create" "$bin" "${create_args[@]}"; then
 		server_ready=0
 		return 1
 	fi
 	server_ready=1
+	# A kept home may hold a key an older run put in another store.
+	[[ "$throwaway_home" -eq 1 ]] || return 0
+	run_live_ok "key-store-$key_store" "live credential key in $key_store store" "$bin" auth status
 }
 
 # scenario_status proves the status row reports the requested identity.
@@ -305,8 +311,11 @@ scenario_import() {
 		import_args+=(--with-cloudflare --cloudflare-account-id "$SERVERPRO_DOGFOOD_CLOUDFLARE_ACCOUNT_ID")
 	fi
 	mkdir -p "$import_home" && chmod 700 "$import_home" || return 1
-	run_live_ok import-complete "live server import" env HOME="$import_home" "$bin" "${import_args[@]}" || return 1
-	run_live_ok doctor-report "live server doctor after import" env HOME="$import_home" "$bin" --non-interactive -n "$namespace" -p "$provider" server doctor "$server"
+	# The import HOME gets its own key, which the keyring pin would put in the
+	# operator's keyring where no cleanup finds it; the key file in it goes
+	# with work_dir instead.
+	run_live_ok import-complete "live server import" env HOME="$import_home" SERVERPRO_KEY_STORE="$DOGFOOD_SAFE_KEY_STORE" "$bin" "${import_args[@]}" || return 1
+	run_live_ok doctor-report "live server doctor after import" env HOME="$import_home" SERVERPRO_KEY_STORE="$DOGFOOD_SAFE_KEY_STORE" "$bin" --non-interactive -n "$namespace" -p "$provider" server doctor "$server"
 }
 
 # scenario_delete disarms the fallback delete once the server is proven gone,
@@ -369,6 +378,8 @@ run_destructive_dogfood() {
 	poll_interval="$(positive_int_setting SERVERPRO_DOGFOOD_POLL_INTERVAL "$DOGFOOD_DEFAULT_POLL_INTERVAL")" || exit 2
 	max_age_hours="$(positive_int_setting SERVERPRO_DOGFOOD_MAX_AGE_HOURS "$DOGFOOD_DEFAULT_MAX_AGE_HOURS")" || exit 2
 	ssh_timeout="$(positive_int_setting SERVERPRO_DOGFOOD_SSH_TIMEOUT "$DOGFOOD_DEFAULT_SSH_TIMEOUT")" || exit 2
+	key_store="$(key_store_setting)" || exit 2
+	pin_key_store "$key_store"
 	# A throwaway server cannot outlive the run, so server scenarios need create.
 	if [[ "$server_outlives_run" -ne 1 ]] && ! scenario_selected create; then
 		for scenario in $DOGFOOD_SCENARIO_ORDER; do

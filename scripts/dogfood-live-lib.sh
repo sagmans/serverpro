@@ -41,6 +41,35 @@ DOGFOOD_DEFAULT_DIGITALOCEAN_IMAGE="ubuntu-24-04-x64"
 # Keep mode's persistent home, relative to the operator home, so it never
 # shares the operator's real serverpro home.
 DOGFOOD_DEFAULT_KEPT_HOME_SUFFIX=".local/state/serverpro-dogfood/home"
+# Throwaway run HOMEs live here, relative to the operator home. WHY not the
+# temp dir: serverpro keeps a temp-dir HOME away from the OS keyring, so a run
+# there would prove only the key file and never the Keychain or Secret Service.
+DOGFOOD_RUN_HOME_PARENT_SUFFIX=".cache/serverpro-live-dogfood"
+# The key store a paid run must end up using; SERVERPRO_DOGFOOD_KEY_STORE=file
+# suits headless hosts with no OS keyring. Each value is a validator kind suffix.
+DOGFOOD_DEFAULT_KEY_STORE="keyring"
+DOGFOOD_KEY_STORES="keyring file"
+# The store for every HOME that must never reach the OS keyring: the run HOME
+# before create picks a store, and the import scenario's second HOME.
+DOGFOOD_SAFE_KEY_STORE="file"
+# serverpro's keyring item names (service, account prefix + config root). The
+# harness needs them only to remove a throwaway run's key: the CLI has no key
+# delete command, and dead test keys must not pile up in the login keyring.
+DOGFOOD_KEYRING_SERVICE="serverpro"
+DOGFOOD_KEYRING_ACCOUNT_PREFIX="credential-key:"
+DOGFOOD_CREDENTIAL_ROOT_SUFFIX=".config/serverpro"
+# serverpro refuses the macOS keyring for a HOME without this folder, because
+# security(1) would open a blocking "Keychain Not Found" dialog. A run HOME
+# links it to the operator's folder, where the login keychain lives.
+DOGFOOD_KEYCHAIN_FOLDER_SUFFIX="Library/Keychains"
+# Bounds each keyring cleanup call: security(1) and D-Bus have no deadline of
+# their own, and the exit trap must not hang on a stuck keyring.
+DOGFOOD_KEYRING_TIMEOUT=30
+# The lookup exit status that means "no such item" (security(1) errSecItemNotFound,
+# secret-tool's no-match). Any other failure, a timeout included, counts as
+# "may still exist", so key removal fails closed.
+DOGFOOD_KEYRING_ABSENT_STATUS_DARWIN=44
+DOGFOOD_KEYRING_ABSENT_STATUS_LINUX=1
 # The CLI's fixed per-server state location under a HOME (home, namespace, server).
 DOGFOOD_STATE_PATH_FORMAT="%s/.local/state/serverpro/namespaces/%s/servers/%s.json"
 # Mirrors config.ValidID so operator-supplied identifiers can never traverse
@@ -57,8 +86,11 @@ dogfood_context_init() {
 	work_dir="$3"
 	out_dir="$work_dir/out"
 	results="$work_dir/results.txt"
-	home_dir="$work_dir/home"
+	# Set by the orchestrator: create_run_home or the kept home.
+	home_dir=""
 	operator_home="$HOME"
+	# Read once so every keyring and Keychain branch agrees on the OS.
+	host_os="$(uname -s)"
 	# WHY resolved for every run: a throwaway run must see state a kept run left,
 	# because both use the same namespace and provider resource names.
 	kept_dogfood_home="${SERVERPRO_DOGFOOD_HOME:-$operator_home/$DOGFOOD_DEFAULT_KEPT_HOME_SUFFIX}"
@@ -67,13 +99,18 @@ dogfood_context_init() {
 	# than on the mode: a kept server may predate the run and must survive it
 	# (persistent home, reuse, no create requirement); a throwaway server is
 	# deleted by the exit trap and must start beside nothing it could collide with.
+	# A throwaway HOME is made per run, proves the key store, and is removed
+	# with its key; a kept home may hold a key from an older run, so neither
+	# the store check nor key removal applies to it.
 	server_outlives_run=0
 	arm_fallback_delete=1
 	require_clean_start=1
+	throwaway_home=1
 	if [[ "${SERVERPRO_DOGFOOD_KEEP_SERVER:-}" == "1" ]]; then
 		server_outlives_run=1
 		arm_fallback_delete=0
 		require_clean_start=0
+		throwaway_home=0
 	fi
 
 	# Result counters and summary lines, written by every case and scenario.
@@ -103,6 +140,7 @@ dogfood_context_init() {
 	poll_interval=""
 	max_age_hours=""
 	ssh_timeout=""
+	key_store=""
 	server_ready=0
 	# Set once a paid run starts, so the exit trap knows to look for leftovers.
 	destructive_started=0
@@ -268,11 +306,14 @@ positive_int_setting() {
 run_with_timeout() {
 	local seconds="$1" pid watcher rc
 	shift
-	"$@" <&0 &
+	# WHY reset signals in both jobs: the exit trap ignores INT/TERM/HUP while
+	# it tears down, children inherit that, and the deadline is a TERM, so
+	# without the reset neither the command nor the watcher could be stopped.
+	(trap - INT TERM HUP; exec "$@") <&0 &
 	pid=$!
 	# The watcher must not hold stdout, or a $(...) caller waits out the sleep.
 	# Children are stopped too, since an ssh child would keep the pipe open.
-	(sleep "$seconds" && { pkill -TERM -P "$pid"; kill -TERM "$pid"; }) >/dev/null 2>&1 &
+	(trap - INT TERM HUP; sleep "$seconds" && { pkill -TERM -P "$pid"; kill -TERM "$pid"; }) >/dev/null 2>&1 &
 	watcher=$!
 	wait "$pid"
 	rc=$?
@@ -316,4 +357,141 @@ remote_sudo_script() {
 		printf '%s\n' "$SERVERPRO_DOGFOOD_SUDOPASS"
 		printf '%s\n' "$script"
 	} | run_with_timeout "$ssh_timeout" tailscale ssh "$admin_user@$target" "sh -c 'IFS= read -r p; printf \"%s\\n\" \"\$p\" | sudo -S -p \"\" -v && sudo -n sh -s'"
+}
+
+# keyring_tool_present reports whether this OS's keyring CLI is installed; the
+# harness needs it to prove a run's keyring item is gone.
+keyring_tool_present() {
+	case "$host_os" in
+		Darwin) command -v security >/dev/null 2>&1 ;;
+		Linux) command -v secret-tool >/dev/null 2>&1 ;;
+		*) return 1 ;;
+	esac
+}
+
+# key_store_setting reads the key store a paid run must use and fails closed
+# on an unknown name, so a typo cannot weaken the check.
+key_store_setting() {
+	local value="${SERVERPRO_DOGFOOD_KEY_STORE:-$DOGFOOD_DEFAULT_KEY_STORE}"
+	if [[ " $DOGFOOD_KEY_STORES " != *" $value "* ]]; then
+		printf 'invalid SERVERPRO_DOGFOOD_KEY_STORE %q: expected one of: %s\n' "$value" "$DOGFOOD_KEY_STORES" >&2
+		exit 2
+	fi
+	# Without secret-tool a Linux run could not remove its keyring item, so
+	# it refuses to start rather than leave a test key behind.
+	if [[ "$throwaway_home" -eq 1 && "$value" == keyring && "$host_os" == Linux ]] && ! keyring_tool_present; then
+		printf 'SERVERPRO_DOGFOOD_KEY_STORE=keyring on Linux needs secret-tool to remove the run key; install libsecret-tools or set SERVERPRO_DOGFOOD_KEY_STORE=file\n' >&2
+		exit 2
+	fi
+	printf '%s' "$value"
+}
+
+# create_run_home makes the throwaway HOME. Its parent is a physical path so
+# home_dir is spelled exactly as serverpro spells the keyring account it
+# derives from HOME; a doubled slash would make the key unfindable at exit.
+create_run_home() {
+	local parent
+	parent="$operator_home/$DOGFOOD_RUN_HOME_PARENT_SUFFIX"
+	mkdir -p "$parent" && chmod 700 "$parent" || return 1
+	parent="$(cd -P -- "$parent" && pwd -P)" || return 1
+	home_dir="$(mktemp -d "$parent/home.XXXXXX")" || return 1
+	link_keychain_folder
+}
+
+# link_keychain_folder lets serverpro reach the operator's login Keychain from
+# the run HOME on macOS. Elsewhere, or without that folder, it does nothing.
+link_keychain_folder() {
+	local source="$operator_home/$DOGFOOD_KEYCHAIN_FOLDER_SUFFIX"
+	local link="$home_dir/$DOGFOOD_KEYCHAIN_FOLDER_SUFFIX"
+	[[ "$host_os" == Darwin && -d "$source" ]] || return 0
+	mkdir -p "$(dirname "$link")" && ln -s "$source" "$link"
+}
+
+# run_key_account is the keyring account serverpro uses for the run HOME.
+run_key_account() {
+	printf '%s%s/%s' "$DOGFOOD_KEYRING_ACCOUNT_PREFIX" "$home_dir" "$DOGFOOD_CREDENTIAL_ROOT_SUFFIX"
+}
+
+# run_key_item names the run key as Keychain Access and seahorse show it.
+run_key_item() {
+	printf '%s/%s' "$DOGFOOD_KEYRING_SERVICE" "$(run_key_account)"
+}
+
+# keyring_item removes or looks up the run key's keyring item on this OS.
+# stdout is discarded, so a lookup never prints the key; stderr is left to the
+# caller, because on Linux it is the only sign that tells an error from a miss.
+keyring_item() {
+	local action="$1" account
+	account="$(run_key_account)"
+	case "$host_os:$action" in
+		Darwin:find) run_with_timeout "$DOGFOOD_KEYRING_TIMEOUT" security find-generic-password -s "$DOGFOOD_KEYRING_SERVICE" -a "$account" ;;
+		Darwin:delete) run_with_timeout "$DOGFOOD_KEYRING_TIMEOUT" security delete-generic-password -s "$DOGFOOD_KEYRING_SERVICE" -a "$account" ;;
+		Linux:find) run_with_timeout "$DOGFOOD_KEYRING_TIMEOUT" secret-tool lookup service "$DOGFOOD_KEYRING_SERVICE" username "$account" ;;
+		Linux:delete) run_with_timeout "$DOGFOOD_KEYRING_TIMEOUT" secret-tool clear service "$DOGFOOD_KEYRING_SERVICE" username "$account" ;;
+		*) return 1 ;;
+	esac </dev/null >/dev/null
+}
+
+# keyring_item_state reports present, absent, or why the lookup failed. Only
+# the OS's own not-found status counts as absent; secret-tool exits 1 for both
+# a miss and an error and differs only in printing the error, so on Linux a
+# miss must also be silent.
+keyring_item_state() {
+	local status absent err
+	err="$(keyring_item find 2>&1)"
+	status=$?
+	case "$host_os" in
+		Darwin) absent="$DOGFOOD_KEYRING_ABSENT_STATUS_DARWIN" ;;
+		*) absent="$DOGFOOD_KEYRING_ABSENT_STATUS_LINUX" ;;
+	esac
+	if [[ "$status" -eq 0 ]]; then
+		printf 'present'
+	elif [[ "$status" -eq "$absent" && ( "$host_os" == Darwin || -z "$err" ) ]]; then
+		printf 'absent'
+	else
+		printf 'lookup failed with exit %s' "$status"
+	fi
+}
+
+# pin_key_store makes serverpro use exactly the given key store in a throwaway
+# HOME, so the store a run proves and the store it cleans up are the one it
+# chose, not serverpro's automatic pick. Injected keys are dropped because they
+# outrank the pin. A kept HOME keeps the operator's own store setup unpinned.
+pin_key_store() {
+	[[ "$throwaway_home" -eq 1 ]] || return 0
+	unset SERVERPRO_CREDENTIAL_KEY SERVERPRO_CREDENTIAL_KEY_COMMAND
+	export SERVERPRO_KEY_STORE="$1"
+}
+
+# remove_run_key deletes a throwaway run's keyring item and proves it gone.
+# Only a run pinned to the keyring can own one; a key file sits in the run
+# HOME, which cleanup removes, so file and read-only runs never query a keyring
+# that may not work on the host. Fails when the item may remain.
+remove_run_key() {
+	local item state
+	[[ "$key_store" == keyring ]] || return 0
+	item="$(run_key_item)"
+	case "$host_os" in
+		# Without the Keychain link the pinned Keychain refused the key, and a
+		# lookup could open the blocking "Keychain Not Found" dialog.
+		Darwin) [[ -L "$home_dir/$DOGFOOD_KEYCHAIN_FOLDER_SUFFIX" ]] || return 0 ;;
+		Linux) ;;
+		*) return 0 ;;
+	esac
+	# A missing tool means the item cannot be checked, so fail closed.
+	if ! keyring_tool_present; then
+		log "CLEANUP-FAIL | keyring item $item may remain: no keyring tool"
+		return 1
+	fi
+	state="$(keyring_item_state)"
+	[[ "$state" != absent ]] || return 0
+	if [[ "$state" == present ]]; then
+		keyring_item delete >/dev/null 2>&1
+		state="$(keyring_item_state)"
+	fi
+	if [[ "$state" != absent ]]; then
+		log "CLEANUP-FAIL | keyring item $item may remain: $state"
+		return 1
+	fi
+	log "CLEANUP | removed keyring item $item"
 }

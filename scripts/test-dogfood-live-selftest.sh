@@ -108,6 +108,11 @@ require_provider_token() {
 		exit 91
 	fi
 }
+# fake_key_store is the store real serverpro would use: the pinned one, else
+# the keyring. FAKE_KEY_STORE forces another, to model a pin serverpro ignored.
+fake_key_store() {
+	printf '%s' "${FAKE_KEY_STORE:-${SERVERPRO_KEY_STORE:-keyring}}"
+}
 namespace="$(value_after -n)"
 provider="$(value_after -p)"
 case " $* " in
@@ -147,7 +152,7 @@ case " $* " in
 		fi
 		;;
 	*" server import "*)
-		printf 'HOME %s\n' "$HOME" >>"$FAKE_ARGV_DIR/import-home.log"
+		printf 'HOME %s STORE %s\n' "$HOME" "$(fake_key_store)" >>"$FAKE_ARGV_DIR/import-home.log"
 		status=imported
 		[[ "${FAKE_INVALID_SEMANTIC:-}" == import-status ]] && status=failed
 		printf '[{"namespace":"%s","server":"%s","provider":"%s","provider_id":"123","status":"%s","config_path":"c","state_path":"s"}]\n' "$namespace" "$(sequence_value server import)" "$provider" "$status"
@@ -188,6 +193,8 @@ case " $* " in
 			node=node-swapped
 		fi
 		mkdir -p "$(dirname "$state_file")"
+		# Create is the first credential write, so it is where the key appears.
+		[[ "$(fake_key_store)" != keyring ]] || printf 'credential-key:%s/.config/serverpro' "$HOME" >"$FAKE_ARGV_DIR/keyring-item"
 		# The recorded tag is what the identity decoy must advertise.
 		printf '{"created_at":"%s","compute":{"id":"srv-1","name":"%s-%s"},"tailscale":{"name":"%s-%s.selftest.ts.net","node_id":"%s","tags":["tag:serverpro-%s"]}}\n' \
 			"${FAKE_CREATED_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" "$namespace" "$server" "$namespace" "$server" "$node" "$namespace" >"$state_file"
@@ -203,7 +210,16 @@ case " $* " in
 		esac
 		printf '{"namespace":"%s","server":"%s","provider":"%s","power":"%s"}\n' "$namespace" "$server" "$provider" "$power"
 		;;
+	*" auth status "*)
+		if [[ "$(fake_key_store)" == keyring ]]; then
+			store="OS keyring item serverpro/credential-key:$HOME/.config/serverpro" file_backed=false
+		else
+			store="key file $HOME/.local/share/serverpro/credential-key.txt" file_backed=true
+		fi
+		printf '{"store":"%s","key_present":true,"file_backed":%s,"rotation_pending":false,"encrypted_files":1,"plaintext_files":0,"unreadable_files":0}\n' "$store" "$file_backed"
+		;;
 	*" server doctor "*)
+		[[ "$HOME" != */import-home ]] || printf 'DOCTOR %s STORE %s\n' "$HOME" "$(fake_key_store)" >>"$FAKE_ARGV_DIR/import-home.log"
 		doctor_summary "$(sequence_value server doctor)" server-doctor-status
 		;;
 	*" server bootstrap "*)
@@ -290,7 +306,33 @@ case "$method $url" in
 esac
 FAKE
 
-chmod +x "$fakebin/uv" "$fakebin/python-managed" "$fakebin/serverpro" "$fakebin/tailscale" "$fakebin/curl"
+# Fake keyring tools for macOS (security) and Linux (secret-tool): one item
+# file stands in for the login keyring, so key removal is provable without
+# touching the operator's real keyring.
+# Both real command lines end with the account, which is all this fake reads.
+cat >"$fakebin/security" <<'FAKE'
+#!/usr/bin/env bash
+printf '<%s>\n' "$@" >>"$FAKE_ARGV_DIR/keyring-argv.log"
+item="$FAKE_ARGV_DIR/keyring-item"
+account="${*: -1}"
+absent=1
+[[ "$(basename "$0")" == security ]] && absent=44
+# A broken keyring must not read as "no item". secret-tool reports errors with
+# its not-found status plus a message, so the fake does the same.
+if [[ -n "${FAKE_KEYRING_LOOKUP_ERROR:-}" ]]; then
+	[[ "$absent" -eq 1 ]] || exit 2
+	printf 'secret-tool: Cannot autolaunch D-Bus\n' >&2
+	exit 1
+fi
+[[ -f "$item" && "$(cat "$item")" == "$account" ]] || exit "$absent"
+case "$1" in
+	find-generic-password|lookup) exit 0 ;;
+	delete-generic-password|clear) [[ -n "${FAKE_KEYRING_DELETE_FAIL:-}" ]] || rm -f "$item" ;;
+esac
+FAKE
+cp "$fakebin/security" "$fakebin/secret-tool"
+
+chmod +x "$fakebin/uv" "$fakebin/python-managed" "$fakebin/serverpro" "$fakebin/tailscale" "$fakebin/curl" "$fakebin/security" "$fakebin/secret-tool"
 
 fails=0
 note() { printf '%s\n' "$*"; }
@@ -366,7 +408,8 @@ run_harness() {
 	local stmp="$tmp/$scenario"
 	export FAKE_ARGV_DIR="$stmp/argv"
 	# Operators always have a home; keep-mode alias checks resolve it physically.
-	mkdir -p "$FAKE_ARGV_DIR" "$stmp/htmp" "$stmp/home"
+	# The Keychain folder lets the macOS run HOME link it like a real one.
+	mkdir -p "$FAKE_ARGV_DIR" "$stmp/htmp" "$stmp/home/Library/Keychains"
 	[[ -z "$delete_status" ]] || printf '%s\n' "$delete_status" >"$FAKE_ARGV_DIR/delete-status"
 	env -i PATH="$fakebin:/usr/bin:/bin" HOME="$stmp/home" \
 		TMPDIR="$stmp/htmp" FAKE_ARGV_DIR="$FAKE_ARGV_DIR" FAKE_REAL_PYTHON="$real_python" FAKE_PYTHON_LAUNCHER="$fakebin/python-managed" \
@@ -384,6 +427,11 @@ work_dir() {
 	find "$scenario_tmp/htmp" -maxdepth 1 -type d -name 'serverpro-live-dogfood.*' | head -1
 }
 
+# run_home finds the throwaway HOME, which lives under the operator home.
+run_home() {
+	find "$scenario_tmp/home/.cache/serverpro-live-dogfood" -maxdepth 1 -type d -name 'home.*' 2>/dev/null | head -1
+}
+
 create_prerequisites=(
 	"SERVERPRO_DOGFOOD_PROVIDER=hetzner"
 	"SERVERPRO_DOGFOOD_HETZNER_TOKEN=$SENT_HETZNER"
@@ -393,9 +441,13 @@ create_prerequisites=(
 	"SERVERPRO_DOGFOOD_NAMESPACE=spdogfooda"
 	"SERVERPRO_DOGFOOD_SERVER=web"
 )
+# Short recovery waits: the default scenarios include power, whose polls would
+# otherwise wait out the full live timeout on every invalid-output case.
+fast_waits=(SERVERPRO_DOGFOOD_RECOVERY_TIMEOUT=3 SERVERPRO_DOGFOOD_POLL_INTERVAL=1)
 create_env=(
 	"SERVERPRO_DOGFOOD_CREATE=1"
 	"${create_prerequisites[@]}"
+	"${fast_waits[@]}"
 )
 
 note "scenario A: all-provider happy path keeps every secret private"
@@ -442,6 +494,14 @@ for provider in hetzner vultr digitalocean; do
 	check_command "A $provider discover argv" "CMD <--non-interactive> <-p> <$provider> <server> <discover>"
 done
 check_command "A live server doctor argv" "CMD <--non-interactive> <-n> <spdogfooda> <-p> <hetzner> <server> <doctor> <web>"
+check "A key store proven" grep -Fq "PASS | live credential key in keyring store" "$scenario_tmp/harness.log"
+check "A run HOME outside the temp dir" test -n "$(run_home)"
+if [[ "$(uname -s)" == Darwin ]]; then
+	check "A run HOME links the Keychain folder" test -L "$(run_home)/Library/Keychains"
+fi
+check "A keep-temp keeps the run key for inspection" test -e "$FAKE_ARGV_DIR/keyring-item"
+# The harness spells the run HOME physically (/private/var on macOS).
+check "A keep-temp names the kept key" grep -Eq "kept its key, if in the OS keyring: serverpro/credential-key:.*/home\.[^/]+/\.config/serverpro$" "$scenario_tmp/harness.log"
 if [[ -n "$wd" ]]; then
 	leaked=0
 	while IFS= read -r f; do
@@ -455,7 +515,7 @@ if [[ -n "$wd" ]]; then
 	else
 		bad "A no secrets in results/out artifacts"
 	fi
-	creds="$wd/home/.config/serverpro/namespaces/spdogfooda/servers/web/credentials.json"
+	creds="$(run_home)/.config/serverpro/namespaces/spdogfooda/servers/web/credentials.json"
 	check "A exact credential document written via env transport" check_credentials_document "$creds"
 	duplicate_creds="$scenario_tmp/duplicate-credentials.json"
 	printf '{"namespace":"wrong","namespace":"spdogfooda","server":"web","server_provider_token":"%s","tailscale_token":"%s","tailscale_auth_key":"","cloudflare_token":"%s"}\n' \
@@ -474,6 +534,40 @@ if [[ -n "$wd" ]]; then
 else
 	bad "A work dir preserved for inspection"
 fi
+
+note "scenario R: the run proves its key store and removes its key"
+run_harness scenarioR-default "" env "${create_env[@]}"
+if [[ "$harness_rc" -eq 0 ]]; then ok "R default exit zero"; else bad "R default exit zero"; sed 's/^/  log: /' "$scenario_tmp/harness.log"; fi
+for scenario in fix power import; do
+	check "R default runs $scenario" grep -Fq "SCENARIO | $scenario | pass |" "$scenario_tmp/harness.log"
+done
+check_absent "R default skips identity" "SCENARIO | identity" "$scenario_tmp/harness.log"
+check "R keyring item removed at exit" grep -Fq "CLEANUP | removed keyring item serverpro/credential-key:" "$scenario_tmp/harness.log"
+check "R keyring item gone" test ! -e "$FAKE_ARGV_DIR/keyring-item"
+check "R run HOME removed" test -z "$(run_home)"
+run_harness scenarioR-mismatch "" env "${create_env[@]}" FAKE_KEY_STORE=file
+if [[ "$harness_rc" -ne 0 ]]; then ok "R store mismatch fails"; else bad "R store mismatch fails"; fi
+check "R store mismatch recorded" grep -Fq "FAIL | live credential key in keyring store" "$scenario_tmp/harness.log"
+check "R server still deleted" grep -Fq "PASS | live server delete" "$scenario_tmp/harness.log"
+# A broken keyring lookup must not matter to a file run: it never owned an item.
+run_harness scenarioR-file "" env "${create_env[@]}" SERVERPRO_DOGFOOD_KEY_STORE=file FAKE_KEYRING_LOOKUP_ERROR=1
+if [[ "$harness_rc" -eq 0 ]]; then ok "R file store pinned and proven"; else bad "R file store pinned and proven"; sed 's/^/  log: /' "$scenario_tmp/harness.log"; fi
+check "R file store creates no keyring item" test ! -e "$FAKE_ARGV_DIR/keyring-item"
+check_absent "R file store skips keyring cleanup" "keyring item" "$scenario_tmp/harness.log"
+check "R file store never calls the keyring" test ! -e "$FAKE_ARGV_DIR/keyring-argv.log"
+run_harness scenarioR-readonly "" env FAKE_KEYRING_LOOKUP_ERROR=1
+if [[ "$harness_rc" -eq 0 ]]; then ok "R read-only run ignores the keyring"; else bad "R read-only run ignores the keyring ($harness_rc)"; fi
+check "R read-only run never calls the keyring" test ! -e "$FAKE_ARGV_DIR/keyring-argv.log"
+run_harness scenarioR-unknown "" env "${create_env[@]}" SERVERPRO_DOGFOOD_KEY_STORE=vault
+if [[ "$harness_rc" -eq 2 ]]; then ok "R unknown key store exit 2"; else bad "R unknown key store exit 2 ($harness_rc)"; fi
+check_no_create_or_credentials "R unknown key store"
+run_harness scenarioR-stuck "" env "${create_env[@]}" FAKE_KEYRING_DELETE_FAIL=1
+if [[ "$harness_rc" -ne 0 ]]; then ok "R stuck keyring item fails"; else bad "R stuck keyring item fails"; fi
+check "R stuck keyring item reported" grep -Fq "CLEANUP-FAIL | keyring item" "$scenario_tmp/harness.log"
+check "R stuck keyring item keeps the run HOME" test -n "$(run_home)"
+run_harness scenarioR-lookup "" env "${create_env[@]}" FAKE_KEYRING_LOOKUP_ERROR=1
+if [[ "$harness_rc" -ne 0 ]]; then ok "R failed keyring lookup fails"; else bad "R failed keyring lookup fails"; fi
+check "R failed keyring lookup reported" grep -Fq "may remain: lookup failed with exit" "$scenario_tmp/harness.log"
 
 note "scenario N: default namespace stays stable across runs"
 # A per-run namespace would add new tailnet policy entries on every run.
@@ -634,7 +728,6 @@ for entry in "${invalid_semantics[@]}"; do
 	fi
 done
 
-fast_waits=(SERVERPRO_DOGFOOD_RECOVERY_TIMEOUT=3 SERVERPRO_DOGFOOD_POLL_INTERVAL=1)
 all_scenarios="create,status,doctor,fix,bootstrap,power,import,identity,delete"
 
 check_no_secret_in() { # check_no_secret_in <label> <path...>
@@ -682,6 +775,8 @@ check_command "P fix argv" "CMD <--non-interactive> $scope <server> <doctor> <we
 check "P reboot proven by boot id" grep -Fq "PASS | live server rebooted" "$scenario_tmp/harness.log"
 check "P doctor after restart" grep -Fq "PASS | live server doctor after restart" "$scenario_tmp/harness.log"
 check "P import ran in a separate HOME" grep -Fq "HOME $wd/import-home" "$FAKE_ARGV_DIR/import-home.log"
+check "P import HOME kept off the keyring" grep -Fq "HOME $wd/import-home STORE file" "$FAKE_ARGV_DIR/import-home.log"
+check "P doctor after import kept off the keyring" grep -Fq "DOCTOR $wd/import-home STORE file" "$FAKE_ARGV_DIR/import-home.log"
 check "P doctor after import" grep -Fq "PASS | live server doctor after import" "$scenario_tmp/harness.log"
 check "P decoy enrolled" grep -Fq "PASS | live identity decoy enrolled" "$scenario_tmp/harness.log"
 check "P recorded node unchanged" grep -Fq "PASS | live recorded node unchanged beside identity decoy" "$scenario_tmp/harness.log"
@@ -805,7 +900,7 @@ for secret in "$SENT_VULTR" "$SENT_TS" "$SENT_SUDO"; do
 	check_absent "Q1 secret not in serverpro argv" "$secret" "$FAKE_ARGV_DIR/serverpro-argv.log"
 done
 [[ -n "$wd" ]] && check "Q1 prompted token reached credentials" grep -Fq "$SENT_VULTR\"" \
-	"$wd/home/.config/serverpro/namespaces/spdogfooda/servers/web/credentials.json"
+	"$(run_home)/.config/serverpro/namespaces/spdogfooda/servers/web/credentials.json"
 
 prompt_input="$tmp/prompt-q2"
 printf 'n\n%s\n' "$SENT_VULTR" >"$prompt_input"

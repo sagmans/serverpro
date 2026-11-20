@@ -65,20 +65,34 @@ if [[ "$server_outlives_run" -eq 1 ]]; then
 		exit 2
 	fi
 	home_dir="$resolved_home"
+elif ! create_run_home; then
+	printf 'cannot create a run HOME under %s\n' "$operator_home/$DOGFOOD_RUN_HOME_PARENT_SUFFIX" >&2
+	rm -rf "$work_dir"
+	[[ -z "$home_dir" ]] || rm -rf "$home_dir"
+	exit 2
 fi
 mkdir -p "$home_dir" "$out_dir"
 
-# cleanup removes the run's temp tree unless the operator asked to inspect it.
+# cleanup removes the run's temp tree and throwaway HOME unless the operator
+# asked to inspect them. A kept server's HOME is never removed.
 cleanup() {
 	if [[ "${SERVERPRO_KEEP_HARNESS_TEMP:-}" == "1" ]]; then
 		printf 'kept live dogfood temp dir: %s\n' "$work_dir" >&2
+		if [[ "$throwaway_home" -eq 1 ]]; then
+			printf 'kept live dogfood run HOME: %s\n' "$home_dir" >&2
+			printf 'kept its key, if in the OS keyring: %s\n' "$(run_key_item)" >&2
+		fi
 		return
 	fi
 	rm -rf "$work_dir"
+	[[ "$throwaway_home" -eq 0 ]] || rm -rf "$home_dir"
 }
 trap cleanup EXIT
 
 export HOME="$home_dir"
+# Deny by default: in a throwaway HOME, until the create flow picks a store,
+# serverpro may only use the key file there, never the operator's keyring.
+pin_key_store "$DOGFOOD_SAFE_KEY_STORE"
 
 # run_finish_hooks runs teardown that flows registered (for example the
 # identity decoy) before the exit trap deletes the server it lives on.
@@ -101,8 +115,16 @@ finish() {
 	cleanup_created_server || cleanup_failed=1
 	check_leftovers_on_exit
 	if [[ "$cleanup_failed" -eq 1 ]]; then
+		# The key stays too: recovering the server needs its credentials.
 		printf 'preserved live dogfood temp dir after cleanup failure: %s\n' "$work_dir" >&2
-		printf 'recover manually, then remove: %s\n' "$work_dir" >&2
+		printf 'recover manually, then remove: %s %s\n' "$work_dir" "$home_dir" >&2
+		exit 1
+	fi
+	# Keep-temp keeps the key with the run HOME, so kept credentials still
+	# decrypt during inspection; cleanup prints the item to remove by hand.
+	if [[ "$throwaway_home" -eq 1 && "${SERVERPRO_KEEP_HARNESS_TEMP:-}" != "1" ]] && ! remove_run_key; then
+		printf 'preserved live dogfood run HOME after key cleanup failure: %s\n' "$home_dir" >&2
+		printf 'remove keyring item %s, then remove: %s %s\n' "$(run_key_item)" "$work_dir" "$home_dir" >&2
 		exit 1
 	fi
 	cleanup
@@ -116,6 +138,8 @@ trap 'log "INTERRUPTED | SIGHUP"; exit 129' HUP
 
 log "serverpro live dogfood run"
 log "binary: $bin"
+# Logged so a hard-killed run's HOME (credentials, key account) can be found.
+log "run HOME: $home_dir"
 "$bin" --version | tee -a "$results"
 shasum -a 256 "$bin" | tee -a "$results"
 

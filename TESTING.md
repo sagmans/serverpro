@@ -1184,8 +1184,9 @@ lib itself and depends on nothing else, so source order is free.
 harness's JSON helper subcommands (state field reads, discover filtering, age
 calculation, decoy key request and response, device counting, and the
 credential writer), so the shell holds no inline Python. The orchestrator
-uses an isolated `HOME`, never reuses operator state, and removes its temp home
-unless `SERVERPRO_KEEP_HARNESS_TEMP=1` is set. Keep mode is the one exception:
+uses an isolated throwaway `HOME` under `~/.cache/serverpro-live-dogfood/`,
+never reuses operator state, and removes that home and its temp dir unless
+`SERVERPRO_KEEP_HARNESS_TEMP=1` is set. Keep mode is the one exception:
 `SERVERPRO_DOGFOOD_KEEP_SERVER=1` uses a dedicated persistent `0700` home
 (`SERVERPRO_DOGFOOD_HOME`, default `~/.local/state/serverpro-dogfood/home`, never
 the operator's own home) so one on-demand test server survives between runs
@@ -1203,6 +1204,30 @@ evidence, the harness keeps the created-resource markers, preserves the run
 artifacts, and exits nonzero. SIGINT, SIGTERM, and SIGHUP route through the same
 exit trap, so an interrupted throwaway run still deletes its server.
 
+The throwaway home is outside the temp dir on purpose: serverpro keeps a
+temp-dir `HOME` away from the OS keyring, so only a home elsewhere makes the run
+use the macOS login Keychain or the Linux Secret Service like a real install. On
+macOS the home links `Library/Keychains` to the operator's folder, which
+serverpro requires before it uses the Keychain. The harness pins serverpro's
+store with `SERVERPRO_KEY_STORE` and drops injected keys, which outrank the pin:
+the key file until the create flow starts, then `SERVERPRO_DOGFOOD_KEY_STORE`
+(`keyring` by default; `file` for headless hosts). The import scenario's second
+HOME always uses the key file, so its key goes with the temp dir. Keep mode is
+not pinned. Right after `create`, `auth status` must show the key in that store,
+and every credential file must be encrypted; later scenarios decrypt with that
+key. At exit a keyring run removes its keyring item (`security` on macOS,
+`secret-tool` on Linux) and proves it is gone; file and read-only runs never
+query the keyring. Only the tool's own not-found status (on Linux, also silent)
+counts as gone; a
+lookup error, a timeout, or an item that stays fails the run and keeps the run
+HOME, whose path the run logs at start. Keyring calls in the exit trap keep
+their timeout even though the trap ignores interrupts. A Linux keyring run
+without `secret-tool` exits 2 before any paid call. With
+`SERVERPRO_KEEP_HARNESS_TEMP=1` the key stays with the kept HOME so its
+credentials still decrypt, and the harness prints the item to remove. Keep mode
+skips the store check and key removal, because its home may hold a key from an
+older run.
+
 With a terminal attached, the harness asks for every missing input before any API
 call (`scripts/dogfood-live-prompt.sh`): whether to run paid scenarios, the
 provider token, the Tailscale token, the tailnet, the
@@ -1217,7 +1242,8 @@ answers.
 
 `SERVERPRO_DOGFOOD_SCENARIOS` selects a comma-separated subset of `create`,
 `status`, `doctor`, `fix`, `bootstrap`, `power`, `import`, `identity`, and
-`delete` (default `create,status,doctor,bootstrap,delete`). Scenarios always run
+`delete` (default `create,status,doctor,fix,bootstrap,power,import,delete`;
+`identity` is opt-in because it repeats the full bootstrap). Scenarios always run
 in that order; unknown names, and server scenarios without `create` outside keep
 mode, exit 2 before any paid call. The order lives once, in
 `DOGFOOD_SCENARIO_ORDER`; each name maps to a `scenario_<name>` function, and
@@ -1225,7 +1251,7 @@ every scenario except `create` and `delete` is skipped when no server is ready.
 
 | Scenario | Proves |
 | --- | --- |
-| `create` | Create (or a resume in keep mode) ends with a passing doctor report. |
+| `create` | Create (or a resume in keep mode) ends with a passing doctor report; the credential key is in the expected store and every credential file is encrypted. |
 | `status`, `doctor`, `bootstrap` | Status row identity, passing doctor, idempotent `git` bootstrap. |
 | `fix` | `server doctor --fix` passes, then plain doctor passes. |
 | `power` | Stop reaches a settled off state, start reaches on and doctor passes, restart changes the kernel boot ID (a real reboot) and doctor passes again. |
@@ -1265,7 +1291,13 @@ guard, leftover preflight, delete
 after interruption and after a second signal during teardown, home aliases, an
 SSH hang cut off by the timeout, the sudo command shape, decoy failures with
 teardown, a recorded-node swap, an
-import failed row hidden behind exit zero, prompted inputs with masking, backspace
+import failed row hidden behind exit zero, fake `security` and `secret-tool`
+binaries for the key store check (default scenarios, a store mismatch that
+still deletes the server, a pinned file store that ignores a broken keyring,
+a read-only run that ignores it too, an import HOME kept on the key file, an
+unknown store, a keyring item that cannot be removed or looked up, and
+keep-temp keeping the key),
+prompted inputs with masking, backspace
 editing, sudo retries, and required-value exhaustion, and secrets absent from
 every argv and
 artifact. Both run through `make test-dogfood-live-selftest` as part of

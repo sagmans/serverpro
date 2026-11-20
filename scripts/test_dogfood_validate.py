@@ -24,6 +24,20 @@ VALID_SUMMARY = {
     "results": [],
     "report_path": "/tmp/doctor-report.json",
 }
+KEYRING_STATUS = {
+    "store": "OS keyring item serverpro/credential-key:/home/op/.config/serverpro",
+    "key_present": True,
+    "file_backed": False,
+    "rotation_pending": False,
+    "encrypted_files": 1,
+    "plaintext_files": 0,
+    "unreadable_files": 0,
+}
+FILE_STATUS = {
+    **KEYRING_STATUS,
+    "store": "key file /home/op/.local/share/serverpro/credential-key.txt",
+    "file_backed": True,
+}
 VALID_CANDIDATE = {
     "provider": PROVIDER,
     "id": "123",
@@ -78,6 +92,8 @@ VALID_OUTPUTS = {
             "status": "imported",
         }
     ],
+    "key-store-keyring": KEYRING_STATUS,
+    "key-store-file": FILE_STATUS,
 }
 CONTRACT_FIELD_MUTATIONS = {
     "namespace-created": {
@@ -102,6 +118,19 @@ CONTRACT_FIELD_MUTATIONS = {
         "namespace": "wrong",
         "server": "wrong",
         "provider": "wrong",
+    },
+    "key-store-keyring": {
+        "store": FILE_STATUS["store"],
+        "key_present": False,
+        "file_backed": True,
+        "encrypted_files": 0,
+        "plaintext_files": 1,
+        "unreadable_files": 1,
+        "error": "load credential key: not found",
+    },
+    "key-store-file": {
+        "store": KEYRING_STATUS["store"],
+        "file_backed": False,
     },
 }
 INVALID_OUTPUTS = {
@@ -149,6 +178,8 @@ INVALID_OUTPUTS = {
             "status": "failed",
         }
     ],
+    "key-store-keyring": FILE_STATUS,
+    "key-store-file": KEYRING_STATUS,
 }
 
 
@@ -156,7 +187,7 @@ class ValidateOutputTests(unittest.TestCase):
     def test_accepts_every_output_contract(self):
         for kind, value in VALID_OUTPUTS.items():
             with self.subTest(kind=kind):
-                dogfood_validate.validate_output(
+                dogfood_validate.validate_result(
                     kind, value, PROVIDER, NAMESPACE, SERVER
                 )
 
@@ -164,18 +195,18 @@ class ValidateOutputTests(unittest.TestCase):
         for kind, value in INVALID_OUTPUTS.items():
             with self.subTest(kind=kind):
                 with self.assertRaises(dogfood_validate.ValidationError):
-                    dogfood_validate.validate_output(
+                    dogfood_validate.validate_result(
                         kind, value, PROVIDER, NAMESPACE, SERVER
                     )
 
     def test_accepts_empty_inventory_and_every_local_state(self):
-        dogfood_validate.validate_output(
+        dogfood_validate.validate_result(
             "list", [], PROVIDER, NAMESPACE, SERVER
         )
         for local_state in ("missing", "partial", "present"):
             with self.subTest(local_state=local_state):
                 candidate = dict(VALID_CANDIDATE, local_state=local_state)
-                dogfood_validate.validate_output(
+                dogfood_validate.validate_result(
                     "list", [candidate], PROVIDER, NAMESPACE, SERVER
                 )
 
@@ -214,7 +245,7 @@ class ValidateOutputTests(unittest.TestCase):
         for label, candidate in invalid_candidates:
             with self.subTest(label=label):
                 with self.assertRaises(dogfood_validate.ValidationError):
-                    dogfood_validate.validate_output(
+                    dogfood_validate.validate_result(
                         "list", [candidate], PROVIDER, NAMESPACE, SERVER
                     )
 
@@ -224,7 +255,7 @@ class ValidateOutputTests(unittest.TestCase):
                 with self.subTest(field=field, valid=valid_value):
                     candidate = dict(VALID_CANDIDATE)
                     candidate[field] = valid_value
-                    dogfood_validate.validate_output(
+                    dogfood_validate.validate_result(
                         "list", [candidate], PROVIDER, NAMESPACE, SERVER
                     )
             for invalid_value in (
@@ -242,7 +273,7 @@ class ValidateOutputTests(unittest.TestCase):
                     candidate = dict(VALID_CANDIDATE)
                     candidate[field] = invalid_value
                     with self.assertRaises(dogfood_validate.ValidationError):
-                        dogfood_validate.validate_output(
+                        dogfood_validate.validate_result(
                             "list", [candidate], PROVIDER, NAMESPACE, SERVER
                         )
 
@@ -253,7 +284,7 @@ class ValidateOutputTests(unittest.TestCase):
                     value = dict(VALID_OUTPUTS[kind])
                     value[field] = invalid_value
                     with self.assertRaises(dogfood_validate.ValidationError):
-                        dogfood_validate.validate_output(
+                        dogfood_validate.validate_result(
                             kind, value, PROVIDER, NAMESPACE, SERVER
                         )
 
@@ -265,7 +296,7 @@ class ValidateOutputTests(unittest.TestCase):
         ):
             with self.subTest(kind=kind):
                 with self.assertRaises(dogfood_validate.ValidationError):
-                    dogfood_validate.validate_output(
+                    dogfood_validate.validate_result(
                         kind, value, PROVIDER, NAMESPACE, SERVER
                     )
 
@@ -286,7 +317,7 @@ class ValidateOutputTests(unittest.TestCase):
                 for status in statuses:
                     value["counts"][status] += 1
                     value["counts"]["total"] += 1
-                dogfood_validate.validate_output(
+                dogfood_validate.validate_result(
                     "doctor-report", value, PROVIDER, NAMESPACE, SERVER
                 )
 
@@ -344,7 +375,7 @@ class ValidateOutputTests(unittest.TestCase):
         for label, value in invalid:
             with self.subTest(label=label):
                 with self.assertRaises(dogfood_validate.ValidationError):
-                    dogfood_validate.validate_output(
+                    dogfood_validate.validate_result(
                         "doctor-report", value, PROVIDER, NAMESPACE, SERVER
                     )
 
@@ -356,11 +387,11 @@ class ValidateOutputTests(unittest.TestCase):
             for label in labels:
                 with self.subTest(kind=kind, label=label):
                     value = dict(VALID_OUTPUTS[kind], power=label)
-                    dogfood_validate.validate_output(
+                    dogfood_validate.validate_result(
                         kind, value, PROVIDER, NAMESPACE, SERVER
                     )
         with self.assertRaises(dogfood_validate.ValidationError):
-            dogfood_validate.validate_output(
+            dogfood_validate.validate_result(
                 "power-on", dict(VALID_OUTPUTS["power-on"], provider="vultr"),
                 PROVIDER, NAMESPACE, SERVER,
             )
@@ -377,11 +408,11 @@ class ValidateOutputTests(unittest.TestCase):
         ):
             with self.subTest(label=label):
                 with self.assertRaises(dogfood_validate.ValidationError):
-                    dogfood_validate.validate_output(
+                    dogfood_validate.validate_result(
                         "import-complete", value, PROVIDER, NAMESPACE, SERVER
                     )
         unrelated = dict(row, server="other", status="skipped")
-        dogfood_validate.validate_output(
+        dogfood_validate.validate_result(
             "import-complete", [unrelated, row], PROVIDER, NAMESPACE, SERVER
         )
 
@@ -389,7 +420,7 @@ class ValidateOutputTests(unittest.TestCase):
         with self.assertRaisesRegex(
             dogfood_validate.ValidationError, "unknown output validator"
         ):
-            dogfood_validate.validate_output(
+            dogfood_validate.validate_result(
                 "unknown", {}, PROVIDER, NAMESPACE, SERVER
             )
 

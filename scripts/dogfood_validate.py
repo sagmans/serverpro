@@ -41,6 +41,13 @@ CREDENTIAL_TOKEN_ENV = {
     "cloudflare_token": "CLOUDFLARE_TOKEN",
 }
 PRIVATE_FILE_MODE = 0o600
+# `auth status` names the store by these prefixes; each kind pins one store so
+# a run that silently fell back to another store fails instead of passing.
+# Values are (store prefix, expected file_backed).
+KEY_STORE_PREFIXES = {
+    "key-store-keyring": ("OS keyring item ", False),
+    "key-store-file": ("key file ", True),
+}
 
 
 class ValidationError(ValueError):
@@ -238,6 +245,39 @@ def validate_output(kind, value, provider="", namespace="", server=""):
     raise ValidationError(f"unknown output validator: {kind}")
 
 
+def validate_key_store(kind, value):
+    """Prove `auth status` shows the run's key in its pinned store and every
+    credential file encrypted. Kept apart from validate_output so the store
+    contract stays small and testable on its own."""
+    prefix, file_backed = KEY_STORE_PREFIXES[kind]
+    if not isinstance(value, dict) or value.get("key_present") is not True or value.get("error"):
+        raise ValidationError("credential key not readable")
+    store = value.get("store")
+    if (
+        not isinstance(store, str)
+        or not store.startswith(prefix)
+        or value.get("file_backed") is not file_backed
+    ):
+        raise ValidationError("credential key is not in the expected store")
+    encrypted = value.get("encrypted_files")
+    if (
+        not isinstance(encrypted, int)
+        or encrypted < 1
+        or value.get("plaintext_files") != 0
+        or value.get("unreadable_files") != 0
+    ):
+        raise ValidationError("credential files are not all encrypted")
+
+
+def validate_result(kind, value, provider="", namespace="", server=""):
+    """Route a parsed command result to its validator; the single entry point
+    for callers, so new contracts can live in their own functions."""
+    if kind in KEY_STORE_PREFIXES:
+        validate_key_store(kind, value)
+        return
+    validate_output(kind, value, provider, namespace, server)
+
+
 def validate_file(kind, path, provider="", namespace="", server=""):
     """Load one complete JSON document before applying semantic validation."""
     try:
@@ -245,7 +285,7 @@ def validate_file(kind, path, provider="", namespace="", server=""):
             value = json.load(stream)
     except (OSError, json.JSONDecodeError) as error:
         raise ValidationError(f"invalid JSON output: {error}") from error
-    validate_output(kind, value, provider, namespace, server)
+    validate_result(kind, value, provider, namespace, server)
 
 
 def state_field(path, field):
