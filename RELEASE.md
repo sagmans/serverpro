@@ -100,8 +100,8 @@ do not move an existing tag.
 
 ## Observe automatic GitHub publication
 
-Pushing the tag invokes `.github/workflows/release.yml`. It reruns the
-reusable CI workflow on the tagged commit, builds and smoke-tests native
+Pushing the tag invokes `.github/workflows/release.yml`. It runs the `check`
+and `full-chain-e2e` jobs on the tagged commit, builds and smoke-tests native
 Linux/macOS `amd64`/`arm64` binaries, packages deterministic archives, creates
 per-target SPDX SBOMs and Sigstore provenance/SBOM attestations, then creates
 the immutable GitHub release. SemVer prerelease tags become GitHub prereleases.

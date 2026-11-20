@@ -21,8 +21,8 @@ DEVELOPMENT.md is contributor workflow. User docs live in `README.md`,
   (Go fetches and checksum-verifies it once). Set `GOTOOLCHAIN` in the
   environment to override.
 - `make check` is the primary local gate and `make test-full-chain-e2e` is
-  the separate full-chain gate. Both run in the `pre-push` hook; CI runs them
-  only inside the tag-triggered release workflow.
+  the separate full-chain gate. Both run in the `pre-push` hook and again
+  inside the tag-triggered release workflow.
 - Tool installers write under `.bin/`; caches stay under `.cache/`.
 
 ## Git hooks

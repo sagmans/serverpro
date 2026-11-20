@@ -5,8 +5,6 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 VALIDATOR=${ROOT}/scripts/validate-release-tag.sh
 CLASSIFIER=${ROOT}/scripts/classify-release-tag.sh
 PROVENANCE=${ROOT}/scripts/validate-release-provenance.sh
-CI_WORKFLOW=${ROOT}/.github/workflows/ci.yml
-RELEASE_WORKFLOW=${ROOT}/.github/workflows/release.yml
 GO_MOD=${ROOT}/go.mod
 README_DOC=${ROOT}/README.md
 INSTALLATION_DOC=${ROOT}/INSTALLATION.md
@@ -14,11 +12,6 @@ DEVELOPMENT_DOC=${ROOT}/DEVELOPMENT.md
 MISE_CONFIG=${ROOT}/mise.toml
 GO_VERSION=1.27.4
 LEGACY_GO_MINIMUM=1.26+
-CHECKOUT_SHA=3d3c42e5aac5ba805825da76410c181273ba90b1
-SETUP_GO_SHA=b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
-ATTEST_PROVENANCE_SHA=4d101475d8b20a2381f78447822ac1eab6504dd8
-ATTEST_SBOM_SHA=1e69f48acb82d1966a394da916b4c1698aa569d6
-SBOM_ACTION_SHA=66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c
 # Stable object identities keep command fixtures independent of local Git policy.
 MAIN_COMMIT_SHA=1111111111111111111111111111111111111111
 OFFMAIN_COMMIT_SHA=2222222222222222222222222222222222222222
@@ -78,34 +71,8 @@ assert_absent "${README_DOC}" "Requires Go ${LEGACY_GO_MINIMUM}."
 assert_line_count "${INSTALLATION_DOC}" "- Go ${GO_VERSION}+" 1
 assert_absent "${INSTALLATION_DOC}" "- Go ${LEGACY_GO_MINIMUM}"
 assert_line_count "${DEVELOPMENT_DOC}" "- Go ${GO_VERSION} is the supported development, CI, and release toolchain." 1
-assert_contains "${CI_WORKFLOW}" "workflow_call:"
-assert_contains "${CI_WORKFLOW}" "actions/checkout@${CHECKOUT_SHA}"
-assert_contains "${CI_WORKFLOW}" "actions/setup-go@${SETUP_GO_SHA}"
-assert_line_count "${CI_WORKFLOW}" "          go-version: \"${GO_VERSION}\"" 2
-assert_absent "${CI_WORKFLOW}" "1.26.x"
-assert_absent "${CI_WORKFLOW}" "check-latest: true"
-assert_absent "${CI_WORKFLOW}" "mise_toml:"
-assert_contains "${RELEASE_WORKFLOW}" "uses: $/.github/workflows/ci.yml"
-assert_contains "${RELEASE_WORKFLOW}" "actions/checkout@${CHECKOUT_SHA}"
-assert_contains "${RELEASE_WORKFLOW}" "actions/setup-go@${SETUP_GO_SHA}"
-assert_line_count "${RELEASE_WORKFLOW}" "          go-version: \"${GO_VERSION}\"" 1
-assert_contains "${RELEASE_WORKFLOW}" "bash scripts/validate-release-tag.sh \"\${GITHUB_REF_NAME}\""
-assert_contains "${RELEASE_WORKFLOW}" "bash scripts/validate-release-provenance.sh \"\${GITHUB_REF_NAME}\""
-assert_contains "${RELEASE_WORKFLOW}" "RELEASE_SIGNER_ALLOWLIST: \${{ vars.RELEASE_SIGNER_ALLOWLIST }}"
-assert_line_count "${RELEASE_WORKFLOW}" "    needs: [checks, validate]" 1
-assert_contains "${RELEASE_WORKFLOW}" "needs: [checks, validate, package]"
-assert_contains "${RELEASE_WORKFLOW}" "gh release view \"\${GITHUB_REF_NAME}\""
-assert_contains "${RELEASE_WORKFLOW}" "macos-15-intel"
-assert_contains "${RELEASE_WORKFLOW}" "macos-15"
-assert_contains "${RELEASE_WORKFLOW}" "./serverpro --version"
-assert_contains "${RELEASE_WORKFLOW}" "anchore/sbom-action@${SBOM_ACTION_SHA}"
-assert_contains "${RELEASE_WORKFLOW}" "actions/attest-build-provenance@${ATTEST_PROVENANCE_SHA}"
-assert_contains "${RELEASE_WORKFLOW}" "actions/attest@${ATTEST_SBOM_SHA}"
-assert_contains "${RELEASE_WORKFLOW}" "gh release create"
-assert_absent "${RELEASE_WORKFLOW}" "gh release edit"
-assert_absent "${RELEASE_WORKFLOW}" "--clobber"
-assert_absent "${RELEASE_WORKFLOW}" "1.26.x"
-assert_absent "${RELEASE_WORKFLOW}" "check-latest: true"
+# Typed workflow YAML invariants live in internal/releasecontract/workflow_test.go;
+# this script covers executable release scripts and doc/toolchain pin parity.
 assert_contains "${INSTALLATION_DOC}" "gh release download \"\${version}\""
 assert_contains "${INSTALLATION_DOC}" "grep -F \"  \${archive}\" SHA256SUMS"
 assert_contains "${INSTALLATION_DOC}" "--bundle \"\${provenance_bundle}\""

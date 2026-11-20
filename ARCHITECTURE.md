@@ -769,8 +769,8 @@ never replaced.
 - CLI stdout remains deterministic and JSON-stable; create/bootstrap progress
   is fixed-vocabulary, secret-safe, and stderr-only.
 - Concurrent full-chain provider journeys run production doctor and cleanup
-  orchestration in a distinct non-live CI job; failure artifacts redact test
-  credentials and contain no provider secrets.
+  orchestration in a distinct non-live release-workflow job; failure artifacts
+  redact test credentials and contain no provider secrets.
 - `TESTING.md` must list command, package, use-case, and dogfood coverage for
   each new or changed capability.
 - Docs and `WEB_SOURCES.md` must be updated when provider, ingress, or

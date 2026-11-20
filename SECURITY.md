@@ -658,14 +658,14 @@ only after checking the new value through the official source recorded in
 coverage, and landing code plus documentation together. A changed remote key or
 artifact fails closed until that review completes.
 
-Release tags run the reusable non-live check gate on the exact tagged commit and
-use the same Go 1.27.4 pin as local development. The build that gets attested
-and published does not read the Actions cache. Release publication rejects
-non-SemVer tags and existing releases, never clobbers assets, smoke-tests native
-binaries, and pairs every target archive with checksums, an SPDX SBOM, and
-signed Sigstore provenance and SBOM attestations. SemVer prerelease tags are
-published as GitHub prereleases. Repository-level tag protection and
-immutable-release settings remain required defense in depth.
+Release tags run the non-live `check` and `full-chain-e2e` gates directly in
+`release.yml` on the exact tagged commit and use the same Go 1.27.4 pin as
+local development. Release workflow jobs do not read the Actions cache. Release
+publication rejects non-SemVer tags and existing releases, never clobbers
+assets, smoke-tests native binaries, and pairs every target archive with
+checksums, an SPDX SBOM, and signed Sigstore provenance and SBOM attestations.
+SemVer prerelease tags are published as GitHub prereleases. Repository-level
+tag protection and immutable-release settings remain required defense in depth.
 
 ## Safe operations
 

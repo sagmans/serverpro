@@ -1349,10 +1349,8 @@ https://github.com/actions/attest-build-provenance/releases/tag/v4.2.2
 https://github.com/actions/attest/releases/tag/v4.2.2
 https://github.com/anchore/sbom-action/releases/tag/v0.24.3
 https://github.com/anchore/syft/releases/tag/v1.48.0
-https://github.blog/changelog/2026-07-30-reference-same-repository-actions-with-self-repository-syntax/
-https://docs.zizmor.sh/audits/#self-repository
+https://github.com/jdx/mise-action/releases/tag/v5.2.4
 https://docs.zizmor.sh/audits/#cache-poisoning
-https://github.com/rhysd/actionlint/issues/711
 ```
 
 Use: release workflow, native runner architecture, artifact transport, SPDX
@@ -1365,10 +1363,11 @@ is pinned to `v1.48.0`.
 `macos-15-intel` supplies amd64 and `macos-15` supplies arm64 for native smoke
 execution. Recheck action release notes, runtime requirements, and Syft security
 advisories before rotating any pin.
-Reviewed 2026-11-05: `release.yml` calls `ci.yml` with the self-repository `$/`
-syntax, which needs runner `2.336.0` or newer and is not available on GitHub
-Enterprise Server. actionlint `1.7.12` is the newest release and still rejects
-`$/`, so `.github/actionlint.yaml` ignores that one message until issue 711 ships.
+Reviewed 2026-11-21: `check` and `full-chain-e2e` live directly in
+`release.yml` (`.github/workflows/ci.yml` is removed), and every job disables
+Actions caching (`cache: false`) to prevent cross-ref cache poisoning.
+`jdx/mise-action` is pinned to `v5.2.4` and allowed explicitly in repository
+Actions permissions.
 
 ### Hetzner VNC
 

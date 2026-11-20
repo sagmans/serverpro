@@ -40,6 +40,11 @@ if [[ "$release_test_count" != '1' ]] || ! grep -Fq 'bash scripts/test-release-c
 	printf 'make test-release must run one focused Go package test and shell contract:\n%s\n' "$release_plan" >&2
 	exit 1
 fi
+e2e_plan="$(make -n test-full-chain-e2e GO=__SERVERPRO_GO__)"
+if ! grep -Fq 'GOFLAGS="-tags=serverpro_full_chain_e2e" go test ./internal/e2e' <<<"$e2e_plan"; then
+	printf 'make test-full-chain-e2e missing full-chain build-tag test invocation:\n%s\n' "$e2e_plan" >&2
+	exit 1
+fi
 root=$PWD
 if grep -Fq 'go test ./internal/releasecontract' "$root/scripts/test-release-contract.sh"; then
 	printf 'release shell contract must not rerun Go tests already owned by make targets\n' >&2
