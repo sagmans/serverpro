@@ -13,11 +13,12 @@ import (
 const (
 	// Older releases let Tailscale SSH forward to root-only unix sockets
 	// (TS-2026-014), allow an SSH memory DoS (TS-2026-015), carry the Serve
-	// flaws TS-2026-016/017, and lack the TS-2026-013 eMudhra distrust. Hosts
-	// already on 1.104.x must also never be pinned back to an older release.
-	Version      = "1.104.4"
-	AMD64SHA256  = "624ea093d47d62cf56f17b8332d74b8decda4a1faa610ebc60a1de334b2b3dc9"
-	ARM64SHA256  = "a1c249ce6bdebef62e1ae3b997595555bce2ae4709bf95a718e9ca7a129dad7e"
+	// flaws TS-2026-016/017 and k8s-proxy header impersonation (TS-2026-018),
+	// lack the TS-2026-013 eMudhra distrust, or ship Go below 1.27.4
+	// (GO-2026-6859). Hosts already on 1.104.x must never be pinned backward.
+	Version      = "1.104.7"
+	AMD64SHA256  = "e56693ff74a64f2591b7e819c280635a100aae1ddfb0ef058fcd052b7cd8d16c"
+	ARM64SHA256  = "d6bed2720310b328b861f943d7b4016c5358a9bad60575eb51e8143b79068484"
 	CheckName    = "tailscale " + Version
 	RestartGrace = 5 * time.Second
 	restartDelay = "2s"

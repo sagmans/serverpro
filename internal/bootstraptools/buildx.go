@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	BuildxVersion          = "0.38.1"
-	BuildxLinuxAMD64SHA256 = "e25d5cd675092bb5d1d03632fdc46cdf3fede7b514dc5f023a105e00d3ce5ad4"
-	BuildxLinuxARM64SHA256 = "3b83b3731916ba433feccaaa689fe5bcdc81c641d92c8e6c2ea865dfa141c97a"
+	BuildxVersion          = "0.39.0"
+	BuildxLinuxAMD64SHA256 = "5fb31a097304fbf6dd4038649a0decf32c2b9510e4047acd7d68b9d700c46194"
+	BuildxLinuxARM64SHA256 = "722cdcdfdd6f3fb943fa1ba75102d057feb18ba72aab93b1b0a8cf2b2b48a25f"
 	BuildxPackage          = "docker-buildx-plugin"
 	BuildxManagedDirectory = "/usr/local/lib/serverpro/docker-buildx"
 	BuildxPluginPath       = "/usr/local/lib/docker/cli-plugins/docker-buildx"

@@ -655,7 +655,7 @@ package once available. Operator-owned overrides require operator action;
 repair does not delete them. Tailscale daemon restart is delayed until the updating
 SSH command returns, then doctor waits and rechecks it. When ingress is enabled,
 doctor verifies cloudflared is active and at or above
-its reviewed `2026.10.6` package floor. A failed `cloudflared` check names one
+its reviewed `2026.11.0` package floor. A failed `cloudflared` check names one
 reason: the package is not installed, its package status, the installed version
 below the floor, a missing install receipt, a connector that is "not the build
 serverpro installed from <https://pkg.cloudflare.com/cloudflared>", or the service
@@ -722,13 +722,13 @@ and installs the latest stable Pi under `~/.pi/agent/`, with a launcher link at
 later with `pi update`. Doctor requires the `~/.local/bin/pi` entrypoint, Pi's
 managed-install marker, and a semver `pi --version`. The `all`
 target also installs Node.js `24.22.3` LTS with bundled npm `11.19.1`, uv
-`0.13.5` through mise's explicit `aqua:astral-sh/uv` backend, and
-Rust `1.99.1` through `core:rust` with the default rustc, Cargo, rustfmt, Clippy,
+`0.13.8` through mise's explicit `aqua:astral-sh/uv` backend, and
+Rust `1.100.0` through `core:rust` with the default rustc, Cargo, rustfmt, Clippy,
 and docs profile. Doctor checks those exact versions and all Rust
 default-profile components. Wrong Node/npm state forces same-version Node
-replacement; Pi is not affected. It also installs tmux `3.7c`, gh
-`2.103.3`, rg
-`15.2.0`, fd `10.5.0`, ast-grep `0.51.0`, sem `0.29.0`, and inspect `0.1.1`.
+replacement; Pi is not affected. It also installs tmux `3.8`, gh
+`2.104.0`, rg
+`15.2.0`, fd `10.5.2`, ast-grep `0.51.2`, sem `0.30.1`, and inspect `0.1.1`.
 ast-grep, sem, and inspect use checksum-pinned GitHub release assets; inspect's
 bare binary
 digest is checked before execution. On existing hosts, `all` removes the active

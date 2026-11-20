@@ -13,13 +13,13 @@ import (
 )
 
 func TestManifestPinsApprovedRelease(t *testing.T) {
-	if Version != "1.104.4" {
-		t.Fatalf("tailscale version = %q, want 1.104.4", Version)
+	if Version != "1.104.7" {
+		t.Fatalf("tailscale version = %q, want 1.104.7", Version)
 	}
-	if AMD64SHA256 != "624ea093d47d62cf56f17b8332d74b8decda4a1faa610ebc60a1de334b2b3dc9" {
+	if AMD64SHA256 != "e56693ff74a64f2591b7e819c280635a100aae1ddfb0ef058fcd052b7cd8d16c" {
 		t.Fatalf("amd64 digest = %q", AMD64SHA256)
 	}
-	if ARM64SHA256 != "a1c249ce6bdebef62e1ae3b997595555bce2ae4709bf95a718e9ca7a129dad7e" {
+	if ARM64SHA256 != "d6bed2720310b328b861f943d7b4016c5358a9bad60575eb51e8143b79068484" {
 		t.Fatalf("arm64 digest = %q", ARM64SHA256)
 	}
 	if RestartGrace < time.Second {
@@ -32,7 +32,7 @@ func TestCheckCommandRequiresClientDaemonAndServiceVersion(t *testing.T) {
 	for _, want := range []string{
 		"tailscale version --json",
 		"tailscale status --json",
-		`1.104.4`,
+		`1.104.7`,
 		"systemctl is-active tailscaled",
 	} {
 		if !strings.Contains(command, want) {
@@ -178,7 +178,7 @@ func TestUpdateScriptPreflightsCandidatesBeforeInstall(t *testing.T) {
 func TestUpdateScriptPinsArtifactsAndDelaysDaemonRestart(t *testing.T) {
 	script := UpdateScript()
 	for _, want := range []string{
-		"SERVERPRO_TAILSCALE_VERSION='1.104.4'",
+		"SERVERPRO_TAILSCALE_VERSION='1.104.7'",
 		AMD64SHA256,
 		ARM64SHA256,
 		"https://pkgs.tailscale.com/stable/",

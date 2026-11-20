@@ -464,42 +464,36 @@ without one get this secure default.
 
 ## Supply-chain verification
 
-The 2026-10-03 managed-tool review, refreshed 2026-10-22 and 2026-10-30, selects
-stable releases at least seven days
-old, except explicitly approved fixes for disclosed vulnerabilities. Tailscale
-`1.104.4`, Docker Engine `29.9.2`, Buildx `0.38.1`, Compose `5.6.1`, mise `2026.10.24`,
-Node.js `24.22.3`, uv `0.13.5`, gh `2.103.3`, and sem `0.29.0` use those
-exceptions; `WEB_SOURCES.md` records the evidence. The age
-threshold governs release selection. Signed apt candidates can be newer.
-Pi and Herdr are the exception: they install as the latest stable release
-from their vendor installers and have no age gate (see the Pi and Herdr items
-below).
-containerd `2.4.2` meets seven days and
-fixes `CVE-2026-95839`, `GHSA-8647-2jxj-p2rc`, and `GHSA-hc94-p972-ch66`.
-Docker Engine, Buildx, and Compose are rebuilt with Go releases that reject
-the eight revoked eMudhra intermediate certificates (`CVE-2026-111943`).
-The mise exception fixes `GHSA-wcqh-j26q-g44x`: untrusted inline
-`.tool-versions` options can disclose `GITHUB_TOKEN` on releases through `2026.9.18`.
-A 2026-10-22 follow-up exception raises the mise floor from `2026.10.0` to
-`2026.10.17`. That release stops mise’s built-in npm backend from trusting
-eight eMudhra intermediate CA certificates whose private keys were compromised.
-The same 2026-10-22 review takes Node.js `24.22.1` for its security release,
-uv `0.13.5` for `GHSA-hq85-5cpj-mr62` (its own trust store kept the compromised
-emSign root), and gh `2.102.1` for its Go `1.27.3` standard-library fixes,
-all younger than seven days. ast-grep `0.51.0` passes the age gate and fixes
-critical `GHSA-xx6h-xcfw-vf5j` and high `GHSA-cmvf-x8f7-rvp6`: a project
-configuration could load native code as a custom language library.
-The 2026-10-30 Tailscale exception fixes Tailscale SSH forwarding to root-only
-unix sockets (TS-2026-014), an SSH memory denial of service (TS-2026-015), and
-Serve flaws (TS-2026-016, TS-2026-017); it keeps the TS-2026-013 eMudhra fix.
-The same review raises the mise floor to `2026.10.24`: pinned checksums, Node
-signatures, and attestations fail closed, the GitHub token goes only to GitHub
-API hosts, and git refs can no longer inject options. gh `2.103.3` carries the
-`digitorus/pkcs7` fix for `GHSA-3xqc-rpq8-wgp9`, and sem `0.29.0` drops the
-compromised eMudhra CAs from its bundled roots.
+The 2026-10-03 managed-tool review, refreshed 2026-10-22, 2026-10-30, and
+2026-11-20, selects stable releases at least seven days old, except explicitly
+approved fixes for disclosed vulnerabilities. On 2026-11-20 every pinned release
+passes the seven-day age gate (cutoff 2026-11-13); `WEB_SOURCES.md` records the
+evidence. The age threshold governs release selection. Signed apt candidates can
+be newer. Pi and Herdr are the exception: they install as the latest stable
+release from their vendor installers and have no age gate (see the Pi and Herdr
+items below).
+The 2026-11-20 refresh raises Tailscale to `1.104.7` (fixes `TS-2026-018`
+k8s-proxy header impersonation and rebuilds with Go `1.27.4` for
+`GO-2026-6859`), `ca-certificates` to `20260816ubuntu0.24.04.2` (synchronous
+`update-ca-certificates` hooks and stale temporary bundle cleanup), Docker
+Engine/CLI to `29.9.3`, containerd to `2.4.2-4`, Buildx to `0.39.0`, Compose to
+`5.7.1`, cloudflared to `2026.11.0` (semicolon path-parameter normalization for
+Cloudflare Access), mise to `2026.11.7`, uv to `0.13.8` (owner-only permissions
+for Unix plaintext credential files plus the `CVE-2026-115557` eMudhra CPython
+denylist), Rust to `1.100.0`, tmux to `3.8`, gh to `2.104.0`, fd to `10.5.2`,
+ast-grep to `0.51.2`, and sem to `0.30.1`. Earlier security floors remain in
+effect: containerd `2.4.2` fixes `CVE-2026-95839`, `GHSA-8647-2jxj-p2rc`, and
+`GHSA-hc94-p972-ch66`; Docker Engine, Buildx, and Compose reject the eight
+revoked eMudhra intermediate certificates (`CVE-2026-111943`); mise keeps the
+`GHSA-wcqh-j26q-g44x`, eMudhra distrust, fail-closed verification, GitHub-host
+token scoping, git-ref option-injection, and fnox secret-grant fixes; Node.js
+`24.22.3` carries the 2026-11-11 security fixes and `CVE-2026-111497` Brotli
+fix; uv keeps `GHSA-hq85-5cpj-mr62`; ast-grep keeps `GHSA-xx6h-xcfw-vf5j` and
+`GHSA-cmvf-x8f7-rvp6`; Tailscale keeps `TS-2026-013` through `TS-2026-017`; gh
+keeps `GHSA-3xqc-rpq8-wgp9`; and sem keeps eMudhra CA removal.
 `MISE_SAFE=1` skips mise’s trust check; never use it to inspect untrusted projects.
 
-Buildx `0.38.1` is in Docker’s Noble apt repository for both supported
+Buildx `0.39.0` is in Docker’s Noble apt repository for both supported
 architectures at review time. The fallback stays for hosts whose apt candidate
 is older. Bootstrap instead permits only the reviewed
 official binary with a Go-owned architecture-specific SHA-256. It verifies
@@ -528,19 +522,19 @@ Bootstrap still saves them to disk before it runs them. The other tools:
   keyring contains exactly one primary key with fingerprint
   `9DC858229FC7DD38854AE2D88D81803C0EBFCD88`; subkeys are allowed, but missing,
   substituted, or additional primary keys fail before publication.
-- mise `2026.10.24` is fetched as a release tarball and verified against its
+- mise `2026.11.7` is fetched as a release tarball and verified against its
   published SHA-256 checksum before the target user installs it into
   `~/.local/bin`; newer compatible mise releases remain valid.
-- uv `0.13.5` is pinned and installed through mise's explicit
+- uv `0.13.8` is pinned and installed through mise's explicit
   `aqua:astral-sh/uv` backend. That registry entry advertises release SHA-256
   and GitHub-attestation verification; doctor verifies the exact version.
-- Rust `1.99.1` is pinned and installed through mise's `core:rust` backend with
+- Rust `1.100.0` is pinned and installed through mise's `core:rust` backend with
   the default rustup profile. Doctor verifies rustc, Cargo, rustfmt, Clippy, and
   Rust
   docs. rustup downloads over HTTPS, but its official security documentation
   states download signatures are not yet enforced; this remains a trust
   boundary despite the exact version pin.
-- ast-grep `0.51.0`, sem `0.29.0`, and inspect `0.1.1` are installed from exact
+- ast-grep `0.51.2`, sem `0.30.1`, and inspect `0.1.1` are installed from exact
   mise GitHub backends and versions. Their x86_64/arm64 release assets are
   pinned by reviewed
   SHA-256 values; unsupported architectures fail before mutation. Doctor checks
@@ -585,7 +579,7 @@ Bootstrap still saves them to disk before it runs them. The other tools:
 - Pi is an AI agent with shell execution. Installing it on a hardened host
   widens the admin-user trust boundary; enable the `pi` or `all` target only
   where that is intended.
-- Tailscale `1.104.4` first-boot and repair binaries are fetched only for
+- Tailscale `1.104.7` first-boot and repair binaries are fetched only for
   reviewed amd64 or arm64 architectures, checked against pinned SHA-256 digests,
   and extracted by exact member name. Unsupported architectures and mismatches
   stop before install. Serverpro explicitly sets `GODEBUG=tlsmlkem=1` for
@@ -596,12 +590,12 @@ Bootstrap still saves them to disk before it runs them. The other tools:
   contain exactly one primary key with fingerprint
   `CC94B39C77AE7342A68B89628A682D308D4E5E73`. Missing, substituted, or additional
   primary keys fail before the key can enter the trusted keyring. The installer
-  uses the explicit noble repository and requires cloudflared `2026.10.6` or
+  uses the explicit noble repository and requires cloudflared `2026.11.0` or
   newer; ingress-enabled doctor runs verify both that floor and service state.
   Older connectors still trust eight eMudhra intermediate CAs whose private
-  keys were compromised, and builds before `2026.10.6` also ship vulnerable
-  go-jose and go-chi modules and expose the metrics debug endpoints, so
-  doctor fails them and `--fix` upgrades them.
+  keys were compromised, ship vulnerable go-jose and go-chi modules, expose
+  metrics debug endpoints, or omit semicolon path-parameter normalization for
+  Cloudflare Access, so doctor fails them and `--fix` upgrades them.
   With ingress `none`, doctor still audits a connector that another tool
   installed, because the config setting does not prove the host has none. An
   enabled or running connector gets the full check and repair. A dormant

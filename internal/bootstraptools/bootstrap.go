@@ -15,34 +15,36 @@ import (
 const (
 	// Older mise skips pinned-checksum, Node-signature, and attestation checks
 	// when a file is missing, sends the GitHub token to any /api/v3 host, and
-	// passes untrusted git refs as options; this release fails closed on all.
-	MinimumMiseVersion        = "2026.10.24"
-	MiseLinuxX64TarGzSHA256   = "9a6c9c55f5c6372d0af70a9979fe6d742aea3793267a929e1738022143c466cc"
-	MiseLinuxArm64TarGzSHA256 = "8c8f5d7f748bf3aef431dc50f0ad776270f36025c788aa21c74e2fabdbbd6d3e"
+	// passes untrusted git refs as options; 2026.10.24 and later fail closed on all.
+	MinimumMiseVersion        = "2026.11.7"
+	MiseLinuxX64TarGzSHA256   = "3198a5ed5716ca8c17ecfc54521e2769d6cacbf2d13f24f0c2f9706620ec0024"
+	MiseLinuxArm64TarGzSHA256 = "b8de6c8e7aa85752a6a2368df32393552a2d8947b6f4072ecd29a1ad972e5c40"
 	// 24.22.3 carries the 2026-11-11 Node.js security fixes (16 CVEs, including
 	// CVE-2026-123863, CVE-2026-123864, and CVE-2026-126051) and keeps the
 	// CVE-2026-111497 Brotli fix from 24.22.1.
-	NodeVersion     = "24.22.3"
-	NPMVersion      = "11.19.1"
-	UVVersion       = "0.13.5"
+	NodeVersion = "24.22.3"
+	NPMVersion  = "11.19.1"
+	// 0.13.8 restricts Unix plaintext credential files to owner-only mode and
+	// keeps the CVE-2026-115557 eMudhra CPython denylist.
+	UVVersion       = "0.13.8"
 	UVMiseBackend   = "aqua:astral-sh/uv"
-	RustVersion     = "1.99.1"
+	RustVersion     = "1.100.0"
 	RustMiseBackend = "core:rust"
 	RustProfile     = "default"
-	TmuxVersion     = "3.7c"
+	TmuxVersion     = "3.8"
 	// 2.103.1 and later carry the digitorus/pkcs7 fix for GHSA-3xqc-rpq8-wgp9.
-	GitHubCLIVersion        = "2.103.3"
+	GitHubCLIVersion        = "2.104.0"
 	RipgrepVersion          = "15.2.0"
-	FdVersion               = "10.5.0"
-	AstGrepVersion          = "0.51.0"
+	FdVersion               = "10.5.2"
+	AstGrepVersion          = "0.51.2"
 	AstGrepMiseBackend      = "github:ast-grep/ast-grep"
-	AstGrepLinuxX64SHA256   = "a7eead5552d3a8daad70f5d50d935da44bd0c138e946b5b0a96b1d38169fa639"
-	AstGrepLinuxArm64SHA256 = "73af0ebe5958acee012754a5b2826a186580ef83333092408a7a01096fc30b8b"
+	AstGrepLinuxX64SHA256   = "40604c21c38d4c7581c56bdddeef277c56bf3c0113620aa96e78ae87e82366df"
+	AstGrepLinuxArm64SHA256 = "c3ab2bd43959db28621dc1551c13ea5fe5db4c1fc7b18086dade6b65042c78d0"
 	// 0.28.2 and later ship webpki-roots without the compromised eMudhra CAs.
-	SemVersion              = "0.29.0"
+	SemVersion              = "0.30.1"
 	SemMiseBackend          = "github:Ataraxy-Labs/sem"
-	SemLinuxX64SHA256       = "30fa7ab79aaffaf0cc2d317ac771fa4330e6de6a9c0830cbe35d1ba149322dc3"
-	SemLinuxArm64SHA256     = "e7cd85d2c34dc6e8a9505a365a8639b7203c8cf6ad2d94e2b8a07e1acc8854b5"
+	SemLinuxX64SHA256       = "a673a8448d24294ea63c2a366dbc425beeb63b7653322094f6b4d4345406ffb9"
+	SemLinuxArm64SHA256     = "336193dfe156d05eaa9b06c41f69d8798221e29351bc9373f5279c914a9af36e"
 	InspectVersion          = "0.1.1"
 	InspectMiseBackend      = "github:Ataraxy-Labs/inspect"
 	InspectLinuxX64SHA256   = "99cf4ea2a2a1048d8e9369a6a5a11e5f84ee3f3c706e0bde072f9b2bd44e96ba"

@@ -21,9 +21,10 @@ const (
 	OpenSSHServiceUnit = "ssh.service"
 
 	caCertificatesPackage = "ca-certificates"
-	// USN-8944-1 drops the distrusted emSign ECC Root CA - G3, so older
-	// bundles keep accepting chains Mozilla no longer trusts.
-	caCertificatesVersion = "20260816ubuntu0.24.04.1"
+	// USN-8944-1 drops the distrusted emSign ECC Root CA - G3, and .2 adds
+	// synchronous update-ca-certificates hooks and cleans up stale temporary
+	// bundles so older stores cannot keep accepting untrusted chains.
+	caCertificatesVersion = "20260816ubuntu0.24.04.2"
 	curlPackage           = "curl"
 	// USN-8932-1 security fix; git below its floor regresses against it.
 	curlVersion       = "8.5.0-2ubuntu10.16"
@@ -51,21 +52,21 @@ const (
 	htopPackage          = "htop"
 	htopVersion          = "3.3.0-4build1"
 	dockerCEPackage      = "docker-ce"
-	dockerCEVersion      = "5:29.9.2-1~ubuntu.24.04~noble"
+	dockerCEVersion      = "5:29.9.3-1~ubuntu.24.04~noble"
 	dockerCLIPackage     = "docker-ce-cli"
-	dockerCLIVersion     = "5:29.9.2-1~ubuntu.24.04~noble"
+	dockerCLIVersion     = "5:29.9.3-1~ubuntu.24.04~noble"
 	containerdPackage    = "containerd.io"
-	containerdVersion    = "2.4.2-3~ubuntu.24.04~noble"
+	containerdVersion    = "2.4.2-4~ubuntu.24.04~noble"
 	dockerBuildxPackage  = "docker-buildx-plugin"
-	dockerBuildxVersion  = "0.38.1-1~ubuntu.24.04~noble"
+	dockerBuildxVersion  = "0.39.0-1~ubuntu.24.04~noble"
 	dockerComposePackage = "docker-compose-plugin"
-	dockerComposeVersion = "5.6.1-1~ubuntu.24.04~noble"
+	dockerComposeVersion = "5.7.1-1~ubuntu.24.04~noble"
 	cloudflaredPackage   = "cloudflared"
 	// Older connectors still trust eight eMudhra intermediate CAs whose
-	// private keys were compromised, and before 2026.10.6 they also ship the
-	// vulnerable go-jose and go-chi modules and expose the metrics debug
-	// endpoints, so hosts below this floor fail doctor.
-	cloudflaredVersion = "2026.10.6"
+	// private keys were compromised, ship vulnerable go-jose and go-chi
+	// modules, expose metrics debug endpoints, or omit semicolon path-param
+	// normalization for Cloudflare Access, so hosts below this floor fail.
+	cloudflaredVersion = "2026.11.0"
 )
 
 var (

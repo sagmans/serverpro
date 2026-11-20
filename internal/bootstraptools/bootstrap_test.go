@@ -39,7 +39,7 @@ func TestWrapperScriptDefaultsAndDelegation(t *testing.T) {
 	wrapper := WrapperScript()
 	for _, kv := range manifestEnvPairs() {
 		want := kv[0] + `="${` + kv[0] + `:-` + kv[1] + `}"`
-		if !contains(wrapper, want) {
+		if !strings.Contains(wrapper, want) {
 			t.Fatalf("wrapper missing overridable default %q", want)
 		}
 	}
@@ -50,7 +50,7 @@ func TestWrapperScriptDefaultsAndDelegation(t *testing.T) {
 		`if [ ! -f "${canonical}" ]; then`,
 		`exec sh "${canonical}" "$@"`,
 	} {
-		if !contains(wrapper, want) {
+		if !strings.Contains(wrapper, want) {
 			t.Fatalf("wrapper missing delegation marker %q", want)
 		}
 	}
@@ -121,7 +121,7 @@ func TestInstallScriptMutatesUserFilesAsTargetUser(t *testing.T) {
 		`install -m 0600 /dev/null "${config}"`,
 		`chmod 0600 "${backup}"`,
 	} {
-		if !contains(script, want) {
+		if !strings.Contains(script, want) {
 			t.Fatalf("install script missing %q", want)
 		}
 	}
@@ -133,7 +133,7 @@ func TestInstallScriptMutatesUserFilesAsTargetUser(t *testing.T) {
 		`install -d -o "${TARGET_USER}"`,
 		`install -o "${TARGET_USER}"`,
 	} {
-		if contains(script, old) {
+		if strings.Contains(script, old) {
 			t.Fatalf("install script still mutates user-owned paths as root via %q", old)
 		}
 	}
@@ -152,9 +152,9 @@ var installScriptRequiredMarkers = []string{
 	"SERVERPRO_BOOTSTRAP_PI_PROBE_BASE64=",
 	"SERVERPRO_BOOTSTRAP_HERDR_PROBE_BASE64=",
 	"SERVERPRO_BOOTSTRAP_HERDR_PI_PROBE_BASE64=",
-	"SERVERPRO_BOOTSTRAP_UV_VERSION='0.13.5'",
+	"SERVERPRO_BOOTSTRAP_UV_VERSION='" + UVVersion + "'",
 	"SERVERPRO_BOOTSTRAP_UV_BACKEND='aqua:astral-sh/uv'",
-	"SERVERPRO_BOOTSTRAP_RUST_VERSION='1.99.1'",
+	"SERVERPRO_BOOTSTRAP_RUST_VERSION='" + RustVersion + "'",
 	"SERVERPRO_BOOTSTRAP_RUST_BACKEND='core:rust'",
 	"SERVERPRO_BOOTSTRAP_RUST_PROFILE='default'",
 	"SERVERPRO_BOOTSTRAP_TMUX_VERSION='" + TmuxVersion + "'",
@@ -262,8 +262,8 @@ var installScriptUniqueVersions = []string{
 	MinimumMiseVersion,
 	NodeVersion,
 	NPMVersion,
-	"0.13.5",
-	"1.99.1",
+	UVVersion,
+	RustVersion,
 	TmuxVersion,
 	GitHubCLIVersion,
 	RipgrepVersion,
@@ -306,9 +306,17 @@ var installScriptForbiddenMarkers = []string{
 
 func TestInstallScriptExportsManagedManifestAndNoSecrets(t *testing.T) {
 	script := InstallScriptForUser("deploy")
+	header, ok := strings.CutSuffix(script, installScript)
+	if !ok {
+		t.Fatal("install script does not end with embedded canonical script")
+	}
 	assertContainsAll(t, script, installScriptRequiredMarkers)
-	assertAppearsOnce(t, script, installScriptUniqueVersions)
-	assertAppearsOnce(t, script, installScriptUniqueChecksums)
+	// Verify every pin is assigned exactly once in the generated manifest
+	// header and never hardcoded inside the canonical script body.
+	assertAssignedOnce(t, header, installScriptUniqueVersions)
+	assertAssignedOnce(t, header, installScriptUniqueChecksums)
+	assertOmitsAll(t, installScript, installScriptUniqueVersions)
+	assertOmitsAll(t, installScript, installScriptUniqueChecksums)
 	assertOmitsAll(t, script, installScriptForbiddenMarkers)
 	// Remote scripts are downloaded to a file and checked before they run;
 	// piping a download straight into a shell would run a partial body.
@@ -324,17 +332,17 @@ var pipeToShellPattern = regexp.MustCompile(`\|\s*(sudo\s+)?(sh|bash)(\s|$)`)
 func assertContainsAll(t *testing.T, script string, markers []string) {
 	t.Helper()
 	for _, marker := range markers {
-		if !contains(script, marker) {
+		if !strings.Contains(script, marker) {
 			t.Fatalf("install script missing %q", marker)
 		}
 	}
 }
 
-func assertAppearsOnce(t *testing.T, script string, markers []string) {
+func assertAssignedOnce(t *testing.T, header string, values []string) {
 	t.Helper()
-	for _, marker := range markers {
-		if count := strings.Count(script, marker); count != 1 {
-			t.Fatalf("%s appears %d times, want exactly once", marker, count)
+	for _, value := range values {
+		if count := strings.Count(header, "='"+value+"'\n"); count != 1 {
+			t.Fatalf("%s is assigned %d times in manifest header, want exactly once", value, count)
 		}
 	}
 }
@@ -342,17 +350,12 @@ func assertAppearsOnce(t *testing.T, script string, markers []string) {
 func assertOmitsAll(t *testing.T, script string, markers []string) {
 	t.Helper()
 	for _, marker := range markers {
-		if contains(script, marker) {
+		if strings.Contains(script, marker) {
 			t.Fatalf("install script still contains forbidden marker %q", marker)
 		}
 	}
 }
 
 func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return sub == ""
+	return strings.Contains(s, sub)
 }

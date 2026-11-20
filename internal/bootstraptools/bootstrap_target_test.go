@@ -103,14 +103,14 @@ func TestManagedVersionManifestPinsApprovedReleases(t *testing.T) {
 	want := map[string]string{
 		"node":     "24.22.3",
 		"npm":      "11.19.1",
-		"uv":       "0.13.5",
-		"rust":     "1.99.1",
-		"tmux":     "3.7c",
-		"gh":       "2.103.3",
+		"uv":       "0.13.8",
+		"rust":     "1.100.0",
+		"tmux":     "3.8",
+		"gh":       "2.104.0",
 		"rg":       "15.2.0",
-		"fd":       "10.5.0",
-		"ast-grep": "0.51.0",
-		"sem":      "0.29.0",
+		"fd":       "10.5.2",
+		"ast-grep": "0.51.2",
+		"sem":      "0.30.1",
 		"inspect":  "0.1.1",
 	}
 	got := map[string]string{
@@ -131,7 +131,7 @@ func TestManagedVersionManifestPinsApprovedReleases(t *testing.T) {
 			t.Fatalf("%s version = %q, want %q", tool, got[tool], version)
 		}
 	}
-	for _, pin := range []string{"SERVERPRO_BOOTSTRAP_NPM_VERSION='11.19.1'", "SERVERPRO_BOOTSTRAP_UV_VERSION='0.13.5'", "SERVERPRO_BOOTSTRAP_RUST_VERSION='1.99.1'", "SERVERPRO_BOOTSTRAP_AST_GREP_VERSION='0.51.0'", "SERVERPRO_BOOTSTRAP_SEM_VERSION='0.29.0'", "SERVERPRO_BOOTSTRAP_INSPECT_VERSION='0.1.1'"} {
+	for _, pin := range []string{"SERVERPRO_BOOTSTRAP_NPM_VERSION='11.19.1'", "SERVERPRO_BOOTSTRAP_UV_VERSION='0.13.8'", "SERVERPRO_BOOTSTRAP_RUST_VERSION='1.100.0'", "SERVERPRO_BOOTSTRAP_AST_GREP_VERSION='0.51.2'", "SERVERPRO_BOOTSTRAP_SEM_VERSION='0.30.1'", "SERVERPRO_BOOTSTRAP_INSPECT_VERSION='0.1.1'"} {
 		if !contains(InstallScriptForUser("deploy"), pin) {
 			t.Fatalf("managed version manifest missing %q", pin)
 		}
@@ -140,8 +140,8 @@ func TestManagedVersionManifestPinsApprovedReleases(t *testing.T) {
 
 func TestManagedReleaseChecksumsPinApprovedAssets(t *testing.T) {
 	want := map[string][2]string{
-		"ast-grep": {"a7eead5552d3a8daad70f5d50d935da44bd0c138e946b5b0a96b1d38169fa639", "73af0ebe5958acee012754a5b2826a186580ef83333092408a7a01096fc30b8b"},
-		"sem":      {"30fa7ab79aaffaf0cc2d317ac771fa4330e6de6a9c0830cbe35d1ba149322dc3", "e7cd85d2c34dc6e8a9505a365a8639b7203c8cf6ad2d94e2b8a07e1acc8854b5"},
+		"ast-grep": {"40604c21c38d4c7581c56bdddeef277c56bf3c0113620aa96e78ae87e82366df", "c3ab2bd43959db28621dc1551c13ea5fe5db4c1fc7b18086dade6b65042c78d0"},
+		"sem":      {"a673a8448d24294ea63c2a366dbc425beeb63b7653322094f6b4d4345406ffb9", "336193dfe156d05eaa9b06c41f69d8798221e29351bc9373f5279c914a9af36e"},
 		"inspect":  {"99cf4ea2a2a1048d8e9369a6a5a11e5f84ee3f3c706e0bde072f9b2bd44e96ba", "2327c1de10ecf40e5199c15fdc4c4b3c173735640294e779c635f4c15771e4f6"},
 	}
 	got := map[string][2]string{
@@ -311,12 +311,12 @@ func TestInstallScriptConfiguresCuratedManagedTools(t *testing.T) {
 }
 
 func TestMiseReleaseManifestPinsRequiredVersion(t *testing.T) {
-	if MinimumMiseVersion != "2026.10.24" {
-		t.Fatalf("mise version = %q, want 2026.10.24", MinimumMiseVersion)
+	if MinimumMiseVersion != "2026.11.7" {
+		t.Fatalf("mise version = %q, want 2026.11.7", MinimumMiseVersion)
 	}
 	want := map[string]string{
-		"linux-x64":   "9a6c9c55f5c6372d0af70a9979fe6d742aea3793267a929e1738022143c466cc",
-		"linux-arm64": "8c8f5d7f748bf3aef431dc50f0ad776270f36025c788aa21c74e2fabdbbd6d3e",
+		"linux-x64":   "3198a5ed5716ca8c17ecfc54521e2769d6cacbf2d13f24f0c2f9706620ec0024",
+		"linux-arm64": "b8de6c8e7aa85752a6a2368df32393552a2d8947b6f4072ecd29a1ad972e5c40",
 	}
 	got := map[string]string{
 		"linux-x64":   MiseLinuxX64TarGzSHA256,

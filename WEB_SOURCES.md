@@ -1,12 +1,12 @@
 # Web Sources for serverpro
 
-Date: 2026-11-18
+Date: 2026-11-20
 Scope: provider-agnostic serverpro references
 
 Prefer official provider/API docs. If guides conflict with API references, trust
 API references.
 
-## Managed-tool review: 2026-10-03, refreshed through 2026-11-18
+## Managed-tool review: 2026-10-03, refreshed through 2026-11-20
 
 The normal cutoff is 2026-09-26 09:13:29 UTC: stable releases must be at least
 seven days old. Preserve Ubuntu 24.04 packages and Node.js 24 LTS. Keep npm
@@ -118,24 +118,42 @@ history.
 - <https://github.com/aws/aws-sdk-js-v3/issues/8393>
 - <https://registry.npmjs.org/@earendil-works/pi-coding-agent/-/pi-coding-agent-1.5.0.tgz>
 
+Reviewed 2026-11-20 (cutoff 2026-11-13): every pinned release passes the
+seven-day age gate. Tailscale moves to `1.104.7` (fixes `TS-2026-018` k8s-proxy
+header impersonation and rebuilds with Go `1.27.4` for `GO-2026-6859`),
+`ca-certificates` moves to `20260816ubuntu0.24.04.2`, Docker Engine/CLI move to
+`29.9.3`, containerd moves to `2.4.2-4`, Buildx moves to `0.39.0`, Compose moves
+to `5.7.1`, cloudflared moves to `2026.11.0`, mise moves to `2026.11.7`, uv
+moves to `0.13.8`, Rust moves to `1.100.0`, tmux moves to `3.8`
+(`tmux/tmux-builds` now publishes `3.8` Linux archives), gh moves to `2.104.0`,
+fd moves to `10.5.2`, ast-grep moves to `0.51.2`, and sem moves to `0.30.1`.
+Docker `29.10.0`, Buildx `0.39.1`, Compose `5.7.2` / `5.8.0`, and cloudflared
+`2026.11.1` are younger than seven days with no urgent override required, so
+reviewed floors stop at `29.9.3`, `0.39.0`, `5.7.1`, and `2026.11.0` while
+accepting newer signed apt packages (the Noble index already serves cloudflared
+`2026.11.1`).
+
 | Updated tool | Selected release | Published (UTC) | Selection |
 | --- | --- | --- | --- |
-| Tailscale | 1.104.4 | 2026-10-28 01:05 | Approved security exception; Tailscale SSH and Serve fixes (TS-2026-014 to TS-2026-017) |
-| Docker Engine / CLI | 29.9.2 | 2026-10-20 20:51:17 | Approved security exception; Go `CVE-2026-111943` rebuild |
-| containerd | 2.4.2 | 2026-10-13 22:35:06 | Normal age gate; Docker's Noble package line is now 2.4 |
-| Buildx | 0.38.1 | 2026-10-20 22:09:11 | Approved security exception; Go `CVE-2026-111943` rebuild; reviewed official binary fallback |
-| Compose | 5.6.1 | 2026-10-21 07:54:18 | Approved security exception; Go `CVE-2026-111943` rebuild |
-| mise | 2026.10.24 | 2026-10-30 10:15:02 | Approved security exception; fail-closed verification, GitHub token limited to GitHub hosts, git ref option-injection and fnox secret-grant fixes |
+| Tailscale | 1.104.7 | 2026-11-12 | Normal age gate and security release; `TS-2026-018` + Go `1.27.4` (`GO-2026-6859`) |
+| ca-certificates | 20260816ubuntu0.24.04.2 | 2026-11-02 | Normal age gate; synchronous hooks and stale temp bundle cleanup |
+| Docker Engine / CLI | 29.9.3 | 2026-11-03 | Normal age gate; keeps Go `CVE-2026-111943` rebuild |
+| containerd | 2.4.2-4 | 2026-11-12 | Normal age gate; Docker Noble `2.4` package revision |
+| Buildx | 0.39.0 | 2026-11-11 | Normal age gate; reviewed official binary fallback |
+| Compose | 5.7.1 | 2026-11-11 | Normal age gate; Docker Noble package floor |
+| mise | 2026.11.7 | 2026-11-12 | Normal age gate; keeps fail-closed verification and token-scoping fixes |
 | Node.js | 24.22.3 LTS | 2026-11-11 | Normal age gate and security release; 16 CVEs incl. `CVE-2026-123863`, `CVE-2026-123864`, `CVE-2026-126051` |
 | libbrotli1 | 1.1.0-2ubuntu0.1 | 2026-10-21 | Ubuntu `USN-8956-1` security floor for `CVE-2026-111497` |
 | Pi | Latest stable (not pinned) | n/a | Vendor installer; `pi update` owns updates (2026-11-18). Past pin: 1.5.0 |
-| uv | 0.13.5 | 2026-10-22 01:35:54 | Approved security exception; removes the compromised emSign root (`GHSA-hq85-5cpj-mr62`) |
-| Rust | 1.99.1 | 2026-10-16 04:47:44 | Normal age gate; miscompilation fix |
-| gh | 2.103.3 | 2026-10-26 19:20:08 | Approved security exception; `digitorus/pkcs7` fix for `GHSA-3xqc-rpq8-wgp9` |
-| ast-grep | 0.51.0 | 2026-10-15 15:10:15 | Normal age gate; fixes `GHSA-xx6h-xcfw-vf5j` and `GHSA-cmvf-x8f7-rvp6` |
-| sem | 0.29.0 | 2026-10-30 00:51:43 | Approved security exception; `webpki-roots` `1.0.10` drops compromised eMudhra CAs |
+| uv | 0.13.8 | 2026-11-12 | Normal age gate; owner-only Unix credential file permissions + `CVE-2026-115557` denylist |
+| Rust | 1.100.0 | 2026-11-12 | Normal age gate |
+| tmux | 3.8 | 2026-11-07 | Normal age gate; `tmux/tmux-builds` v3.8 archives verified |
+| gh | 2.104.0 | 2026-11-12 | Normal age gate; keeps `GHSA-3xqc-rpq8-wgp9` fix |
+| fd | 10.5.2 | 2026-11-07 | Normal age gate |
+| ast-grep | 0.51.2 | 2026-11-11 | Normal age gate; keeps `GHSA-xx6h-xcfw-vf5j` and `GHSA-cmvf-x8f7-rvp6` fixes |
+| sem | 0.30.1 | 2026-11-10 | Normal age gate; keeps eMudhra CA removal |
 | Herdr | Latest stable (not pinned) | n/a | Vendor installer; `herdr update` owns updates (2026-11-18). Past pin: 0.9.5 |
-| cloudflared | 2026.10.6 | 2026-10-29 12:18:25 | Approved security exception; go-jose (VULN-184686), go-chi (VULN-183456), and metrics debug endpoint (VULN-176088) fixes |
+| cloudflared | 2026.11.0 | 2026-11-12 | Normal age gate; semicolon path-parameter normalization for Cloudflare Access |
 
 Primary selection and security evidence:
 
@@ -144,47 +162,49 @@ Primary selection and security evidence:
 - <https://api.launchpad.net/1.0/ubuntu/+archive/primary>
 - <https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-amd64/Packages.gz>
 - <https://download.docker.com/linux/ubuntu/dists/noble/stable/binary-arm64/Packages.gz>
-- <https://github.com/moby/moby/releases/tag/docker-v29.9.2>
+- <https://github.com/moby/moby/releases/tag/docker-v29.9.3>
 - <https://github.com/containerd/containerd/releases/tag/v2.4.2>
-- <https://github.com/docker/compose/releases/tag/v5.6.1>
+- <https://github.com/docker/compose/releases/tag/v5.7.1>
 - <https://go.dev/issue/82345>
 - <https://github.com/containerd/containerd/security/advisories/GHSA-vwhp-8p66-mq4f>
 - <https://github.com/containerd/containerd/security/advisories/GHSA-8647-2jxj-p2rc>
 - <https://github.com/containerd/containerd/security/advisories/GHSA-hc94-p972-ch66>
 - <https://github.com/containerd/containerd/security/advisories/GHSA-pg57-6jwg-q645>
-- <https://github.com/docker/buildx/releases/tag/v0.38.1>
+- <https://github.com/docker/buildx/releases/tag/v0.39.0>
 - <https://github.com/docker/buildx/security/advisories/GHSA-gwr2-q96m-6682>
 - <https://github.com/docker/buildx/security/advisories/GHSA-p54p-jq4x-rc28>
 - <https://github.com/jdx/mise/security/advisories/GHSA-333c-h2jr-xv83>
 - <https://github.com/jdx/mise/security/advisories/GHSA-wcqh-j26q-g44x>
-- <https://github.com/astral-sh/uv/releases/tag/0.13.5>
+- <https://github.com/astral-sh/uv/releases/tag/0.13.8>
 - <https://github.com/astral-sh/uv/security/advisories/GHSA-hq85-5cpj-mr62>
-- <https://github.com/cli/cli/releases/tag/v2.103.3>
+- <https://github.com/cli/cli/releases/tag/v2.104.0>
 - <https://github.com/cli/cli/pull/14791>
-- <https://nodejs.org/dist/index.json>
+- <https://github.com/ast-grep/ast-grep/releases/tag/0.51.2>
 - <https://github.com/ast-grep/ast-grep/security/advisories/GHSA-xx6h-xcfw-vf5j>
 - <https://github.com/ast-grep/ast-grep/security/advisories/GHSA-cmvf-x8f7-rvp6>
 - <https://github.com/astral-sh/uv/security/advisories/GHSA-2cv4-cqwr-gwf7>
-- <https://github.com/jdx/mise/releases/tag/v2026.10.24>
+- <https://github.com/jdx/mise/releases/tag/v2026.11.7>
 - <https://github.com/jdx/mise/releases/tag/v2026.10.19>
 - <https://github.com/jdx/mise/pull/14781>
-- <https://github.com/jdx/mise/releases/download/v2026.10.24/SHASUMS256.txt>
-- <https://github.com/Ataraxy-Labs/sem/releases/download/v0.29.0/checksums.txt>
-- <https://github.com/cli/cli/releases/download/v2.103.3/gh_2.103.3_checksums.txt>
+- <https://github.com/jdx/mise/releases/download/v2026.11.7/SHASUMS256.txt>
+- <https://github.com/Ataraxy-Labs/sem/releases/download/v0.30.1/checksums.txt>
+- <https://github.com/cli/cli/releases/download/v2.104.0/gh_2.104.0_checksums.txt>
 - <https://github.com/advisories/GHSA-g3hv-75wg-m249>
 - <https://github.com/jdx/mise/security/advisories/GHSA-43hx-4j66-v486>
-- <https://github.com/cloudflare/cloudflared/releases/tag/2026.10.6>
+- <https://github.com/cloudflare/cloudflared/releases/tag/2026.11.0>
+- <https://github.com/tmux/tmux-builds/releases/tag/v3.8>
+- <https://github.com/sharkdp/fd/releases/tag/v10.5.2>
 
-On 2026-10-22 the Docker repository contains Engine 29.9.2, containerd 2.4.2,
-Buildx 0.38.1, and Compose 5.6.1 on both architectures. Keep the reviewed
+On 2026-11-20 the Docker repository contains Engine 29.9.3, containerd 2.4.2-4,
+Buildx 0.39.0, and Compose 5.7.1 on both architectures. Keep the reviewed
 official binary for hosts whose apt candidate cannot satisfy the Buildx floor.
 Both Linux binaries were independently
 downloaded and matched `checksums.txt` and GitHub release asset digests.
 
-- amd64 SHA-256: `e25d5cd675092bb5d1d03632fdc46cdf3fede7b514dc5f023a105e00d3ce5ad4`
-- arm64 SHA-256: `3b83b3731916ba433feccaaa689fe5bcdc81c641d92c8e6c2ea865dfa141c97a`
-- <https://github.com/docker/buildx/releases/tag/v0.38.1>
-- <https://github.com/docker/buildx/releases/download/v0.38.1/checksums.txt>
+- amd64 SHA-256: `5fb31a097304fbf6dd4038649a0decf32c2b9510e4047acd7d68b9d700c46194`
+- arm64 SHA-256: `722cdcdfdd6f3fb943fa1ba75102d057feb18ba72aab93b1b0a8cf2b2b48a25f`
+- <https://github.com/docker/buildx/releases/tag/v0.39.0>
+- <https://github.com/docker/buildx/releases/download/v0.39.0/checksums.txt>
 - <https://github.com/docker/buildx#manual-download>
 - <https://github.com/docker/cli/blob/master/cli-plugins/manager/manager.go>
 
@@ -457,24 +477,22 @@ https://tailscale.com/docs/reference/linux-dns
 https://tailscale.com/docs/reference/faq/dns-resolv-conf
 https://tailscale.com/kb/1337/acl-syntax
 https://pkgs.tailscale.com/stable/
-https://github.com/tailscale/tailscale/releases/tag/v1.104.4
+https://github.com/tailscale/tailscale/releases/tag/v1.104.7
 https://tailscale.com/security-bulletins
-https://pkgs.tailscale.com/stable/tailscale_1.104.4_amd64.tgz.sha256
-https://pkgs.tailscale.com/stable/tailscale_1.104.4_arm64.tgz.sha256
+https://pkgs.tailscale.com/stable/tailscale_1.104.7_amd64.tgz.sha256
+https://pkgs.tailscale.com/stable/tailscale_1.104.7_arm64.tgz.sha256
 https://github.com/tailscale/tailscale/issues/20067
 ```
 
 Use: devices, keys, policy read, policy validate, policy update, and pinned
-first-boot/live-repair binaries. Reviewed 2026-10-30: stable release `1.104.4`,
-published 2026-10-28 01:05 UTC, is an approved security exception. It fixes
-Tailscale SSH unix-socket forwarding to root-only sockets (TS-2026-014), an SSH
-memory denial of service (TS-2026-015), and Serve flaws (TS-2026-016,
-TS-2026-017). It keeps the TS-2026-013 eMudhra distrust that needs `1.104.2` or
-later. Hosts already run `1.104.2`, so the older exact pin would downgrade them.
+first-boot/live-repair binaries. Reviewed 2026-11-20: stable release `1.104.7`,
+published 2026-11-12, passes the seven-day age gate, fixes `TS-2026-018`
+(k8s-proxy header impersonation), rebuilds with Go `1.27.4` (`GO-2026-6859`),
+and keeps the `TS-2026-013` through `TS-2026-017` fixes.
 amd64 tarball SHA-256
-`624ea093d47d62cf56f17b8332d74b8decda4a1faa610ebc60a1de334b2b3dc9`;
+`e56693ff74a64f2591b7e819c280635a100aae1ddfb0ef058fcd052b7cd8d16c`;
 arm64 tarball SHA-256
-`a1c249ce6bdebef62e1ae3b997595555bce2ae4709bf95a718e9ca7a129dad7e`.
+`d6bed2720310b328b861f943d7b4016c5358a9bad60575eb51e8143b79068484`.
 Serverpro supplies `GODEBUG=tlsmlkem=1` to the systemd service independently
 from the artifact build default. Recheck the stable release, checksums,
 advisory state, and binary build setting together when rotating this pin.
@@ -652,24 +670,19 @@ https://pkg.cloudflare.com/index.html
 https://pkg.cloudflare.com/cloudflare-main.gpg
 https://pkg.cloudflare.com/cloudflared/dists/noble/main/binary-amd64/Packages
 https://pkg.cloudflare.com/cloudflared/dists/noble/main/binary-arm64/Packages
-https://github.com/cloudflare/cloudflared/releases/tag/2026.10.6
+https://github.com/cloudflare/cloudflared/releases/tag/2026.11.0
 https://raw.githubusercontent.com/cloudflare/cloudflared/master/RELEASE_NOTES
 https://blog.cloudflare.com/emudhra-certificate-compromise/
 ```
 
-Use: connector install source, Ubuntu 24.04 package floor `2026.10.6`, and apt
-trust root. Package indexes and release reviewed 2026-10-30. Earlier builds
-still trust eight eMudhra intermediate CAs whose private keys were compromised;
-Cloudflare's 2026-10-20 notice requires `2026.10.2` or later. The noble index
-then offered only `2026.10.6` (published 2026-10-29), so install and repair take
-that build while the reviewed floor stays at the age-gated `2026.10.2`.
-Reviewed 2026-11-02: the floor moves to `2026.10.6` as an owner-approved
-security exception. `2026.10.4` allowlists the metrics debug endpoints
-(VULN-176088), `2026.10.5` updates go-chi (VULN-183456), and `2026.10.6`
-updates go-jose to `v4.1.6` (VULN-184686). The noble index now offers only
-`2026.10.7` (published 2026-10-30), so install and repair take that build.
-The `2026.10.6` update-timer change affects only `cloudflared service install`;
-serverpro writes its own unit with `--no-autoupdate`. Primary
+Use: connector install source, Ubuntu 24.04 package floor `2026.11.0`, and apt
+trust root. Package indexes and release reviewed 2026-11-20 (floor raised from
+`2026.10.6` to `2026.11.0`, published 2026-11-12; noble index serves `2026.11.1`).
+Earlier builds still trust eight eMudhra intermediate CAs whose private keys
+were compromised (`2026.10.2`), expose metrics debug endpoints (`2026.10.4`,
+VULN-176088), ship vulnerable go-chi (`2026.10.5`, VULN-183456) and go-jose
+(`2026.10.6`, VULN-184686), or omit semicolon path-parameter normalization for
+Cloudflare Access (`2026.11.0`). Primary
 package-signing key fingerprint retrieved 2026-07-23 and re-verified 2026-10-30:
 `CC94B39C77AE7342A68B89628A682D308D4E5E73`. Cloudflare announced a 2025 key
 rollover and removal of deprecated keys after 2026-04-30. On future rollover,
@@ -699,14 +712,16 @@ https://bugs.launchpad.net/bugs/2171054
 ```
 
 Use: Ubuntu 24.04 LTS (`noble`) managed-host support, host hardening, and direct
-package minimums. Reviewed 2026-10-30 for amd64 and arm64: `ca-certificates`
-`20260816ubuntu0.24.04.1`, `curl` `8.5.0-2ubuntu10.16`, `gnupg`
-`2.4.4-2ubuntu17.6`, `ufw` `0.36.2-6`, `apparmor`
-`4.0.1really4.0.1-0ubuntu0.24.04.9` (re-reviewed 2026-11-02), `unattended-upgrades`
-`2.9.1+nmu4ubuntu1`, `jq` `1.7.1-3ubuntu0.24.04.2`, `git`
-`1:2.43.0-1ubuntu7.4`, `openssh-client` `1:9.6p1-3ubuntu13.20`, and `htop`
-`3.3.0-4build1`. These are reviewed floors; signed newer candidates remain
-valid and must not be downgraded.
+package minimums. Reviewed 2026-11-20 for amd64 and arm64: `ca-certificates`
+`20260816ubuntu0.24.04.2` (synchronous `update-ca-certificates` hooks and stale
+temporary bundle cleanup, keeping `USN-8944-1`), `curl` `8.5.0-2ubuntu10.16`,
+`gnupg` `2.4.4-2ubuntu17.6`, `ufw` `0.36.2-6`, `apparmor`
+`4.0.1really4.0.1-0ubuntu0.24.04.9`, `unattended-upgrades`
+`2.9.1+nmu4ubuntu1`, `jq` `1.7.1-3ubuntu0.24.04.2`, `libbrotli1`
+`1.1.0-2ubuntu0.1` (`USN-8956-1`), `git` `1:2.43.0-1ubuntu7.4`,
+`openssh-client` `1:9.6p1-3ubuntu13.20`, and `htop` `3.3.0-4build1`. These are
+reviewed floors; signed newer candidates remain valid and must not be
+downgraded.
 The 2026-10-30 review raises four floors to security releases that already
 pass the seven-day age gate. curl `8.5.0-2ubuntu10.16` (USN-8932-1) and
 openssh-client `1:9.6p1-3ubuntu13.20` (USN-8928-1) were published
@@ -1041,12 +1056,12 @@ https://download.docker.com/linux/ubuntu/dists/noble/pool/stable/arm64/
 ```
 
 Use: managed Docker bootstrap. Docker's apt signing key is pinned to fingerprint
-`9DC858229FC7DD38854AE2D88D81803C0EBFCD88`. Reviewed 2026-10-22 floors for
+`9DC858229FC7DD38854AE2D88D81803C0EBFCD88`. Reviewed 2026-11-20 floors for
 Ubuntu 24.04 amd64/arm64: Docker Engine and CLI
-`5:29.9.2-1~ubuntu.24.04~noble`, containerd.io
-`2.4.2-3~ubuntu.24.04~noble`, Buildx
-`0.38.1-1~ubuntu.24.04~noble`, and Compose
-`5.6.1-1~ubuntu.24.04~noble`.
+`5:29.9.3-1~ubuntu.24.04~noble`, containerd.io
+`2.4.2-4~ubuntu.24.04~noble`, Buildx
+`0.39.0-1~ubuntu.24.04~noble`, and Compose
+`5.7.1-1~ubuntu.24.04~noble`.
 
 ### Docker Linux postinstall
 
@@ -1063,27 +1078,24 @@ https://mise.jdx.dev/installing-mise.html
 https://mise.jdx.dev/cli/install.html
 https://mise.jdx.dev/cli/unuse.html
 https://mise.jdx.dev/dev-tools/backends/github.html
-https://github.com/jdx/mise/releases/tag/v2026.10.24
-https://api.github.com/repos/jdx/mise/releases/tags/v2026.10.24
-https://github.com/jdx/mise/releases/download/v2026.10.24/SHASUMS256.txt
+https://github.com/jdx/mise/releases/tag/v2026.11.7
+https://api.github.com/repos/jdx/mise/releases/tags/v2026.11.7
+https://github.com/jdx/mise/releases/download/v2026.11.7/SHASUMS256.txt
 https://github.com/jdx/mise/releases/tag/v2026.10.19
 https://github.com/jdx/mise/releases/tag/v2026.10.22
 https://github.com/jdx/mise/releases/tag/v2026.10.23
 ```
 
 Use: mise prerequisite, scoped managed-tool installation, legacy managed-tool
-removal, and reviewed minimum version `2026.10.24`. Pinned release artifact
-SHA-256 values, matched against the release `SHASUMS256.txt` on 2026-10-30:
+removal, and reviewed minimum version `2026.11.7`. Pinned release artifact
+SHA-256 values, matched against the release `SHASUMS256.txt` on 2026-11-20:
 
-- Linux x64: `9a6c9c55f5c6372d0af70a9979fe6d742aea3793267a929e1738022143c466cc`
-- Linux arm64: `8c8f5d7f748bf3aef431dc50f0ad776270f36025c788aa21c74e2fabdbbd6d3e`
+- Linux x64: `3198a5ed5716ca8c17ecfc54521e2769d6cacbf2d13f24f0c2f9706620ec0024`
+- Linux arm64: `b8de6c8e7aa85752a6a2368df32393552a2d8947b6f4072ecd29a1ad972e5c40`
 
-The `2026.10.24` floor is an owner-approved exception to the seven-day release
-age gate. It keeps the `2026.10.17` eMudhra distrust and adds fail-closed
-verification, GitHub-host-only token use, git ref option-injection rejection,
-and the fnox personal-secret fix. Its breaking changes were checked against
-bootstrap: no lockfile is enabled, Node comes from `nodejs.org` with its
-`SHASUMS256.txt.sig`, and only global config is written with `mise config set`.
+The `2026.11.7` floor passes the seven-day age gate and keeps the `2026.10.17`
+eMudhra distrust and `2026.10.24` fail-closed verification, GitHub-host-only
+token use, git ref option-injection rejection, and fnox personal-secret fixes.
 
 ### mise bootstrap
 
@@ -1114,27 +1126,27 @@ reviewed 2026-11-18 on the supported Node 24 LTS line (fixes 16 CVEs including
 ### uv
 
 ```text
-https://github.com/astral-sh/uv/releases/tag/0.13.5
+https://github.com/astral-sh/uv/releases/tag/0.13.8
 https://github.com/astral-sh/uv/security/advisories/GHSA-hq85-5cpj-mr62
 https://docs.astral.sh/uv/getting-started/installation/
 ```
 
-Use: pinned uv `0.13.5` through mise's explicit `aqua:astral-sh/uv` backend;
-reviewed 2026-10-22. Published SHA-256 files and GitHub asset digests agree:
-x86_64 `f68d291c75783122dad58ab77def0e13f3233f358731db5d6d7e8715603b928f`;
-aarch64 `4bb69cf95ed13f23713bb7bc09f241896ea0c75b7c557e615a20604b82f9c403`.
+Use: pinned uv `0.13.8` through mise's explicit `aqua:astral-sh/uv` backend;
+reviewed 2026-11-20. Published SHA-256 files:
+x86_64 `5acfd9177cfecf0bf87578f059728215ccc884388988f55f7a65041b57387d91`;
+aarch64 `74f2f5c6024d397481db228db8fc25eed420db192243f88438c118e7e013e585`.
 
 ### Rust and rustup
 
 ```text
-https://github.com/rust-lang/rust/releases/tag/1.99.1
+https://github.com/rust-lang/rust/releases/tag/1.100.0
 https://doc.rust-lang.org/stable/releases.html
 https://mise.jdx.dev/lang/rust.html
 https://rust-lang.github.io/rustup/security.html
 ```
 
-Use: pinned Rust `1.99.1` through mise's `core:rust` backend and rustup default
-profile. Reviewed 2026-10-30. rustup uses HTTPS for downloads but does not yet
+Use: pinned Rust `1.100.0` through mise's `core:rust` backend and rustup default
+profile. Reviewed 2026-11-20. rustup uses HTTPS for downloads but does not yet
 enforce download signatures.
 
 ### mise npm backend
@@ -1161,11 +1173,12 @@ Authentication remains operator-owned.
 ### tmux
 
 ```text
-https://github.com/tmux/tmux/releases/tag/3.7c
+https://github.com/tmux/tmux/releases/tag/3.8
+https://github.com/tmux/tmux-builds/releases/tag/v3.8
 https://github.com/tmux/tmux/wiki/Installing
 ```
 
-Use: pinned tmux `3.7c` build/install reference; reviewed 2026-10-01.
+Use: pinned tmux `3.8` build/install reference; reviewed 2026-11-20.
 
 ### Herdr
 
@@ -1185,14 +1198,14 @@ integration status. Reviewed 2026-11-18.
 
 ```text
 https://cli.github.com/manual/
-https://github.com/cli/cli/releases/tag/v2.103.3
+https://github.com/cli/cli/releases/tag/v2.104.0
 https://github.com/cli/cli/pull/14791
 ```
 
-Use: pinned `gh` `2.103.3` install reference; reviewed 2026-10-30.
+Use: pinned `gh` `2.104.0` install reference; reviewed 2026-11-20.
 Published GNU/Linux SHA-256 values: amd64
-`4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d`; arm64
-`ee32df2323c8847f5fac6cb6b4b69ca75828e9329a8f22f677021f7b3306ce63` (`.tar.gz`).
+`98cb101ad87dbbd3f6b2f2bfcbd43197ccd07643140121d8a9cfaa91eadbc24e`; arm64
+`cb34cefc6f4e77b90731374a2b737516bb8f3033c6ca46aa949e5344f68069e3` (`.tar.gz`).
 Authentication remains operator-owned.
 
 ### ripgrep
@@ -1206,41 +1219,41 @@ Use: pinned `rg` `15.2.0` tool reference.
 ### fd
 
 ```text
-https://github.com/sharkdp/fd/releases/tag/v10.5.0
+https://github.com/sharkdp/fd/releases/tag/v10.5.2
 ```
 
-Use: pinned `fd` `10.5.0` tool reference; reviewed 2026-10-01.
+Use: pinned `fd` `10.5.2` tool reference; reviewed 2026-11-20.
 
 ### ast-grep
 
 ```text
 https://ast-grep.github.io/
-https://github.com/ast-grep/ast-grep/releases/tag/0.51.0
-https://api.github.com/repos/ast-grep/ast-grep/releases/tags/0.51.0
+https://github.com/ast-grep/ast-grep/releases/tag/0.51.2
+https://api.github.com/repos/ast-grep/ast-grep/releases/tags/0.51.2
 https://github.com/ast-grep/ast-grep/security/advisories/GHSA-xx6h-xcfw-vf5j
 https://github.com/ast-grep/ast-grep/security/advisories/GHSA-cmvf-x8f7-rvp6
 ```
 
-Use: pinned ast-grep `0.51.0` through mise's GitHub backend; reviewed
-2026-10-22. Pinned release SHA-256 values:
+Use: pinned ast-grep `0.51.2` through mise's GitHub backend; reviewed
+2026-11-20. Pinned release SHA-256 values:
 
-- Linux x64: `a7eead5552d3a8daad70f5d50d935da44bd0c138e946b5b0a96b1d38169fa639`
-- Linux arm64: `73af0ebe5958acee012754a5b2826a186580ef83333092408a7a01096fc30b8b`
+- Linux x64: `40604c21c38d4c7581c56bdddeef277c56bf3c0113620aa96e78ae87e82366df`
+- Linux arm64: `c3ab2bd43959db28621dc1551c13ea5fe5db4c1fc7b18086dade6b65042c78d0`
 
 ### sem
 
 ```text
 https://github.com/Ataraxy-Labs/sem
-https://github.com/Ataraxy-Labs/sem/releases/tag/v0.29.0
-https://api.github.com/repos/Ataraxy-Labs/sem/releases/tags/v0.29.0
+https://github.com/Ataraxy-Labs/sem/releases/tag/v0.30.1
+https://api.github.com/repos/Ataraxy-Labs/sem/releases/tags/v0.30.1
 https://github.com/Ataraxy-Labs/sem/pull/526
 ```
 
-Use: pinned Ataraxy Labs sem `0.29.0` through mise's GitHub backend; reviewed
-2026-10-30. Pinned release archive (`sem-linux-*.tar.gz`) SHA-256 values:
+Use: pinned Ataraxy Labs sem `0.30.1` through mise's GitHub backend; reviewed
+2026-11-20. Pinned release archive (`sem-linux-*.tar.gz`) SHA-256 values:
 
-- Linux x64: `30fa7ab79aaffaf0cc2d317ac771fa4330e6de6a9c0830cbe35d1ba149322dc3`
-- Linux arm64: `e7cd85d2c34dc6e8a9505a365a8639b7203c8cf6ad2d94e2b8a07e1acc8854b5`
+- Linux x64: `a673a8448d24294ea63c2a366dbc425beeb63b7653322094f6b4d4345406ffb9`
+- Linux arm64: `336193dfe156d05eaa9b06c41f69d8798221e29351bc9373f5279c914a9af36e`
 
 ### inspect
 

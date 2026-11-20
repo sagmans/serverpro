@@ -25,7 +25,7 @@ func TestSupportedRuntimeContract(t *testing.T) {
 
 func TestReviewedPackageBaselines(t *testing.T) {
 	want := map[string]string{
-		"ca-certificates":       "20260816ubuntu0.24.04.1",
+		"ca-certificates":       "20260816ubuntu0.24.04.2",
 		"curl":                  "8.5.0-2ubuntu10.16",
 		"gnupg":                 "2.4.4-2ubuntu17.6",
 		"ufw":                   "0.36.2-6",
@@ -36,12 +36,12 @@ func TestReviewedPackageBaselines(t *testing.T) {
 		"git":                   "1:2.43.0-1ubuntu7.4",
 		"openssh-client":        "1:9.6p1-3ubuntu13.20",
 		"htop":                  "3.3.0-4build1",
-		"docker-ce":             "5:29.9.2-1~ubuntu.24.04~noble",
-		"docker-ce-cli":         "5:29.9.2-1~ubuntu.24.04~noble",
-		"containerd.io":         "2.4.2-3~ubuntu.24.04~noble",
-		"docker-buildx-plugin":  "0.38.1-1~ubuntu.24.04~noble",
-		"docker-compose-plugin": "5.6.1-1~ubuntu.24.04~noble",
-		"cloudflared":           "2026.10.6",
+		"docker-ce":             "5:29.9.3-1~ubuntu.24.04~noble",
+		"docker-ce-cli":         "5:29.9.3-1~ubuntu.24.04~noble",
+		"containerd.io":         "2.4.2-4~ubuntu.24.04~noble",
+		"docker-buildx-plugin":  "0.39.0-1~ubuntu.24.04~noble",
+		"docker-compose-plugin": "5.7.1-1~ubuntu.24.04~noble",
+		"cloudflared":           "2026.11.0",
 	}
 	got := make(map[string]string)
 	for _, pkg := range append(BootstrapPackageBaselines(), CloudflaredPackageBaseline()) {
@@ -63,7 +63,7 @@ func TestReviewedPackageBaselines(t *testing.T) {
 func TestTailscalePrerequisitesUseReviewedBaseBaselines(t *testing.T) {
 	got := TailscalePrerequisitePackageBaselines()
 	want := []PackageBaseline{
-		{Name: "ca-certificates", MinimumVersion: "20260816ubuntu0.24.04.1"},
+		{Name: "ca-certificates", MinimumVersion: "20260816ubuntu0.24.04.2"},
 		{Name: "curl", MinimumVersion: "8.5.0-2ubuntu10.16"},
 		{Name: "jq", MinimumVersion: "1.7.1-3ubuntu0.24.04.2"},
 	}

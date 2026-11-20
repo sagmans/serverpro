@@ -111,21 +111,11 @@ fi
 printf '     0.0.1 500\n        500 https://mirror.example/older noble/main arm64 Packages\n'
 `
 
-// versionOneStepBelow derives the closest version under a reviewed floor, so
-// the floor case keeps testing the boundary when the baseline moves.
-func versionOneStepBelow(t *testing.T, version string) string {
-	t.Helper()
-	cut := strings.LastIndex(version, ".")
-	last, err := strconv.Atoi(version[cut+1:])
-	if cut < 0 || err != nil || last == 0 {
-		t.Fatalf("cannot derive a version one step below %q", version)
-	}
-	return version[:cut+1] + strconv.Itoa(last-1)
-}
-
 func TestInstallScriptCloudflaredCandidateExecutableMatrix(t *testing.T) {
 	baseline := hostplatform.CloudflaredPackageBaseline()
-	belowFloor := versionOneStepBelow(t, baseline.MinimumVersion)
+	// Debian/dpkg and sort -V order a trailing "~" pre-release strictly below
+	// the floor, even when a CalVer floor lands on ".0".
+	belowFloor := baseline.MinimumVersion + "~"
 	for _, tc := range []struct {
 		name, installedState, installedVersion, candidate string
 		origins                                           string
@@ -788,7 +778,7 @@ func (h unmanagedHarness) stateLog(t *testing.T, name string) string {
 // refuse to classify, so an unexpected host never reads as absent.
 func TestUnmanagedCheckCommandExecutableMatrix(t *testing.T) {
 	baseline := hostplatform.CloudflaredPackageBaseline()
-	belowFloor := versionOneStepBelow(t, baseline.MinimumVersion)
+	belowFloor := baseline.MinimumVersion + "~"
 	activeStopped := activeHost(baseline.MinimumVersion, receiptMatching)
 	activeStopped.active = "failed"
 	dormantNoUnit := dormantHost(baseline.MinimumVersion, receiptMatching)
@@ -844,7 +834,7 @@ func TestUnmanagedCheckCommandExecutableMatrix(t *testing.T) {
 // cannot trust stops before apt.
 func TestUnmanagedRepairScriptExecutableMatrix(t *testing.T) {
 	baseline := hostplatform.CloudflaredPackageBaseline()
-	belowFloor := versionOneStepBelow(t, baseline.MinimumVersion)
+	belowFloor := baseline.MinimumVersion + "~"
 	activeNoToken := activeHost(belowFloor, receiptNone)
 	activeNoToken.token = false
 	enabledByInstall := dormantHost(belowFloor, receiptNone)
