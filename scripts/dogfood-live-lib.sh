@@ -20,9 +20,11 @@ dogfood_python_init() {
 	fi
 	DOGFOOD_PYTHON=("$selected")
 }
-# DigitalOcean is the default test provider for on-demand dogfood servers. It
-# lives here because the prompt flow needs it before the paid flow runs.
-DOGFOOD_DEFAULT_PROVIDER="digitalocean"
+# Vultr is the default test provider for on-demand dogfood servers so a live
+# run reuses the provider account that already backs managed servers;
+# SERVERPRO_DOGFOOD_PROVIDER picks another. It lives here because the prompt
+# flow needs it before the paid flow runs.
+DOGFOOD_DEFAULT_PROVIDER="vultr"
 # Providers covered by the read-only matrix; each needs the defaults below.
 DOGFOOD_PROVIDERS="hetzner vultr digitalocean"
 DOGFOOD_DEFAULT_HETZNER_LOCATION="fsn1"
@@ -30,7 +32,9 @@ DOGFOOD_DEFAULT_HETZNER_SIZE="cx23"
 DOGFOOD_DEFAULT_HETZNER_IMAGE="ubuntu-24.04"
 DOGFOOD_DEFAULT_VULTR_LOCATION="fra"
 DOGFOOD_DEFAULT_VULTR_SIZE="vc2-1c-1gb"
-DOGFOOD_DEFAULT_VULTR_IMAGE="1743"
+# Vultr names images by numeric OS ID; 2284 is "Ubuntu 24.04 LTS x64" in the
+# live catalog, the only release managed create accepts (1743 is 22.04).
+DOGFOOD_DEFAULT_VULTR_IMAGE="2284"
 DOGFOOD_DEFAULT_DIGITALOCEAN_LOCATION="fra1"
 DOGFOOD_DEFAULT_DIGITALOCEAN_SIZE="s-1vcpu-1gb-amd"
 DOGFOOD_DEFAULT_DIGITALOCEAN_IMAGE="ubuntu-24-04-x64"

@@ -1211,7 +1211,7 @@ and account ID for `cloudflare-tunnel` ingress. Secrets echo `*` per character,
 never reach the screen, logs, or argv, and live only in harness variables.
 Values already set in the environment are not asked for again; without a terminal,
 or with `SERVERPRO_DOGFOOD_NO_PROMPT=1`, nothing is asked and the skip rules
-apply. The default provider is DigitalOcean (`SERVERPRO_DOGFOOD_PROVIDER`).
+apply. The default provider is Vultr (`SERVERPRO_DOGFOOD_PROVIDER`).
 `SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT` exists only for the self-test's scripted
 answers.
 
@@ -1293,13 +1293,13 @@ dogfood runs.
 
 ```sh
 SERVERPRO_DOGFOOD_CREATE=1 \
-SERVERPRO_DOGFOOD_PROVIDER=digitalocean \
-SERVERPRO_DOGFOOD_DIGITALOCEAN_TOKEN=... \
+SERVERPRO_DOGFOOD_PROVIDER=vultr \
+SERVERPRO_DOGFOOD_VULTR_TOKEN=... \
 SERVERPRO_DOGFOOD_TAILSCALE_TOKEN=... \
 SERVERPRO_DOGFOOD_TAILNET=example.ts.net \
-SERVERPRO_DOGFOOD_LOCATION=fra1 \
-SERVERPRO_DOGFOOD_SIZE=s-1vcpu-1gb-amd \
-SERVERPRO_DOGFOOD_IMAGE=ubuntu-24-04-x64 \
+SERVERPRO_DOGFOOD_LOCATION=fra \
+SERVERPRO_DOGFOOD_SIZE=vc2-1c-1gb \
+SERVERPRO_DOGFOOD_IMAGE=2284 \
 SERVERPRO_DOGFOOD_SUDOPASS='long unique password here' \
 make test-dogfood-live
 ```

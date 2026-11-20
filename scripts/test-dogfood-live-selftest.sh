@@ -792,38 +792,38 @@ prompt_base=(SERVERPRO_DOGFOOD_NAMESPACE=spdogfooda SERVERPRO_DOGFOOD_SERVER=web
 prompt_input="$tmp/prompt-q1"
 # The provider token carries a typo erased with backspace to prove editing.
 printf 'y\n%sZ\177\n%s\nselftest-tailnet\n%s\n%s\n' \
-	"$SENT_DIGITALOCEAN" "$SENT_TS" "$SENT_SUDO" "$SENT_SUDO" >"$prompt_input"
+	"$SENT_VULTR" "$SENT_TS" "$SENT_SUDO" "$SENT_SUDO" >"$prompt_input"
 run_harness scenarioQ1 "" env "${prompt_base[@]}" SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT="$prompt_input" SERVERPRO_KEEP_HARNESS_TEMP=1
 wd="$(work_dir)"
 if [[ "$harness_rc" -eq 0 ]]; then ok "Q1 exit zero"; else bad "Q1 exit zero"; sed 's/^/  log: /' "$scenario_tmp/harness.log"; fi
-check "Q1 defaults to DigitalOcean" grep -Fq "<-p> <digitalocean> <--non-interactive> <--yes> <server> <create> <web>" "$FAKE_ARGV_DIR/serverpro-command.log"
-check "Q1 asked for the provider token" grep -Fq "digitalocean API token: " "$scenario_tmp/harness.log"
+check "Q1 defaults to Vultr" grep -Fq "<-p> <vultr> <--non-interactive> <--yes> <server> <create> <web>" "$FAKE_ARGV_DIR/serverpro-command.log"
+check "Q1 asked for the provider token" grep -Fq "vultr API token: " "$scenario_tmp/harness.log"
 check "Q1 asked for the sudo password twice" grep -Fq "Repeat sudo password" "$scenario_tmp/harness.log"
 check "Q1 masked input echoed" grep -Fq "****" "$scenario_tmp/harness.log"
-for secret in "$SENT_DIGITALOCEAN" "$SENT_TS" "$SENT_SUDO"; do
+for secret in "$SENT_VULTR" "$SENT_TS" "$SENT_SUDO"; do
 	check_absent "Q1 secret never echoed" "$secret" "$scenario_tmp/harness.log"
 	check_absent "Q1 secret not in serverpro argv" "$secret" "$FAKE_ARGV_DIR/serverpro-argv.log"
 done
-[[ -n "$wd" ]] && check "Q1 prompted token reached credentials" grep -Fq "$SENT_DIGITALOCEAN\"" \
+[[ -n "$wd" ]] && check "Q1 prompted token reached credentials" grep -Fq "$SENT_VULTR\"" \
 	"$wd/home/.config/serverpro/namespaces/spdogfooda/servers/web/credentials.json"
 
 prompt_input="$tmp/prompt-q2"
-printf 'n\n%s\n' "$SENT_DIGITALOCEAN" >"$prompt_input"
+printf 'n\n%s\n' "$SENT_VULTR" >"$prompt_input"
 run_harness scenarioQ2 "" env SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT="$prompt_input"
 if [[ "$harness_rc" -eq 0 ]]; then ok "Q2 decline exit zero"; else bad "Q2 decline exit zero"; fi
-check "Q2 read-only checks use the prompted token" grep -Fq "PASS | live provider doctor digitalocean" "$scenario_tmp/harness.log"
+check "Q2 read-only checks use the prompted token" grep -Fq "PASS | live provider doctor vultr" "$scenario_tmp/harness.log"
 check "Q2 declined paid run skipped" grep -Fq "SKIP | live create/delete" "$scenario_tmp/harness.log"
 
 prompt_input="$tmp/prompt-q3"
 printf 'y\n%s\n%s\nselftest-tailnet\nshort\n%s\nmismatch-but-long-enough\n%s\n%s\n' \
-	"$SENT_DIGITALOCEAN" "$SENT_TS" "$SENT_SUDO" "$SENT_SUDO" "$SENT_SUDO" >"$prompt_input"
+	"$SENT_VULTR" "$SENT_TS" "$SENT_SUDO" "$SENT_SUDO" "$SENT_SUDO" >"$prompt_input"
 run_harness scenarioQ3 "" env "${prompt_base[@]}" SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT="$prompt_input"
 if [[ "$harness_rc" -eq 0 ]]; then ok "Q3 exit zero after retries"; else bad "Q3 exit zero after retries"; fi
 check "Q3 short password rejected" grep -Fq "Too short." "$scenario_tmp/harness.log"
 check "Q3 mismatch rejected" grep -Fq "Passwords do not match." "$scenario_tmp/harness.log"
 
 prompt_input="$tmp/prompt-q4"
-printf 'y\n%s\n\n\n\n' "$SENT_DIGITALOCEAN" >"$prompt_input"
+printf 'y\n%s\n\n\n\n' "$SENT_VULTR" >"$prompt_input"
 run_harness scenarioQ4 "" env "${prompt_base[@]}" SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT="$prompt_input"
 if [[ "$harness_rc" -eq 2 ]]; then ok "Q4 empty required value exits 2"; else bad "Q4 empty required value exits 2 ($harness_rc)"; fi
 check_no_create_or_credentials "Q4 empty required value"

@@ -451,7 +451,7 @@ serverpro server create webapp \
   -n mynamespace -p vultr \
   --location ewr \
   --size vc2-1c-1gb \
-  --image 1743 \
+  --image 2284 \
   --dry-run
 
 # 4. Run live create; Cloudflare is requested only when ingress is enabled
@@ -459,7 +459,7 @@ serverpro server create webapp \
   -n mynamespace -p vultr \
   --location ewr \
   --size vc2-1c-1gb \
-  --image 1743
+  --image 2284
 
 # Or non-interactive with env secrets
 MYNAMESPACE_WEBAPP_SUDOPASS='use-a-long-remote-admin-password' \
@@ -467,7 +467,7 @@ MYNAMESPACE_WEBAPP_SUDOPASS='use-a-long-remote-admin-password' \
   -n mynamespace -p vultr \
   --location ewr \
   --size vc2-1c-1gb \
-  --image 1743 \
+  --image 2284 \
   --tailscale-tailnet mytailnet.ts.net \
   --tailscale-tags tag:serverpro-mynamespace \
   --non-interactive --yes
