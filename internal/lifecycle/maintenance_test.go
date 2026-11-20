@@ -8,6 +8,7 @@ import (
 
 	"github.com/sagmans/serverpro/internal/config"
 	"github.com/sagmans/serverpro/internal/rebootgate"
+	"github.com/sagmans/serverpro/internal/shell"
 	"github.com/sagmans/serverpro/internal/state"
 )
 
@@ -127,8 +128,9 @@ func TestUpgradeServerTriggersGatedRebootWhenRequired(t *testing.T) {
 	if !strings.Contains(runner.scripts[0], "--with-new-pkgs") {
 		t.Fatalf("full upgrade script missing --with-new-pkgs:\n%s", runner.scripts[0])
 	}
-	if !strings.Contains(runner.scripts[1], rebootgate.ScriptPath) {
-		t.Fatalf("gated reboot trigger missing rebootgate script:\n%s", runner.scripts[1])
+	wantGatedCmd := "--unit=" + rebootgate.OnDemandUnitPrefix + "$$ --description='serverpro gated reboot' " + shell.Quote(rebootgate.ScriptPath) + " window"
+	if !strings.Contains(runner.scripts[1], wantGatedCmd) {
+		t.Fatalf("gated reboot trigger must pair %s with the rebootgate window command:\n%s", wantGatedCmd, runner.scripts[1])
 	}
 }
 

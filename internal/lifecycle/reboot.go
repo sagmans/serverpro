@@ -39,7 +39,6 @@ const (
 	rebootInitialGrace    = 10 * time.Second
 	rebootPollInterval    = 5 * time.Second
 	rebootScheduleDelay   = "2s"
-	rebootUnitPrefix      = "serverpro-ondemand-reboot-"
 	bootIDPath            = "/proc/sys/kernel/random/boot_id"
 
 	markerRebootAction  = "SERVERPRO_REBOOT_ACTION="
@@ -149,7 +148,7 @@ func rebootTriggerScript(rebootCfg config.Reboot, opts RebootOptions) (string, e
 // writeRebootScheduleBlock schedules the reboot via systemd-run with a short
 // delay so the SSH command exits cleanly instead of racing TCP teardown.
 func writeRebootScheduleBlock(b *strings.Builder, force bool) {
-	unitExpr := rebootUnitPrefix + "$$"
+	unitExpr := rebootgate.OnDemandUnitPrefix + "$$"
 	if !force {
 		b.WriteString("if [ -e " + shell.Quote(rebootgate.RebootRequiredPath) + " ] && [ -x " + shell.Quote(rebootgate.ScriptPath) + " ]; then\n" +
 			"  systemd-run --quiet --on-active=" + rebootScheduleDelay + " --unit=" + unitExpr +

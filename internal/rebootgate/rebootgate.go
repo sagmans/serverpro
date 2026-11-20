@@ -34,6 +34,12 @@ const (
 	// ServiceUnit has no [Install] section: only the timer starts it.
 	ServiceUnit = LogTag + ".service"
 	VerifyUnit  = LogTag + "-verify.service"
+	// OnDemandUnitPrefix names the transient systemd-run unit lifecycle uses to
+	// trigger a gated reboot asynchronously. Keeping it under LogTag guarantees
+	// serverpro-reboot.sh's skipped_service rule ("$LOG_TAG"*.service) treats
+	// the trigger unit as one of the gate's own services instead of blocking
+	// itself as a survivability gap.
+	OnDemandUnitPrefix = LogTag + "-ondemand-"
 	// RebootRequiredPath is the flag Ubuntu's update hooks write when an
 	// installed update needs a reboot.
 	RebootRequiredPath = "/var/run/reboot-required"

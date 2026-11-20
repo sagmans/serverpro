@@ -1,6 +1,7 @@
 package rebootgate
 
 import (
+	"errors"
 	"io/fs"
 	"os/exec"
 	"strings"
@@ -68,6 +69,43 @@ func TestRenderedScriptsParseUnderSh(t *testing.T) {
 	for name, script := range map[string]string{"install": install, "preflight": probe} {
 		if out, err := exec.Command("sh", "-n", "-c", script).CombinedOutput(); err != nil {
 			t.Fatalf("%s script does not parse: %v\n%s", name, err, out)
+		}
+	}
+}
+
+// Verify skipped_service against the rendered HostScript so unit-name
+// constants and the shell glob cannot silently drift apart.
+func TestSkippedServiceMatchesGateUnits(t *testing.T) {
+	hostScript, err := HostScript(config.Reboot{Enabled: true, Window: "02:00", VerifyTimeout: "10m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptDefs, _, found := strings.Cut(hostScript, "\ncase \"$mode\" in\n")
+	if !found {
+		t.Fatal("rendered host script missing mode dispatch")
+	}
+	probe := scriptDefs + "\nskipped_service \"$1\"\n"
+	for _, tc := range []struct {
+		unit string
+		skip bool
+	}{
+		{ServiceUnit, true},
+		{VerifyUnit, true},
+		{OnDemandUnitPrefix + "12345.service", true},
+		{"serverpro-ondemand-reboot-12345.service", false},
+	} {
+		cmd := exec.Command("sh", "-s", "--", tc.unit)
+		cmd.Stdin = strings.NewReader(probe)
+		out, err := cmd.CombinedOutput()
+		if tc.skip {
+			if err != nil {
+				t.Fatalf("skipped_service(%q) rejected gate unit: %v\n%s", tc.unit, err, out)
+			}
+			continue
+		}
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+			t.Fatalf("skipped_service(%q) expected exit status 1, got err=%v\n%s", tc.unit, err, out)
 		}
 	}
 }
