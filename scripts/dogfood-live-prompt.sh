@@ -63,17 +63,17 @@ prompt_secret() {
 	printf '%s: ' "$label" >&"$DOGFOOD_PROMPT_OUT_FD"
 	while IFS= read -r -s -n 1 char <&"$DOGFOOD_PROMPT_IN_FD"; do
 		case "$char" in
-			"" | $'\n' | $'\r') break ;;
-			$'\177' | $'\b')
-				if [[ -n "$value" ]]; then
-					value="${value%?}"
-					printf '\b \b' >&"$DOGFOOD_PROMPT_OUT_FD"
-				fi
-				;;
-			*)
-				value+="$char"
-				printf '*' >&"$DOGFOOD_PROMPT_OUT_FD"
-				;;
+		"" | $'\n' | $'\r') break ;;
+		$'\177' | $'\b')
+			if [[ -n "$value" ]]; then
+				value="${value%?}"
+				printf '\b \b' >&"$DOGFOOD_PROMPT_OUT_FD"
+			fi
+			;;
+		*)
+			value+="$char"
+			printf '*' >&"$DOGFOOD_PROMPT_OUT_FD"
+			;;
 		esac
 	done
 	printf '\n' >&"$DOGFOOD_PROMPT_OUT_FD"

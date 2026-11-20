@@ -337,7 +337,10 @@ chmod +x "$fakebin/uv" "$fakebin/python-managed" "$fakebin/serverpro" "$fakebin/
 fails=0
 note() { printf '%s\n' "$*"; }
 ok() { note "PASS | $1"; }
-bad() { note "FAIL | $1"; fails=$((fails + 1)); }
+bad() {
+	note "FAIL | $1"
+	fails=$((fails + 1))
+}
 check() { # check <label> <command...>
 	local label="$1"
 	shift
@@ -478,9 +481,9 @@ check_absent "A Cloudflare secret not in serverpro argv" "$SENT_CF" "$FAKE_ARGV_
 check "A exact Cloudflare secret reached serverpro environment" grep -Fqx exact "$FAKE_ARGV_DIR/cloudflare-env"
 for provider in hetzner vultr digitalocean; do
 	case "$provider" in
-		hetzner) location=fsn1 ;;
-		vultr) location=fra ;;
-		digitalocean) location=fra1 ;;
+	hetzner) location=fsn1 ;;
+	vultr) location=fra ;;
+	digitalocean) location=fra1 ;;
 	esac
 	check "A $provider provider doctor passed" grep -Fq "PASS | live provider doctor $provider" "$scenario_tmp/harness.log"
 	check "A $provider locations passed" grep -Fq "PASS | live catalog locations $provider" "$scenario_tmp/harness.log"
@@ -509,7 +512,10 @@ if [[ -n "$wd" ]]; then
 			note "  leak in $f"
 			leaked=1
 		fi
-	done < <(find "$wd/out" -type f; printf '%s\n' "$wd/results.txt")
+	done < <(
+		find "$wd/out" -type f
+		printf '%s\n' "$wd/results.txt"
+	)
 	if [[ "$leaked" -eq 0 ]]; then
 		ok "A no secrets in results/out artifacts"
 	else
@@ -537,7 +543,10 @@ fi
 
 note "scenario R: the run proves its key store and removes its key"
 run_harness scenarioR-default "" env "${create_env[@]}"
-if [[ "$harness_rc" -eq 0 ]]; then ok "R default exit zero"; else bad "R default exit zero"; sed 's/^/  log: /' "$scenario_tmp/harness.log"; fi
+if [[ "$harness_rc" -eq 0 ]]; then ok "R default exit zero"; else
+	bad "R default exit zero"
+	sed 's/^/  log: /' "$scenario_tmp/harness.log"
+fi
 for scenario in fix power import; do
 	check "R default runs $scenario" grep -Fq "SCENARIO | $scenario | pass |" "$scenario_tmp/harness.log"
 done
@@ -551,7 +560,10 @@ check "R store mismatch recorded" grep -Fq "FAIL | live credential key in keyrin
 check "R server still deleted" grep -Fq "PASS | live server delete" "$scenario_tmp/harness.log"
 # A broken keyring lookup must not matter to a file run: it never owned an item.
 run_harness scenarioR-file "" env "${create_env[@]}" SERVERPRO_DOGFOOD_KEY_STORE=file FAKE_KEYRING_LOOKUP_ERROR=1
-if [[ "$harness_rc" -eq 0 ]]; then ok "R file store pinned and proven"; else bad "R file store pinned and proven"; sed 's/^/  log: /' "$scenario_tmp/harness.log"; fi
+if [[ "$harness_rc" -eq 0 ]]; then ok "R file store pinned and proven"; else
+	bad "R file store pinned and proven"
+	sed 's/^/  log: /' "$scenario_tmp/harness.log"
+fi
 check "R file store creates no keyring item" test ! -e "$FAKE_ARGV_DIR/keyring-item"
 check_absent "R file store skips keyring cleanup" "keyring item" "$scenario_tmp/harness.log"
 check "R file store never calls the keyring" test ! -e "$FAKE_ARGV_DIR/keyring-argv.log"
@@ -584,30 +596,30 @@ done
 note "guard scenarios: destructive flow needs every explicit opt-in"
 for guard in no-opt-in wrong-create missing-provider-token missing-tailscale-token missing-tailnet missing-sudopass; do
 	case "$guard" in
-		no-opt-in)
-			run_harness "guard-$guard" "" env "${create_prerequisites[@]}" \
-				SERVERPRO_KEEP_HARNESS_TEMP=1
-			;;
-		wrong-create)
-			run_harness "guard-$guard" "" env "${create_prerequisites[@]}" \
-				SERVERPRO_DOGFOOD_CREATE=yes SERVERPRO_KEEP_HARNESS_TEMP=1
-			;;
-		missing-provider-token)
-			run_harness "guard-$guard" "" env "${create_env[@]}" \
-				SERVERPRO_DOGFOOD_HETZNER_TOKEN= SERVERPRO_KEEP_HARNESS_TEMP=1
-			;;
-		missing-tailscale-token)
-			run_harness "guard-$guard" "" env "${create_env[@]}" \
-				SERVERPRO_DOGFOOD_TAILSCALE_TOKEN= SERVERPRO_KEEP_HARNESS_TEMP=1
-			;;
-		missing-tailnet)
-			run_harness "guard-$guard" "" env "${create_env[@]}" \
-				SERVERPRO_DOGFOOD_TAILNET= SERVERPRO_KEEP_HARNESS_TEMP=1
-			;;
-		missing-sudopass)
-			run_harness "guard-$guard" "" env "${create_env[@]}" \
-				SERVERPRO_DOGFOOD_SUDOPASS= SERVERPRO_KEEP_HARNESS_TEMP=1
-			;;
+	no-opt-in)
+		run_harness "guard-$guard" "" env "${create_prerequisites[@]}" \
+			SERVERPRO_KEEP_HARNESS_TEMP=1
+		;;
+	wrong-create)
+		run_harness "guard-$guard" "" env "${create_prerequisites[@]}" \
+			SERVERPRO_DOGFOOD_CREATE=yes SERVERPRO_KEEP_HARNESS_TEMP=1
+		;;
+	missing-provider-token)
+		run_harness "guard-$guard" "" env "${create_env[@]}" \
+			SERVERPRO_DOGFOOD_HETZNER_TOKEN= SERVERPRO_KEEP_HARNESS_TEMP=1
+		;;
+	missing-tailscale-token)
+		run_harness "guard-$guard" "" env "${create_env[@]}" \
+			SERVERPRO_DOGFOOD_TAILSCALE_TOKEN= SERVERPRO_KEEP_HARNESS_TEMP=1
+		;;
+	missing-tailnet)
+		run_harness "guard-$guard" "" env "${create_env[@]}" \
+			SERVERPRO_DOGFOOD_TAILNET= SERVERPRO_KEEP_HARNESS_TEMP=1
+		;;
+	missing-sudopass)
+		run_harness "guard-$guard" "" env "${create_env[@]}" \
+			SERVERPRO_DOGFOOD_SUDOPASS= SERVERPRO_KEEP_HARNESS_TEMP=1
+		;;
 	esac
 	if [[ "$harness_rc" -eq 0 ]]; then ok "guard $guard exit zero"; else bad "guard $guard exit zero"; fi
 	check "guard $guard skipped destructive flow" grep -Fq "SKIP | live create/delete" "$scenario_tmp/harness.log"
@@ -616,18 +628,18 @@ done
 
 for guard in missing-cloudflare-token missing-cloudflare-account; do
 	case "$guard" in
-		missing-cloudflare-token)
-			run_harness "guard-$guard" "" env "${create_env[@]}" \
-				SERVERPRO_DOGFOOD_INGRESS=cloudflare-tunnel \
-				SERVERPRO_DOGFOOD_CLOUDFLARE_ACCOUNT_ID=selftest-account \
-				SERVERPRO_KEEP_HARNESS_TEMP=1
-			;;
-		missing-cloudflare-account)
-			run_harness "guard-$guard" "" env "${create_env[@]}" \
-				SERVERPRO_DOGFOOD_INGRESS=cloudflare-tunnel \
-				SERVERPRO_DOGFOOD_CLOUDFLARE_TOKEN="$SENT_CF" \
-				SERVERPRO_KEEP_HARNESS_TEMP=1
-			;;
+	missing-cloudflare-token)
+		run_harness "guard-$guard" "" env "${create_env[@]}" \
+			SERVERPRO_DOGFOOD_INGRESS=cloudflare-tunnel \
+			SERVERPRO_DOGFOOD_CLOUDFLARE_ACCOUNT_ID=selftest-account \
+			SERVERPRO_KEEP_HARNESS_TEMP=1
+		;;
+	missing-cloudflare-account)
+		run_harness "guard-$guard" "" env "${create_env[@]}" \
+			SERVERPRO_DOGFOOD_INGRESS=cloudflare-tunnel \
+			SERVERPRO_DOGFOOD_CLOUDFLARE_TOKEN="$SENT_CF" \
+			SERVERPRO_KEEP_HARNESS_TEMP=1
+		;;
 	esac
 	if [[ "$harness_rc" -ne 0 ]]; then ok "guard $guard nonzero exit"; else bad "guard $guard nonzero exit"; fi
 	check "guard $guard reported missing prerequisite" grep -Fq "requires SERVERPRO_DOGFOOD_CLOUDFLARE_TOKEN and SERVERPRO_DOGFOOD_CLOUDFLARE_ACCOUNT_ID" "$scenario_tmp/harness.log"
@@ -798,13 +810,19 @@ note "scenario K: keep mode reuses one server across runs"
 keep_home="$tmp/keep-home"
 keep_env=("${create_env[@]}" "${fast_waits[@]}" SERVERPRO_DOGFOOD_KEEP_SERVER=1 SERVERPRO_DOGFOOD_HOME="$keep_home")
 run_harness scenarioK-create "" env "${keep_env[@]}" SERVERPRO_DOGFOOD_SCENARIOS=create,doctor
-if [[ "$harness_rc" -eq 0 ]]; then ok "K create exit zero"; else bad "K create exit zero"; sed 's/^/  log: /' "$scenario_tmp/harness.log"; fi
+if [[ "$harness_rc" -eq 0 ]]; then ok "K create exit zero"; else
+	bad "K create exit zero"
+	sed 's/^/  log: /' "$scenario_tmp/harness.log"
+fi
 check_absent "K create run never deletes" "<delete>" "$FAKE_ARGV_DIR/serverpro-argv.log"
 check "K state persisted" test -f "$keep_home/.local/state/serverpro/namespaces/spdogfooda/servers/web.json"
 perm="$(stat -c '%a' "$keep_home" 2>/dev/null || stat -f '%Lp' "$keep_home")"
 if [[ "$perm" == "700" ]]; then ok "K home mode 0700"; else bad "K home mode 0700 ($perm)"; fi
 run_harness scenarioK-reuse "" env "${keep_env[@]}" SERVERPRO_DOGFOOD_SCENARIOS=doctor,fix
-if [[ "$harness_rc" -eq 0 ]]; then ok "K reuse exit zero"; else bad "K reuse exit zero"; sed 's/^/  log: /' "$scenario_tmp/harness.log"; fi
+if [[ "$harness_rc" -eq 0 ]]; then ok "K reuse exit zero"; else
+	bad "K reuse exit zero"
+	sed 's/^/  log: /' "$scenario_tmp/harness.log"
+fi
 check_absent "K reuse never creates" "<server> <create>" "$FAKE_ARGV_DIR/serverpro-command.log"
 check "K reuse ran doctor" grep -Fq "PASS | live server doctor after fix" "$scenario_tmp/harness.log"
 check "K kept server reported" grep -Fq "kept=yes" "$scenario_tmp/harness.log"
@@ -845,8 +863,8 @@ check "I2 leftover check runs on exit" grep -Fq "live leftover check exit" "$sce
 note "scenario K2: keep-mode home cannot alias the operator home"
 for alias in "home/." "home//" "home/../home" "/"; do
 	case "$alias" in
-		/) alias_path="/" ;;
-		*) alias_path="$tmp/scenarioK2-${alias//[^a-z]/_}/$alias" ;;
+	/) alias_path="/" ;;
+	*) alias_path="$tmp/scenarioK2-${alias//[^a-z]/_}/$alias" ;;
 	esac
 	run_harness "scenarioK2-${alias//[^a-z]/_}" "" env "${create_env[@]}" SERVERPRO_DOGFOOD_KEEP_SERVER=1 SERVERPRO_DOGFOOD_HOME="$alias_path"
 	if [[ "$harness_rc" -eq 2 ]]; then ok "K2 alias $alias rejected"; else bad "K2 alias $alias rejected ($harness_rc)"; fi
@@ -890,7 +908,10 @@ printf 'y\n%sZ\177\n%s\nselftest-tailnet\n%s\n%s\n' \
 	"$SENT_VULTR" "$SENT_TS" "$SENT_SUDO" "$SENT_SUDO" >"$prompt_input"
 run_harness scenarioQ1 "" env "${prompt_base[@]}" SERVERPRO_DOGFOOD_TEST_PROMPT_INPUT="$prompt_input" SERVERPRO_KEEP_HARNESS_TEMP=1
 wd="$(work_dir)"
-if [[ "$harness_rc" -eq 0 ]]; then ok "Q1 exit zero"; else bad "Q1 exit zero"; sed 's/^/  log: /' "$scenario_tmp/harness.log"; fi
+if [[ "$harness_rc" -eq 0 ]]; then ok "Q1 exit zero"; else
+	bad "Q1 exit zero"
+	sed 's/^/  log: /' "$scenario_tmp/harness.log"
+fi
 check "Q1 defaults to Vultr" grep -Fq "<-p> <vultr> <--non-interactive> <--yes> <server> <create> <web>" "$FAKE_ARGV_DIR/serverpro-command.log"
 check "Q1 asked for the provider token" grep -Fq "vultr API token: " "$scenario_tmp/harness.log"
 check "Q1 asked for the sudo password twice" grep -Fq "Repeat sudo password" "$scenario_tmp/harness.log"

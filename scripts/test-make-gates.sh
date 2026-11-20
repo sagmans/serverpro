@@ -7,7 +7,7 @@ if [[ "$test_count" != '1' ]]; then
 	printf 'make check must run one merged Go test invocation, found %s:\n%s\n' "$test_count" "$plan" >&2
 	exit 1
 fi
-for required in '-race' '-covermode=atomic' '-coverprofile="coverage.out"' 'scripts/check-coverage.sh "coverage.out" "81.8"' 'mod tidy -diff'; do
+for required in '-race' '-covermode=atomic' '-coverprofile="coverage.out"' 'scripts/check-coverage.sh "coverage.out" "81.8"' 'mod tidy -diff' 'scripts/lint-scripts.sh --shell' 'scripts/lint-scripts.sh --python'; do
 	if ! grep -F -- "$required" <<<"$plan" >/dev/null; then
 		printf 'make check missing %s:\n%s\n' "$required" "$plan" >&2
 		exit 1

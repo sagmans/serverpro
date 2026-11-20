@@ -26,21 +26,13 @@ ABS_BIN_DIR := $(abspath $(BIN_DIR))
 COVERAGE_PROFILE := coverage.out
 MIN_COVERAGE := 81.8
 HARNESS_ENV_SENTINEL := serverpro-no-token-sentinel
-# ShellCheck is a system tool (preinstalled on the CI runner), not a pinned Go
-# tool, so lint-shell fails with guidance instead of installing anything.
-SHELLCHECK ?= shellcheck
-# ShellCheck reports findings only for the files it is given, so sourced flow
-# files are linted too; -x lets each see the shared lib it sources. The list
-# comes from Git so a new tracked script is linted without editing this file;
-# a hand-kept list once left the root bootstrap script unlinted.
-SHELL_LINT_SCRIPTS := $(shell git ls-files -- '*.sh')
 
-.PHONY: python-policy ci check fmt fmt-check tidy-check test test-unit test-go-check test-harness test-smoke test-integration test-e2e test-full-chain-e2e test-release test-release-shell test-dogfood-readonly test-dogfood-live test-dogfood-live-selftest vet build bin dogfood-no-token link-bin lint lint-shell vuln race cover install-tools hooks install-hooks lint-fast gen-bootstrap-wrapper
+.PHONY: python-policy ci check fmt fmt-check tidy-check test test-unit test-go-check test-harness test-smoke test-integration test-e2e test-full-chain-e2e test-release test-release-shell test-dogfood-readonly test-dogfood-live test-dogfood-live-selftest vet build bin dogfood-no-token link-bin lint lint-shell lint-python vuln race cover install-tools hooks install-hooks lint-fast gen-bootstrap-wrapper
 .SILENT: fmt fmt-check link-bin
 
-ci: build check
+ci: check
 
-check: python-policy fmt-check tidy-check test-go-check test-harness test-smoke test-e2e test-release-shell test-dogfood-live-selftest vet lint lint-shell vuln
+check: python-policy fmt-check tidy-check build test-go-check test-harness test-smoke test-e2e test-release-shell test-dogfood-live-selftest vet lint lint-shell lint-python vuln
 
 python-policy:
 	bash scripts/check-python-runtime.sh
@@ -131,12 +123,14 @@ lint: ${GOLANGCI_LINT_STAMP}
 lint-fast: ${GOLANGCI_LINT_STAMP}
 	GOLANGCI_LINT_CACHE="${GOLANGCI_LINT_CACHE}" "${GOLANGCI_LINT}" run --fast-only --new-from-rev=HEAD
 
-# An empty script list (no Git, tarball checkout, dubious-ownership refusal)
-# must fail loudly rather than reach shellcheck with no files.
+# Enforce mise.toml-pinned shellcheck and shfmt across Git-tracked repo shell
+# scripts, failing closed on missing or mismatched tools.
 lint-shell:
-	command -v "${SHELLCHECK}" >/dev/null 2>&1 || { echo "lint-shell: ${SHELLCHECK} not found; install ShellCheck with your system package manager" >&2; exit 1; }
-	test -n "${SHELL_LINT_SCRIPTS}" || { echo "lint-shell: no Git-tracked *.sh files found; run from a Git checkout" >&2; exit 1; }
-	"${SHELLCHECK}" -x ${SHELL_LINT_SCRIPTS}
+	bash scripts/lint-scripts.sh --shell
+
+# Enforce mise.toml-pinned ruff format and lint across Git-tracked Python files.
+lint-python:
+	bash scripts/lint-scripts.sh --python
 
 vuln: ${GOVULNCHECK_STAMP}
 	"${GOVULNCHECK}" ./...

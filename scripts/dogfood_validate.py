@@ -54,195 +54,214 @@ class ValidationError(ValueError):
     """Reported when command output cannot prove the expected live operation."""
 
 
+def _validate_diagnostics(value):
+    valid = (
+        isinstance(value, list)
+        and bool(value)
+        and all(
+            isinstance(item, dict) and item.get("status") in PASSING_STATUSES
+            for item in value
+        )
+    )
+    if not valid:
+        raise ValidationError(
+            "diagnostics must be a non-empty array without failing statuses"
+        )
+
+
+def _validate_catalog(value):
+    valid = (
+        isinstance(value, list)
+        and bool(value)
+        and all(
+            isinstance(item, dict)
+            and isinstance(item.get("name"), str)
+            and bool(item["name"])
+            for item in value
+        )
+    )
+    if not valid:
+        raise ValidationError("catalog items must have non-empty names")
+
+
+def _validate_list(value, provider):
+    valid = isinstance(value, list) and all(
+        isinstance(item, dict)
+        and item.get("provider") == provider
+        and all(
+            isinstance(item.get(field), str) and bool(item[field].strip())
+            for field in INVENTORY_TEXT_FIELDS
+        )
+        and all(
+            VALID_ID_PATTERN.fullmatch(item[field]) is not None
+            for field in INVENTORY_ID_FIELDS
+        )
+        and item.get("labels_ok") is True
+        and item.get("local_state") in INVENTORY_STATES
+        for item in value
+    )
+    if not valid:
+        raise ValidationError(
+            "inventory candidates must prove provider ownership and local state"
+        )
+
+
+def _validate_namespace_created(value, namespace):
+    if not isinstance(value, dict) or value.get("status") != "created":
+        raise ValidationError("namespace create status mismatch")
+    if value.get("namespace") != namespace:
+        raise ValidationError("namespace mismatch")
+
+
+def _validate_doctor_counts(counts):
+    if not isinstance(counts, dict) or any(
+        type(counts.get(field)) is not int or counts[field] < 0
+        for field in DOCTOR_COUNT_FIELDS
+    ):
+        raise ValidationError("doctor summary identity, report path or counts invalid")
+    # Omitted pass details need positive, internally consistent check counts.
+    if counts["total"] <= 0 or counts["total"] != sum(
+        counts[status] for status in DOCTOR_STATUSES
+    ):
+        raise ValidationError("doctor summary must account for non-empty checks")
+
+
+def _validate_doctor_results(results, counts):
+    if not isinstance(results, list) or any(
+        not isinstance(item, dict) or item.get("status") not in DOCTOR_DETAIL_STATUSES
+        for item in results
+    ):
+        raise ValidationError("doctor summary results must contain only warn/fail/skip")
+    if any(
+        sum(item["status"] == status for item in results) != counts[status]
+        for status in DOCTOR_DETAIL_STATUSES
+    ):
+        raise ValidationError("doctor summary result counts mismatch")
+
+
+def _validate_doctor_summary(value, results, namespace, server):
+    if (
+        value.get("namespace") != namespace
+        or value.get("server") != server
+        or not isinstance(value.get("report_path"), str)
+        or not value["report_path"].strip()
+    ):
+        raise ValidationError("doctor summary identity, report path or counts invalid")
+    counts = value.get("counts")
+    _validate_doctor_counts(counts)
+    _validate_doctor_results(results, counts)
+    expected_status = "fail" if counts["fail"] else "warn" if counts["warn"] else "pass"
+    if value.get("status") != expected_status or counts["fail"]:
+        raise ValidationError("doctor summary status mismatch or failing checks")
+
+
+def _validate_doctor_report(value, namespace, server):
+    if not isinstance(value, dict):
+        raise ValidationError("doctor report must be an object")
+    results = value.get("results")
+    # Summary metadata must not bypass validation through the legacy report path.
+    if any(field in value for field in DOCTOR_SUMMARY_FIELDS):
+        _validate_doctor_summary(value, results, namespace, server)
+        return
+    valid = (
+        isinstance(results, list)
+        and bool(results)
+        and all(
+            isinstance(item, dict) and item.get("status") in PASSING_STATUSES
+            for item in results
+        )
+    )
+    if not valid:
+        raise ValidationError(
+            "doctor report must contain results without failing statuses"
+        )
+
+
+def _validate_server_status(value, provider, namespace, server):
+    if not isinstance(value, dict):
+        raise ValidationError("server status must be an object")
+    if value.get("namespace") != namespace:
+        raise ValidationError("namespace mismatch")
+    if value.get("server") != server:
+        raise ValidationError("server mismatch")
+    if value.get("provider") != provider:
+        raise ValidationError("provider mismatch")
+    if not isinstance(value.get("power"), str) or not value["power"]:
+        raise ValidationError("server power status missing")
+
+
+def _validate_power(kind, value, provider, namespace, server):
+    # Power commands and status share one row; a settled state, not an
+    # in-between label such as "stopping", proves the operation finished.
+    _validate_server_status(value, provider, namespace, server)
+    expected = POWER_ON_LABELS if kind == "power-on" else POWER_OFF_LABELS
+    if value["power"] not in expected:
+        raise ValidationError(f"power {value['power']!r} is not settled {kind}")
+
+
+def _validate_import_complete(value, provider, namespace, server):
+    # Import exits zero even when a row failed, so success needs exactly one
+    # imported row for the requested server.
+    rows = (
+        [
+            item
+            for item in value
+            if isinstance(item, dict)
+            and item.get("namespace") == namespace
+            and item.get("server") == server
+            and item.get("provider") == provider
+        ]
+        if isinstance(value, list)
+        else []
+    )
+    if len(rows) != 1 or rows[0].get("status") != IMPORTED_STATUS:
+        raise ValidationError(
+            "import must report exactly one imported row for the server"
+        )
+
+
+def _validate_action_complete(action, value, provider, namespace, server):
+    if (
+        not isinstance(value, dict)
+        or value.get("status") != "complete"
+        or value.get("action") != action
+    ):
+        raise ValidationError(f"{action} completion mismatch")
+    if value.get("namespace") != namespace:
+        raise ValidationError("namespace mismatch")
+    if value.get("server") != server:
+        raise ValidationError("server mismatch")
+    if action == "delete" and value.get("provider") != provider:
+        raise ValidationError("provider mismatch")
+
+
 def validate_output(kind, value, provider="", namespace="", server=""):
     """Validate one parsed command result against its semantic contract."""
-    if kind == "diagnostics":
-        valid = (
-            isinstance(value, list)
-            and bool(value)
-            and all(
-                isinstance(item, dict)
-                and item.get("status") in PASSING_STATUSES
-                for item in value
-            )
-        )
-        if not valid:
-            raise ValidationError(
-                "diagnostics must be a non-empty array without failing statuses"
-            )
-        return
-
-    if kind == "catalog":
-        valid = (
-            isinstance(value, list)
-            and bool(value)
-            and all(
-                isinstance(item, dict)
-                and isinstance(item.get("name"), str)
-                and bool(item["name"])
-                for item in value
-            )
-        )
-        if not valid:
-            raise ValidationError("catalog items must have non-empty names")
-        return
-
-    if kind == "list":
-        valid = (
-            isinstance(value, list)
-            and all(
-                isinstance(item, dict)
-                and item.get("provider") == provider
-                and all(
-                    isinstance(item.get(field), str) and bool(item[field].strip())
-                    for field in INVENTORY_TEXT_FIELDS
-                )
-                and all(
-                    VALID_ID_PATTERN.fullmatch(item[field]) is not None
-                    for field in INVENTORY_ID_FIELDS
-                )
-                and item.get("labels_ok") is True
-                and item.get("local_state") in INVENTORY_STATES
-                for item in value
-            )
-        )
-        if not valid:
-            raise ValidationError(
-                "inventory candidates must prove provider ownership and local state"
-            )
-        return
-
-    if kind == "namespace-created":
-        if not isinstance(value, dict) or value.get("status") != "created":
-            raise ValidationError("namespace create status mismatch")
-        if value.get("namespace") != namespace:
-            raise ValidationError("namespace mismatch")
-        return
-
-    if kind == "doctor-report":
-        if not isinstance(value, dict):
-            raise ValidationError("doctor report must be an object")
-        results = value.get("results")
-        # Summary metadata must not bypass validation through the legacy report path.
-        if any(field in value for field in DOCTOR_SUMMARY_FIELDS):
-            counts = value.get("counts")
-            if (
-                value.get("namespace") != namespace
-                or value.get("server") != server
-                or not isinstance(value.get("report_path"), str)
-                or not value["report_path"].strip()
-                or not isinstance(counts, dict)
-                or any(
-                    type(counts.get(field)) is not int or counts[field] < 0
-                    for field in DOCTOR_COUNT_FIELDS
-                )
-            ):
-                raise ValidationError("doctor summary identity, report path or counts invalid")
-            # Omitted pass details need positive, internally consistent check counts.
-            if counts["total"] <= 0 or counts["total"] != sum(
-                counts[status] for status in DOCTOR_STATUSES
-            ):
-                raise ValidationError("doctor summary must account for non-empty checks")
-            if not isinstance(results, list) or any(
-                not isinstance(item, dict)
-                or item.get("status") not in DOCTOR_DETAIL_STATUSES
-                for item in results
-            ):
-                raise ValidationError("doctor summary results must contain only warn/fail/skip")
-            if any(
-                sum(item["status"] == status for item in results) != counts[status]
-                for status in DOCTOR_DETAIL_STATUSES
-            ):
-                raise ValidationError("doctor summary result counts mismatch")
-            expected_status = "fail" if counts["fail"] else "warn" if counts["warn"] else "pass"
-            if value.get("status") != expected_status or counts["fail"]:
-                raise ValidationError("doctor summary status mismatch or failing checks")
-            return
-        valid = (
-            isinstance(results, list)
-            and bool(results)
-            and all(
-                isinstance(item, dict)
-                and item.get("status") in PASSING_STATUSES
-                for item in results
-            )
-        )
-        if not valid:
-            raise ValidationError(
-                "doctor report must contain results without failing statuses"
-            )
-        return
-
-    if kind == "server-status":
-        if not isinstance(value, dict):
-            raise ValidationError("server status must be an object")
-        if value.get("namespace") != namespace:
-            raise ValidationError("namespace mismatch")
-        if value.get("server") != server:
-            raise ValidationError("server mismatch")
-        if value.get("provider") != provider:
-            raise ValidationError("provider mismatch")
-        if not isinstance(value.get("power"), str) or not value["power"]:
-            raise ValidationError("server power status missing")
-        return
-
-    if kind in ("power-on", "power-off"):
-        # Power commands and status share one row; a settled state, not an
-        # in-between label such as "stopping", proves the operation finished.
-        validate_output("server-status", value, provider, namespace, server)
-        expected = POWER_ON_LABELS if kind == "power-on" else POWER_OFF_LABELS
-        if value["power"] not in expected:
-            raise ValidationError(f"power {value['power']!r} is not settled {kind}")
-        return
-
-    if kind == "import-complete":
-        # Import exits zero even when a row failed, so success needs exactly one
-        # imported row for the requested server.
-        rows = (
-            [
-                item
-                for item in value
-                if isinstance(item, dict)
-                and item.get("namespace") == namespace
-                and item.get("server") == server
-                and item.get("provider") == provider
-            ]
-            if isinstance(value, list)
-            else []
-        )
-        if len(rows) != 1 or rows[0].get("status") != IMPORTED_STATUS:
-            raise ValidationError("import must report exactly one imported row for the server")
-        return
-
-    if kind == "bootstrap-complete":
-        if (
-            not isinstance(value, dict)
-            or value.get("status") != "complete"
-            or value.get("action") != "bootstrap"
-        ):
-            raise ValidationError("bootstrap completion mismatch")
-        if value.get("namespace") != namespace:
-            raise ValidationError("namespace mismatch")
-        if value.get("server") != server:
-            raise ValidationError("server mismatch")
-        return
-
-    if kind == "delete-complete":
-        if (
-            not isinstance(value, dict)
-            or value.get("status") != "complete"
-            or value.get("action") != "delete"
-        ):
-            raise ValidationError("delete completion mismatch")
-        if value.get("namespace") != namespace:
-            raise ValidationError("namespace mismatch")
-        if value.get("server") != server:
-            raise ValidationError("server mismatch")
-        if value.get("provider") != provider:
-            raise ValidationError("provider mismatch")
-        return
-
-    raise ValidationError(f"unknown output validator: {kind}")
+    validators = {
+        "diagnostics": lambda: _validate_diagnostics(value),
+        "catalog": lambda: _validate_catalog(value),
+        "list": lambda: _validate_list(value, provider),
+        "namespace-created": lambda: _validate_namespace_created(value, namespace),
+        "doctor-report": lambda: _validate_doctor_report(value, namespace, server),
+        "server-status": lambda: _validate_server_status(
+            value, provider, namespace, server
+        ),
+        "power-on": lambda: _validate_power(kind, value, provider, namespace, server),
+        "power-off": lambda: _validate_power(kind, value, provider, namespace, server),
+        "import-complete": lambda: _validate_import_complete(
+            value, provider, namespace, server
+        ),
+        "bootstrap-complete": lambda: _validate_action_complete(
+            "bootstrap", value, provider, namespace, server
+        ),
+        "delete-complete": lambda: _validate_action_complete(
+            "delete", value, provider, namespace, server
+        ),
+    }
+    validator = validators.get(kind)
+    if validator is None:
+        raise ValidationError(f"unknown output validator: {kind}")
+    validator()
 
 
 def validate_key_store(kind, value):
@@ -250,7 +269,11 @@ def validate_key_store(kind, value):
     credential file encrypted. Kept apart from validate_output so the store
     contract stays small and testable on its own."""
     prefix, file_backed = KEY_STORE_PREFIXES[kind]
-    if not isinstance(value, dict) or value.get("key_present") is not True or value.get("error"):
+    if (
+        not isinstance(value, dict)
+        or value.get("key_present") is not True
+        or value.get("error")
+    ):
         raise ValidationError("credential key not readable")
     store = value.get("store")
     if (
@@ -336,7 +359,9 @@ def age_hours(stamp):
         created = datetime.fromisoformat(normalized)
     except ValueError:
         return
-    print(int((datetime.now(timezone.utc) - created).total_seconds() // SECONDS_PER_HOUR))
+    print(
+        int((datetime.now(timezone.utc) - created).total_seconds() // SECONDS_PER_HOUR)
+    )
 
 
 def count_identity_devices(host, tag):
@@ -406,7 +431,9 @@ def write_credentials(path, namespace, server, provider):
     payload = {
         "namespace": namespace,
         "server": server,
-        "server_provider_token": os.environ[CREDENTIAL_TOKEN_ENV["server_provider_token"]],
+        "server_provider_token": os.environ[
+            CREDENTIAL_TOKEN_ENV["server_provider_token"]
+        ],
         "server_provider_name": provider,
         "tailscale_token": os.environ[CREDENTIAL_TOKEN_ENV["tailscale_token"]],
         "tailscale_auth_key": "",
@@ -436,7 +463,10 @@ def run_helper(name, args):
     """Run one harness helper subcommand as the shell harness boundary."""
     helper, arity = HELPER_COMMANDS[name]
     if len(args) != arity:
-        print(f"usage: dogfood_validate.py {name} takes {arity} argument(s)", file=sys.stderr)
+        print(
+            f"usage: dogfood_validate.py {name} takes {arity} argument(s)",
+            file=sys.stderr,
+        )
         return 2
     try:
         helper(*args)

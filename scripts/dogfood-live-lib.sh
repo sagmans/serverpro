@@ -161,10 +161,10 @@ case_path() {
 # production token variables are never read.
 provider_token() {
 	case "$1" in
-		hetzner) printf '%s' "${SERVERPRO_DOGFOOD_HETZNER_TOKEN:-}" ;;
-		vultr) printf '%s' "${SERVERPRO_DOGFOOD_VULTR_TOKEN:-}" ;;
-		digitalocean) printf '%s' "${SERVERPRO_DOGFOOD_DIGITALOCEAN_TOKEN:-}" ;;
-		*) return 1 ;;
+	hetzner) printf '%s' "${SERVERPRO_DOGFOOD_HETZNER_TOKEN:-}" ;;
+	vultr) printf '%s' "${SERVERPRO_DOGFOOD_VULTR_TOKEN:-}" ;;
+	digitalocean) printf '%s' "${SERVERPRO_DOGFOOD_DIGITALOCEAN_TOKEN:-}" ;;
+	*) return 1 ;;
 	esac
 }
 
@@ -172,28 +172,28 @@ provider_token() {
 # good catalog entry per provider unless the operator overrides it.
 provider_location() {
 	case "$1" in
-		hetzner) printf '%s' "${SERVERPRO_DOGFOOD_HETZNER_LOCATION:-$DOGFOOD_DEFAULT_HETZNER_LOCATION}" ;;
-		vultr) printf '%s' "${SERVERPRO_DOGFOOD_VULTR_LOCATION:-$DOGFOOD_DEFAULT_VULTR_LOCATION}" ;;
-		digitalocean) printf '%s' "${SERVERPRO_DOGFOOD_DIGITALOCEAN_LOCATION:-$DOGFOOD_DEFAULT_DIGITALOCEAN_LOCATION}" ;;
-		*) return 1 ;;
+	hetzner) printf '%s' "${SERVERPRO_DOGFOOD_HETZNER_LOCATION:-$DOGFOOD_DEFAULT_HETZNER_LOCATION}" ;;
+	vultr) printf '%s' "${SERVERPRO_DOGFOOD_VULTR_LOCATION:-$DOGFOOD_DEFAULT_VULTR_LOCATION}" ;;
+	digitalocean) printf '%s' "${SERVERPRO_DOGFOOD_DIGITALOCEAN_LOCATION:-$DOGFOOD_DEFAULT_DIGITALOCEAN_LOCATION}" ;;
+	*) return 1 ;;
 	esac
 }
 
 provider_size() {
 	case "$1" in
-		hetzner) printf '%s' "${SERVERPRO_DOGFOOD_HETZNER_SIZE:-$DOGFOOD_DEFAULT_HETZNER_SIZE}" ;;
-		vultr) printf '%s' "${SERVERPRO_DOGFOOD_VULTR_SIZE:-$DOGFOOD_DEFAULT_VULTR_SIZE}" ;;
-		digitalocean) printf '%s' "${SERVERPRO_DOGFOOD_DIGITALOCEAN_SIZE:-$DOGFOOD_DEFAULT_DIGITALOCEAN_SIZE}" ;;
-		*) return 1 ;;
+	hetzner) printf '%s' "${SERVERPRO_DOGFOOD_HETZNER_SIZE:-$DOGFOOD_DEFAULT_HETZNER_SIZE}" ;;
+	vultr) printf '%s' "${SERVERPRO_DOGFOOD_VULTR_SIZE:-$DOGFOOD_DEFAULT_VULTR_SIZE}" ;;
+	digitalocean) printf '%s' "${SERVERPRO_DOGFOOD_DIGITALOCEAN_SIZE:-$DOGFOOD_DEFAULT_DIGITALOCEAN_SIZE}" ;;
+	*) return 1 ;;
 	esac
 }
 
 provider_image() {
 	case "$1" in
-		hetzner) printf '%s' "${SERVERPRO_DOGFOOD_HETZNER_IMAGE:-$DOGFOOD_DEFAULT_HETZNER_IMAGE}" ;;
-		vultr) printf '%s' "${SERVERPRO_DOGFOOD_VULTR_IMAGE:-$DOGFOOD_DEFAULT_VULTR_IMAGE}" ;;
-		digitalocean) printf '%s' "${SERVERPRO_DOGFOOD_DIGITALOCEAN_IMAGE:-$DOGFOOD_DEFAULT_DIGITALOCEAN_IMAGE}" ;;
-		*) return 1 ;;
+	hetzner) printf '%s' "${SERVERPRO_DOGFOOD_HETZNER_IMAGE:-$DOGFOOD_DEFAULT_HETZNER_IMAGE}" ;;
+	vultr) printf '%s' "${SERVERPRO_DOGFOOD_VULTR_IMAGE:-$DOGFOOD_DEFAULT_VULTR_IMAGE}" ;;
+	digitalocean) printf '%s' "${SERVERPRO_DOGFOOD_DIGITALOCEAN_IMAGE:-$DOGFOOD_DEFAULT_DIGITALOCEAN_IMAGE}" ;;
+	*) return 1 ;;
 	esac
 }
 
@@ -216,9 +216,15 @@ env_name_part() {
 	for ((i = 0; i < ${#input}; i++)); do
 		char="${input:i:1}"
 		case "$char" in
-			[a-z]) upper="$(printf '%s' "$char" | tr '[:lower:]' '[:upper:]')"; output+="$upper" ;;
-			[A-Z0-9]) output+="$char" ;;
-			*) printf -v ordinal '%02X' "'$char"; output+="_X${ordinal}_" ;;
+		[a-z])
+			upper="$(printf '%s' "$char" | tr '[:lower:]' '[:upper:]')"
+			output+="$upper"
+			;;
+		[A-Z0-9]) output+="$char" ;;
+		*)
+			printf -v ordinal '%02X' "'$char"
+			output+="_X${ordinal}_"
+			;;
 		esac
 	done
 	printf '%s' "$output"
@@ -309,11 +315,20 @@ run_with_timeout() {
 	# WHY reset signals in both jobs: the exit trap ignores INT/TERM/HUP while
 	# it tears down, children inherit that, and the deadline is a TERM, so
 	# without the reset neither the command nor the watcher could be stopped.
-	(trap - INT TERM HUP; exec "$@") <&0 &
+	(
+		trap - INT TERM HUP
+		exec "$@"
+	) <&0 &
 	pid=$!
 	# The watcher must not hold stdout, or a $(...) caller waits out the sleep.
 	# Children are stopped too, since an ssh child would keep the pipe open.
-	(trap - INT TERM HUP; sleep "$seconds" && { pkill -TERM -P "$pid"; kill -TERM "$pid"; }) >/dev/null 2>&1 &
+	(
+		trap - INT TERM HUP
+		sleep "$seconds" && {
+			pkill -TERM -P "$pid"
+			kill -TERM "$pid"
+		}
+	) >/dev/null 2>&1 &
 	watcher=$!
 	wait "$pid"
 	rc=$?
@@ -363,9 +378,9 @@ remote_sudo_script() {
 # harness needs it to prove a run's keyring item is gone.
 keyring_tool_present() {
 	case "$host_os" in
-		Darwin) command -v security >/dev/null 2>&1 ;;
-		Linux) command -v secret-tool >/dev/null 2>&1 ;;
-		*) return 1 ;;
+	Darwin) command -v security >/dev/null 2>&1 ;;
+	Linux) command -v secret-tool >/dev/null 2>&1 ;;
+	*) return 1 ;;
 	esac
 }
 
@@ -424,11 +439,11 @@ keyring_item() {
 	local action="$1" account
 	account="$(run_key_account)"
 	case "$host_os:$action" in
-		Darwin:find) run_with_timeout "$DOGFOOD_KEYRING_TIMEOUT" security find-generic-password -s "$DOGFOOD_KEYRING_SERVICE" -a "$account" ;;
-		Darwin:delete) run_with_timeout "$DOGFOOD_KEYRING_TIMEOUT" security delete-generic-password -s "$DOGFOOD_KEYRING_SERVICE" -a "$account" ;;
-		Linux:find) run_with_timeout "$DOGFOOD_KEYRING_TIMEOUT" secret-tool lookup service "$DOGFOOD_KEYRING_SERVICE" username "$account" ;;
-		Linux:delete) run_with_timeout "$DOGFOOD_KEYRING_TIMEOUT" secret-tool clear service "$DOGFOOD_KEYRING_SERVICE" username "$account" ;;
-		*) return 1 ;;
+	Darwin:find) run_with_timeout "$DOGFOOD_KEYRING_TIMEOUT" security find-generic-password -s "$DOGFOOD_KEYRING_SERVICE" -a "$account" ;;
+	Darwin:delete) run_with_timeout "$DOGFOOD_KEYRING_TIMEOUT" security delete-generic-password -s "$DOGFOOD_KEYRING_SERVICE" -a "$account" ;;
+	Linux:find) run_with_timeout "$DOGFOOD_KEYRING_TIMEOUT" secret-tool lookup service "$DOGFOOD_KEYRING_SERVICE" username "$account" ;;
+	Linux:delete) run_with_timeout "$DOGFOOD_KEYRING_TIMEOUT" secret-tool clear service "$DOGFOOD_KEYRING_SERVICE" username "$account" ;;
+	*) return 1 ;;
 	esac </dev/null >/dev/null
 }
 
@@ -441,12 +456,12 @@ keyring_item_state() {
 	err="$(keyring_item find 2>&1)"
 	status=$?
 	case "$host_os" in
-		Darwin) absent="$DOGFOOD_KEYRING_ABSENT_STATUS_DARWIN" ;;
-		*) absent="$DOGFOOD_KEYRING_ABSENT_STATUS_LINUX" ;;
+	Darwin) absent="$DOGFOOD_KEYRING_ABSENT_STATUS_DARWIN" ;;
+	*) absent="$DOGFOOD_KEYRING_ABSENT_STATUS_LINUX" ;;
 	esac
 	if [[ "$status" -eq 0 ]]; then
 		printf 'present'
-	elif [[ "$status" -eq "$absent" && ( "$host_os" == Darwin || -z "$err" ) ]]; then
+	elif [[ "$status" -eq "$absent" && ("$host_os" == Darwin || -z "$err") ]]; then
 		printf 'absent'
 	else
 		printf 'lookup failed with exit %s' "$status"
@@ -472,11 +487,11 @@ remove_run_key() {
 	[[ "$key_store" == keyring ]] || return 0
 	item="$(run_key_item)"
 	case "$host_os" in
-		# Without the Keychain link the pinned Keychain refused the key, and a
-		# lookup could open the blocking "Keychain Not Found" dialog.
-		Darwin) [[ -L "$home_dir/$DOGFOOD_KEYCHAIN_FOLDER_SUFFIX" ]] || return 0 ;;
-		Linux) ;;
-		*) return 0 ;;
+	# Without the Keychain link the pinned Keychain refused the key, and a
+	# lookup could open the blocking "Keychain Not Found" dialog.
+	Darwin) [[ -L "$home_dir/$DOGFOOD_KEYCHAIN_FOLDER_SUFFIX" ]] || return 0 ;;
+	Linux) ;;
+	*) return 0 ;;
 	esac
 	# A missing tool means the item cannot be checked, so fail closed.
 	if ! keyring_tool_present; then

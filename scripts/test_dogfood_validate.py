@@ -200,9 +200,7 @@ class ValidateOutputTests(unittest.TestCase):
                     )
 
     def test_accepts_empty_inventory_and_every_local_state(self):
-        dogfood_validate.validate_result(
-            "list", [], PROVIDER, NAMESPACE, SERVER
-        )
+        dogfood_validate.validate_result("list", [], PROVIDER, NAMESPACE, SERVER)
         for local_state in ("missing", "partial", "present"):
             with self.subTest(local_state=local_state):
                 candidate = dict(VALID_CANDIDATE, local_state=local_state)
@@ -328,10 +326,17 @@ class ValidateOutputTests(unittest.TestCase):
             del value[field]
             invalid.append((f"missing {field}", value))
         for field, replacement in (
-            ("namespace", "wrong"), ("server", "wrong"),
-            ("status", "warn"), ("status", "fail"), ("status", "skip"),
-            ("status", []), ("report_path", ""), ("report_path", "  "),
-            ("report_path", None), ("counts", None), ("results", None),
+            ("namespace", "wrong"),
+            ("server", "wrong"),
+            ("status", "warn"),
+            ("status", "fail"),
+            ("status", "skip"),
+            ("status", []),
+            ("report_path", ""),
+            ("report_path", "  "),
+            ("report_path", None),
+            ("counts", None),
+            ("results", None),
         ):
             value = copy.deepcopy(VALID_SUMMARY)
             value[field] = replacement
@@ -354,9 +359,16 @@ class ValidateOutputTests(unittest.TestCase):
             value = copy.deepcopy(VALID_SUMMARY)
             value["counts"] = counts
             invalid.append((f"unproven counts {counts}", value))
-        for result in ({"status": "pass"}, {"status": "warn"},
-                       {"status": "skip"}, {"status": "fail"},
-                       {"status": "unknown"}, {"status": []}, {}, None):
+        for result in (
+            {"status": "pass"},
+            {"status": "warn"},
+            {"status": "skip"},
+            {"status": "fail"},
+            {"status": "unknown"},
+            {"status": []},
+            {},
+            None,
+        ):
             value = copy.deepcopy(VALID_SUMMARY)
             value["results"] = [result]
             invalid.append((f"invalid result {result}", value))
@@ -392,8 +404,11 @@ class ValidateOutputTests(unittest.TestCase):
                     )
         with self.assertRaises(dogfood_validate.ValidationError):
             dogfood_validate.validate_result(
-                "power-on", dict(VALID_OUTPUTS["power-on"], provider="vultr"),
-                PROVIDER, NAMESPACE, SERVER,
+                "power-on",
+                dict(VALID_OUTPUTS["power-on"], provider="vultr"),
+                PROVIDER,
+                NAMESPACE,
+                SERVER,
             )
 
     def test_import_needs_exactly_one_imported_row(self):
@@ -420,9 +435,7 @@ class ValidateOutputTests(unittest.TestCase):
         with self.assertRaisesRegex(
             dogfood_validate.ValidationError, "unknown output validator"
         ):
-            dogfood_validate.validate_result(
-                "unknown", {}, PROVIDER, NAMESPACE, SERVER
-            )
+            dogfood_validate.validate_result("unknown", {}, PROVIDER, NAMESPACE, SERVER)
 
 
 class ValidateFileTests(unittest.TestCase):

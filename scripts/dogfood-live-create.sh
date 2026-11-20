@@ -186,9 +186,9 @@ cleanup_created_server() {
 	# operator can recover paid resources from the preserved artifacts.
 	if SERVERPRO_SERVER_PROVIDER_TOKEN="$(provider_token "$created_provider")" \
 		"$bin" -n "$created_namespace" -p "$created_provider" --yes server delete "$created_server" \
-		>"$out_dir/cleanup-delete.out" 2>"$out_dir/cleanup-delete.err" && \
+		>"$out_dir/cleanup-delete.out" 2>"$out_dir/cleanup-delete.err" &&
 		validate_case_output delete-complete "$out_dir/cleanup-delete.out" "$created_provider" "$created_namespace" "$created_server" \
-		>>"$out_dir/cleanup-delete.err" 2>&1; then
+			>>"$out_dir/cleanup-delete.err" 2>&1; then
 		log "CLEANUP | deleted $created_provider/$created_namespace/$created_server"
 		return 0
 	fi
@@ -404,19 +404,19 @@ run_destructive_dogfood() {
 	# Unknown ingress values abort instead of silently creating a different server.
 	ingress="${SERVERPRO_DOGFOOD_INGRESS:-$DOGFOOD_DEFAULT_INGRESS}"
 	case "$ingress" in
-		none) ;;
-		cloudflare-tunnel)
-			if [[ -z "${SERVERPRO_DOGFOOD_CLOUDFLARE_TOKEN:-}" || -z "${SERVERPRO_DOGFOOD_CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
-				printf 'SERVERPRO_DOGFOOD_INGRESS=cloudflare-tunnel requires SERVERPRO_DOGFOOD_CLOUDFLARE_TOKEN and SERVERPRO_DOGFOOD_CLOUDFLARE_ACCOUNT_ID\n' >&2
-				exit 2
-			fi
-			export SERVERPRO_CLOUDFLARE_TOKEN="$SERVERPRO_DOGFOOD_CLOUDFLARE_TOKEN"
-			create_args+=(--ingress cloudflare-tunnel --cloudflare-account-id "$SERVERPRO_DOGFOOD_CLOUDFLARE_ACCOUNT_ID")
-			;;
-		*)
-			printf 'invalid SERVERPRO_DOGFOOD_INGRESS %q: expected none or cloudflare-tunnel\n' "$ingress" >&2
+	none) ;;
+	cloudflare-tunnel)
+		if [[ -z "${SERVERPRO_DOGFOOD_CLOUDFLARE_TOKEN:-}" || -z "${SERVERPRO_DOGFOOD_CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
+			printf 'SERVERPRO_DOGFOOD_INGRESS=cloudflare-tunnel requires SERVERPRO_DOGFOOD_CLOUDFLARE_TOKEN and SERVERPRO_DOGFOOD_CLOUDFLARE_ACCOUNT_ID\n' >&2
 			exit 2
-			;;
+		fi
+		export SERVERPRO_CLOUDFLARE_TOKEN="$SERVERPRO_DOGFOOD_CLOUDFLARE_TOKEN"
+		create_args+=(--ingress cloudflare-tunnel --cloudflare-account-id "$SERVERPRO_DOGFOOD_CLOUDFLARE_ACCOUNT_ID")
+		;;
+	*)
+		printf 'invalid SERVERPRO_DOGFOOD_INGRESS %q: expected none or cloudflare-tunnel\n' "$ingress" >&2
+		exit 2
+		;;
 	esac
 
 	server_ready=0

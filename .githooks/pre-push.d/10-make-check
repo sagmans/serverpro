@@ -4,13 +4,11 @@
 # govulncheck) must pass on every commit being pushed, not on whatever is
 # checked out. at_sha tests in place only when that commit is a clean HEAD.
 set -eu
-# shellcheck source=.githooks/lib/helpers.sh
-. "${HOOK_HELPERS:?run from .githooks (scripts/setup-hooks)}"
-# shellcheck source=scripts/clean-git-env.sh
-. "$(dirname -- "$0")/../../scripts/clean-git-env.sh"
+# shellcheck source=scripts/push-make.sh
+. "$(dirname -- "$0")/../../scripts/push-make.sh"
 
 shas=$(pushed_shas <"${HOOK_STDIN_FILE:?}") || exit 1
 for sha in $shas; do
 	echo "pre-push: make check @ $sha" >&2
-	at_sha "$sha" make --no-print-directory check || exit 1
+	make_at_commit "$sha" check || exit 1
 done

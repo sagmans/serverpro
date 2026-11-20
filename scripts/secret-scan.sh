@@ -57,10 +57,16 @@ range)
 	# because "already on some remote" is not proof it was ever scanned. A
 	# new branch, or a remote tip this clone does not have, has no trusted
 	# base, so the whole history of the pushed commit is scanned.
-	(($# == 3)) || { echo "usage: $0 range <local-sha> <remote-sha>" >&2; exit 2; }
+	(($# == 3)) || {
+		echo "usage: $0 range <local-sha> <remote-sha>" >&2
+		exit 2
+	}
 	local_sha=$2
 	remote_sha=$3
-	git rev-parse --verify -q "${local_sha}^{commit}" >/dev/null || { echo "secret-scan: unknown commit ${local_sha}" >&2; exit 1; }
+	git rev-parse --verify -q "${local_sha}^{commit}" >/dev/null || {
+		echo "secret-scan: unknown commit ${local_sha}" >&2
+		exit 1
+	}
 	if [[ ! $remote_sha =~ $ZERO_OID_RE ]] && git rev-parse --verify -q "${remote_sha}^{commit}" >/dev/null; then
 		log_range="${remote_sha}..${local_sha}"
 	else

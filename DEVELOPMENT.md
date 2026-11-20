@@ -9,7 +9,9 @@ DEVELOPMENT.md is contributor workflow. User docs live in `README.md`,
 - Ubuntu 24.04 LTS (`noble`) amd64/arm64 is the only supported managed-host
   dogfood target.
 - Go 1.27.4 is the supported development, CI, and release toolchain.
-- `mise.toml` owns the exact Go and uv version pins.
+- `mise.toml` owns the exact Go, uv, ShellCheck, shfmt, and Ruff version pins.
+  In `[tools]`, use one double-quoted `major.minor.patch` value per tool
+  so hooks can read pins without loading a checkout's mise configuration.
 - Python checks require mise-managed uv and run with managed Python only.
   A missing uv command stops the check without a system Python fallback.
 - The `go` directive is a minimum, not a pin. `GOTOOLCHAIN=auto` runs any
@@ -43,7 +45,7 @@ or push.
 | --- | --- | --- |
 | `prepare-commit-msg` | adds `Signed-off-by` | none |
 | `commit-msg` | subject, blank line, body; `Signed-off-by` present | none |
-| `pre-commit` / `pre-merge-commit` (staged, seconds) | gitleaks on the staged change | gofmt, `go vet`, fast golangci-lint on changed code, secret scan, debug-print grep |
+| `pre-commit` / `pre-merge-commit` (staged, seconds) | gitleaks on the staged change | gofmt, `go vet`, fast golangci-lint on changed code, pinned shell/Python format+lint (`shellcheck`, `shfmt`, `ruff`), secret scan, debug-print grep |
 | `pre-push` (each pushed commit) | `Signed-off-by`, verified signature, gitleaks on new commits | `make check`, `make test-full-chain-e2e`, full-range secret scan, native smoke on macOS only |
 
 - **Generic files are copies.** `.githooks/{pre-commit,pre-merge-commit,prepare-commit-msg,commit-msg,pre-push}`,
@@ -118,12 +120,16 @@ runs that package once plus the shell assertions. Standalone unit, integration,
 race, and cover targets support focused development. Build-tagged full-chain
 journeys run through `make test-full-chain-e2e` as a separate pre-push step.
 The gate rejects aggregate coverage below 81.8% and any 0%-covered function.
-`make check` also runs `make lint-shell`, which needs ShellCheck on `PATH`
-(preinstalled on the CI runner; install it locally with your system package
-manager, for example `brew install shellcheck` or `apt install shellcheck`).
-The Makefile does not install it. The target lints every Git-tracked `*.sh`
-file, so a new script is covered once it is added to Git. Suppress a finding
-only with a targeted `# shellcheck disable=SCxxxx # WHY: ...` line.
+`make check` also runs `make build`, `make lint-shell`, and `make lint-python`,
+which enforce the exact `shellcheck`, `shfmt`, and `ruff` pins in `mise.toml`
+via `scripts/lint-scripts.sh` (install them with `mise install`). Every
+Git-tracked repo shell script (`*.sh` and `.githooks/*.d/*`, excluding copied
+template hooks; generated `scripts/serverpro-bootstrap-tools.sh` and embedded
+`internal/bootstraptools/serverpro-bootstrap-tools.sh` run ShellCheck only so
+formatting never alters generator or unit-test string contracts) and every
+tracked Python script (`*.py`) is covered once added to Git. Suppress a
+ShellCheck finding only with a targeted `# shellcheck disable=SCxxxx # WHY: ...`
+line.
 
 `TESTING.md` owns the full capability matrix. Update it when adding or removing
 commands, packages, providers, ingress modes, lifecycle steps, or dogfood paths.
